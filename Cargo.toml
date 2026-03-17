@@ -1,0 +1,119 @@
+[package]
+name = "esprit-seeder"
+version = "0.1.0"
+description = "Esprit Seeder"
+authors = ["Jaeger"]
+license = "AGPL-3.0"
+edition = "2021"
+
+[dependencies]
+# UI framework
+dioxus = { version = "0.7", features = ["desktop", "fullstack"] }
+
+# Serialization
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = "1"
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json"] }
+reqwest-eventsource = "0.6"
+futures = "0.3"
+
+# Async runtime
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "fs", "process", "macros"] }
+
+# Input simulation
+enigo = "0.3"
+
+# Random
+rand = "0.8"
+
+# Windows registry
+winreg = "0.52"
+
+# Task scheduler
+planif = "0.2"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-appender = "0.2"
+tracing-log = "0.2"
+log = "0.4"
+
+# File system
+dirs = "5"
+
+# Lazy statics
+once_cell = "1"
+
+# Date/time
+chrono = "0.4"
+
+# Regex
+regex = "1"
+
+# Open URLs/files in default app
+open = "5"
+
+# Windows API
+winapi = { version = "0.3", features = [
+    "winuser", "processthreadsapi", "handleapi", "winnt",
+    "synchapi", "errhandlingapi", "libloaderapi",
+    "namedpipeapi", "winbase", "dpapi", "tlhelp32",
+    "securitybaseapi", "sddl", "minwinbase",
+] }
+
+# Base64 encoding (for DPAPI encrypted values)
+base64 = "0.22"
+
+# Secure memory zeroing (for DPAPI buffer cleanup)
+zeroize = "1"
+
+# SHA-256 hashing (for update installer verification)
+sha2 = "0.10"
+
+# URL encoding/decoding (for deep link parsing)
+urlencoding = "2"
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_UI_Accessibility",
+    "Win32_System_Com",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_SystemInformation",
+] }
+
+# Notifications
+notify-rust = "4"
+
+# File dialog
+rfd = "0.15"
+
+# System tray (tray-icon 0.19 uses muda 0.15 internally — versions must match)
+tray-icon = "0.19"
+muda = "0.15"
+
+# Image decoding (for tray icon PNG)
+image = { version = "0.25", default-features = false, features = ["png"] }
+dioxus-desktop = "0.7"
+
+[features]
+default = []
+devtools = []
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+opt-level = 3
+panic = "abort"
+overflow-checks = true
+
+[dev-dependencies]
+http = "1"
+
+[build-dependencies]
+winres = "0.1.12"
