@@ -26,7 +26,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "fs", "p
 enigo = "0.3"
 
 # Random
-rand = "0.8"
+rand = "0.9"
 
 # Windows registry
 winreg = "0.52"
