@@ -15,7 +15,22 @@
     on startup (installer keys remain as first-run bootstrap), plus a launch-args URI fallback.
   - Deferred: `[ObservableProperty]` partial-property form needs `LangVersion=preview`
     (MVVMTK0045 suppressed, field form used) — revisit on the .NET 10 bump.
-- ⬜ **Phase 1 — Core seeding** is next: start with `src-rust/src/backend/seeding.rs` (highest-risk port).
+- 🔄 **Phase 1 — Core seeding** in progress (2026-06-07, Windows):
+  - ✅ **Config foundation:** `Core.Security.DpapiProtector` (port of `crypto.rs`, `dpapi:<base64>` format),
+    `Core.Config.AtomicFile` (port of `write_file_safe`), `Core.Config.ConfigService`
+    (STJ store, 500ms save throttle, `icacls` ACL hardening, transparent DPAPI for sensitive keys,
+    **old-dir migration dropped** per clean break).
+  - ✅ **API layer:** `Core.Api.Models` (full port of `types.rs` + `ServerInfo`, snake_case/lowercase-enum
+    wire format via `ApiJson`), `ApiValidation` (friendly-error + validators + OAuth URL),
+    `RetryPolicy` + `ResilienceHandler` (port of `retry.rs`), `AuthSession` + `AuthHandler`
+    (JWT/x-api-key, dedup'd 401 refresh, DPAPI-persisted tokens), `SeedingStatusCache`
+    (SSE cache from `backend/api_client.rs`), `Core.Servers.ServerStore` (port of `server.rs`),
+    `SeedingApiClient` (typed endpoints), `AddChllSeederCore` DI extension.
+  - Verification: `dotnet test` → **159/159 pass**; full solution builds clean (0 warnings).
+  - ⬜ **Remaining Phase 1:** native layer via CsWin32 (`process.rs`, `window_focus.rs`, `steam.rs`,
+    `win11_input.rs`, `power.rs` keep-awake, `backup_restore_hll_config.rs`, `game.rs`) →
+    then **SeedingEngine** (`seeding.rs`, highest-risk) → Seed + Launch tab UI wired to engine + API.
+  - Not yet wired: `App` host still uses the Phase 0 `BuildHost`; call `AddChllSeederCore` when the UI lands.
 
 ## Context
 
