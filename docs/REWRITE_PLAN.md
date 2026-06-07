@@ -26,10 +26,26 @@
     (JWT/x-api-key, dedup'd 401 refresh, DPAPI-persisted tokens), `SeedingStatusCache`
     (SSE cache from `backend/api_client.rs`), `Core.Servers.ServerStore` (port of `server.rs`),
     `SeedingApiClient` (typed endpoints), `AddChllSeederCore` DI extension.
-  - Verification: `dotnet test` → **159/159 pass**; full solution builds clean (0 warnings).
-  - ⬜ **Remaining Phase 1:** native layer via CsWin32 (`process.rs`, `window_focus.rs`, `steam.rs`,
-    `win11_input.rs`, `power.rs` keep-awake, `backup_restore_hll_config.rs`, `game.rs`) →
-    then **SeedingEngine** (`seeding.rs`, highest-risk) → Seed + Launch tab UI wired to engine + API.
+  - ✅ **Native + tools layer (via CsWin32 0.3.275):** `Core.Games.GameDefinition`+`GameCatalog`
+    (port of `game.rs`), `Core.Native.ProcessMonitor` (`process.rs` — Toolhelp32 scan, 15s PID cache,
+    verified kill-by-path), `Core.Native.SteamPaths` (registry cache, shared to break the steam↔process
+    mutual dep), `Core.Native.WindowFocus` (`window_focus.rs` — HLL window find/cache, PostMessage
+    Esc/F13 splash bypass, AttachThreadInput force-focus, minimize), `Core.Native.Win11Input`
+    (`win11_input.rs` — SendInput + UIA fallback; Win11 detect via `Environment.OSVersion`),
+    `Core.Native.SteamLauncher` (`steam.rs` launch half — cold-start + `-applaunch +connect`, IP
+    validation), `Core.Native.PowerStatus` (`power.rs` — powercfg modern-standby/wake-timer warnings),
+    `Core.Tools.HllConfigBackupService` (`backup_restore_hll_config.rs` — efficiency INI rewrite,
+    atomic backup/restore, write-ahead crash-recovery flag). All registered in `AddChllSeederCore`.
+  - Verification: `dotnet test` → **216/216 pass**; full solution builds clean (0 warnings).
+  - Native-layer deviations from the Rust monolith (deliberate): `game.rs` is a plain data record
+    (no `IGameProfile` interface — Rust has no per-game behavior); `SteamLauncher.OpenGameAsync` does
+    launch mechanics only — efficiency-apply / config-restore / the enigo mouse-nudge are left to the
+    SeedingEngine orchestration; backup dir rebranded `espritseeder-backup` → `chllseeder-backup`
+    (`Branding.BackupDirName`).
+  - ⬜ **Remaining Phase 1:** **SeedingEngine** (`backend/seeding.rs`, highest-risk 1183-LOC state
+    machine; ported test list lives in that file — stop/snooze/stagger) → Seed + Launch tab UI wired
+    to engine + API → keep-awake (a *new* feature, no Rust source — implement via
+    `SetThreadExecutionState` ES_CONTINUOUS|ES_SYSTEM_REQUIRED|ES_DISPLAY_REQUIRED while seeding).
   - Not yet wired: `App` host still uses the Phase 0 `BuildHost`; call `AddChllSeederCore` when the UI lands.
 
 ## Context

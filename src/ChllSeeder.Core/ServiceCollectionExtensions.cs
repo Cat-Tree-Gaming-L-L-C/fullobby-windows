@@ -1,6 +1,8 @@
 using ChllSeeder.Core.Api;
 using ChllSeeder.Core.Config;
+using ChllSeeder.Core.Native;
 using ChllSeeder.Core.Servers;
+using ChllSeeder.Core.Tools;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ChllSeeder.Core;
@@ -14,6 +16,14 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<AuthSession>();
         services.AddSingleton<SeedingStatusCache>();
         services.AddSingleton<ServerStore>();
+
+        // Native + tools layer (process/window/input/Steam launch, efficiency mode, power).
+        services.AddSingleton<ProcessMonitor>();
+        services.AddSingleton<WindowFocus>();
+        services.AddSingleton<Win11Input>();
+        services.AddSingleton<SteamLauncher>();
+        services.AddSingleton<PowerStatus>();
+        services.AddSingleton<HllConfigBackupService>();
 
         services.AddTransient<AuthHandler>();
         services.AddTransient<ResilienceHandler>();

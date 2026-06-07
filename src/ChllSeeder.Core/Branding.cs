@@ -28,6 +28,10 @@ public static class Branding
     /// <summary>App data directory name under %LOCALAPPDATA% (logs live in a "logs" subdir).</summary>
     public const string LocalDataDirName = "CHLLSeeder";
 
+    /// <summary>Backup root directory name under %USERPROFILE% (game config backups + efficiency-mode
+    /// crash-recovery flag live here; was espritseeder-backup).</summary>
+    public const string BackupDirName = "chllseeder-backup";
+
     /// <summary>Auto-seed scheduled task names.</summary>
     public const string ScheduledTaskNa = "CHLL-Seeder";
     public const string ScheduledTaskEu = "CHLL-Seeder-EU";
@@ -42,4 +46,8 @@ public static class Branding
     /// <summary>%LOCALAPPDATA%\CHLLSeeder\logs</summary>
     public static string LogsDir => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), LocalDataDirName, "logs");
+
+    /// <summary>%USERPROFILE%\chllseeder-backup</summary>
+    public static string BackupRootDir => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), BackupDirName);
 }
