@@ -1,14 +1,14 @@
-# Esprit Seeder
+# CHLL Seeder
 
 Windows desktop app for [Hell Let Loose](https://store.steampowered.com/app/686810/Hell_Let_Loose/) server seeding. One click to launch, seed, and keep your community servers populated.
 
-Built by [Esprit De Corps Gaming](https://github.com/Esprit-De-Corps-Gaming).
+Built by [Comp HLL](https://github.com/catalloc/chll-seeder-windows). Formerly "Esprit Seeder"; currently being rewritten in C# + WinUI 3 — see [docs/REWRITE_PLAN.md](docs/REWRITE_PLAN.md) for status.
 
 ## Download
 
-Grab the latest installer from [GitHub Releases](https://github.com/Esprit-De-Corps-Gaming/esprit-seeder-windows/releases).
+Grab the latest installer (`CHLL-Seeder-Setup-<ver>.exe`) from [GitHub Releases](https://github.com/catalloc/chll-seeder-windows/releases).
 
-**Requirements:** Windows 10/11, Steam with Hell Let Loose installed.
+**Requirements:** Windows 10 (19041) / Windows 11, Steam with Hell Let Loose installed.
 
 ## Features
 
@@ -20,6 +20,9 @@ Grab the latest installer from [GitHub Releases](https://github.com/Esprit-De-Co
 - **System tray** — runs in the background with close-to-tray support
 - **In-app updates** — notifies you when a new version is available
 - **Discord & Steam sign-in** — track seeding stats and appear on the leaderboard
+
+> During the WinUI 3 rewrite, features ship in phases; the feature list above
+> describes full parity (Phase 5). See the rewrite plan for what's live now.
 
 ## How the App Interacts with Steam and Hell Let Loose
 
@@ -39,7 +42,7 @@ When a seeding session ends (server switch, time limit, or user stop), the app t
 
 ### Efficiency mode (opt-in)
 
-When enabled, the app temporarily edits `GameUserSettings.ini` — the same INI file the in-game settings menu writes to. Changes include lowering resolution to 1024x768, setting all graphics to minimum, capping framerate at 30, and muting audio. The original file is backed up before any changes, and restored automatically when seeding ends. A persistent flag file (`~\hllseeder-backup\.efficiency_mode_active`) ensures recovery even if the app crashes mid-session.
+When enabled, the app temporarily edits `GameUserSettings.ini` — the same INI file the in-game settings menu writes to. Changes include lowering resolution to 1024x768, setting all graphics to minimum, capping framerate at 30, and muting audio. The original file is backed up before any changes, and restored automatically when seeding ends. A persistent flag file ensures recovery even if the app crashes mid-session.
 
 This file is located at `%LOCALAPPDATA%\HLL\Saved\Config\WindowsNoEditor\GameUserSettings.ini` and is a standard user-editable config — not a locked game binary. The app never modifies `Engine.ini` or any other protected file.
 
@@ -65,15 +68,13 @@ Server seeding is a well-established practice in the HLL community. Multiple ope
 
 ### Desktop client
 
-**Credential storage.** Auth tokens and API keys are encrypted at rest using [Windows DPAPI](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/) (`CryptProtectData`), scoped to the current Windows user account. No other user on the machine can decrypt them. Credentials are stored in `%APPDATA%\org.espritdecorpsgaming.hllseeder\config.json`.
+**Credential storage.** Auth tokens and API keys are encrypted at rest using [Windows DPAPI](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/), scoped to the current Windows user account. No other user on the machine can decrypt them. Credentials are stored in `%APPDATA%\org.comphll.chllseeder\config.json`.
 
-**Config directory ACLs.** On every startup, the app restricts the config directory's permissions via `icacls` — inherited ACEs are removed and only the current user is granted access. The `USERNAME` environment variable is validated against a strict character whitelist before being used in the command.
+**Config directory ACLs.** On every startup, the app restricts the config directory's permissions — inherited ACEs are removed and only the current user is granted access.
 
-**In-memory token handling.** Tokens and API keys are zeroized in memory (via the `zeroize` crate) before being overwritten or cleared, reducing the window for memory disclosure.
+**Atomic file writes.** Config and game settings are written using a temp-file-then-rename pattern to prevent data loss or corruption on crash or power failure.
 
-**Atomic file writes.** Config and game settings are written using a temp-file-then-rename pattern with `sync_all()` to prevent data loss or corruption on crash or power failure.
-
-**Update security.** Before downloading an update, the URL is validated against a hardcoded domain whitelist (`seeding-api.espritdecorpsgaming.org`, `github.com`, `objects.githubusercontent.com`) and must use HTTPS. Downloaded installers are verified against a server-provided SHA-256 checksum before being written to disk. Only `.exe` and `.msi` extensions are accepted. Installer filenames are sanitized to prevent path traversal. A 500 MB size limit prevents disk exhaustion.
+**Update security.** Before downloading an update, the URL is validated against a hardcoded domain whitelist and must use HTTPS. Downloaded installers are verified against a server-provided SHA-256 checksum before being written to disk. Only installer extensions are accepted, filenames are sanitized to prevent path traversal, and a 500 MB size limit prevents disk exhaustion.
 
 **Input validation.** All URL path parameters (provider names, Steam IDs, user IDs) are validated against strict whitelists or format rules before being interpolated into API URLs. Config keys, session values, display names, server IPs, and deep link parameters all have length limits, character whitelists, and null-byte rejection. OAuth state parameters are URL-encoded.
 
@@ -81,7 +82,7 @@ Server seeding is a well-established practice in the HLL community. Multiple ope
 
 **HTTPS enforcement.** In release builds, the API base URL is hardcoded to HTTPS and cannot be overridden. Update download URLs are explicitly checked for the `https` scheme.
 
-**Data sent to the API.** The app sends only what is needed for seeding coordination: session IDs, game/region/server index, Steam ID (if linked), display name changes, and heartbeats. It never sends hardware fingerprints, machine names, installed software lists, file system contents, or any data beyond what is listed in the API endpoints below.
+**Data sent to the API.** The app sends only what is needed for seeding coordination: session IDs, game/region/server index, Steam ID (if linked), display name changes, and heartbeats. It never sends hardware fingerprints, machine names, installed software lists, file system contents, or any data beyond what is listed in the privacy policy.
 
 **Local file access.** The app reads and writes only to its own config directory, its log directory, the HLL `GameUserSettings.ini` (only in efficiency mode), its backup directory, and a temp directory for updates. It reads the Steam registry key for the install path. No other files or registry keys are accessed.
 
@@ -93,54 +94,51 @@ The client communicates with a closed-source API server over HTTPS. All traffic 
 
 ### Tech Stack
 
-- **Framework:** [Dioxus](https://dioxuslabs.com/) 0.7 (Rust desktop)
-- **Styling:** TailwindCSS v4 + DaisyUI v5
-- **HTTP:** reqwest with JWT auto-refresh, reqwest-eventsource for SSE
-- **Platform:** Win32 API (window control, system tray, DPAPI encryption)
+- **Framework:** C# / .NET 9 + [WinUI 3](https://learn.microsoft.com/en-us/windows/apps/winui/winui3/) (Windows App SDK 1.8, unpackaged)
+- **MVVM:** CommunityToolkit.Mvvm; Microsoft.Extensions.Hosting for DI + background services
+- **Logging:** Serilog (rolling daily files)
+- **Installer:** Inno Setup
 - **API:** Closed-source backend (HTTPS)
+
+The original Rust/Dioxus implementation lives in [`src-rust/`](src-rust/) as a read-only porting reference until parity sign-off.
 
 ### Prerequisites
 
-- [Rust](https://rustup.rs/) 1.75+
-- [Dioxus CLI](https://dioxuslabs.com/learn/0.6/getting_started): `cargo install dioxus-cli`
+- [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
+- Windows 10 (19041) or later
+- [Inno Setup 6](https://jrsoftware.org/isinfo.php) (installer builds only)
 
 ### Build & Run
 
-```sh
+```powershell
 # Clone
-git clone git@github.com:Esprit-De-Corps-Gaming/esprit-seeder-windows.git
-cd esprit-seeder-windows
+git clone git@github.com:catalloc/chll-seeder-windows.git
+cd chll-seeder-windows
 
-# Dev build with hot reload
-dx serve
+# Build
+dotnet build src/ChllSeeder.sln -c Release
 
-# Release build (exe only)
-dx build --release
+# Run tests
+dotnet test src/ChllSeeder.Core.Tests
 
-# Bundle installer (NSIS + MSI)
-dx bundle --release
+# Run the app
+src\ChllSeeder.App\bin\x64\Release\net9.0-windows10.0.22621.0\win-x64\CHLLSeeder.exe
+
+# Build the installer
+dotnet publish src/ChllSeeder.App -c Release -r win-x64 --self-contained true -p:Platform=x64 -o artifacts/publish
+iscc installer\ChllSeeder.iss
 ```
 
 ### Project Structure
 
 ```
 src/
-  main.rs               Entry point
-  app.rs                Root component
-  api/                  HTTP client with JWT auto-refresh and SSE streaming
-  backend/              Core logic (seeding, server, process, steam, tools, etc.)
-  components/           UI components (seed, launch, settings, tools, modal, toast, etc.)
-  state/                GlobalSignal state modules (servers, seeding, auth, toast, etc.)
-  platform/             Platform integration (notification, tray, deep_link, updater)
-  config.rs             JSON file I/O for app settings
-  events.rs             Typed event bus (tokio broadcast)
-  macros.rs             Utility macros (lock!, read_lock!, write_lock!)
-```
-
-### Running Tests
-
-```sh
-cargo test
+  ChllSeeder.App/         WinUI 3 app (views, view models, custom Main, tray)
+  ChllSeeder.Core/        Non-UI logic (API, seeding engine, config, deep links)
+  ChllSeeder.Core.Tests/  xUnit tests
+src-rust/                 Original Rust/Dioxus app (read-only porting reference)
+installer/                Inno Setup script
+docs/REWRITE_PLAN.md      Rewrite architecture, phases, and status
 ```
 
 ## Contributing
@@ -149,12 +147,12 @@ Contributions are welcome! Please open an issue to discuss your idea before subm
 
 1. Fork the repo and create a feature branch
 2. Make your changes
-3. Run `cargo clippy` and `cargo test`
-4. Submit a pull request against `main`
+3. Run `dotnet build src/ChllSeeder.sln` and `dotnet test src/ChllSeeder.Core.Tests`
+4. Submit a pull request
 
 ## Contact
 
-For questions, feedback, or support: dev@espritdecorpsgaming.org
+For questions, feedback, or support: [GitHub Issues](https://github.com/catalloc/chll-seeder-windows/issues)
 
 ## License
 

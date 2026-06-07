@@ -1,10 +1,10 @@
-# Privacy Policy — Esprit Seeder
+# Privacy Policy — CHLL Seeder
 
-Last updated: 2026-03-10
+Last updated: 2026-06-07
 
 ## Overview
 
-Esprit Seeder collects minimal, non-personally-identifiable analytics to improve the seeding experience. All data collection is transparent and documented here. Users may opt out of the leaderboard at any time.
+CHLL Seeder collects minimal, non-personally-identifiable analytics to improve the seeding experience. All data collection is transparent and documented here. Users may opt out of the leaderboard at any time.
 
 ## What We Collect
 
@@ -73,8 +73,8 @@ This helps us understand server rotation patterns and improve the candidate sele
 
 ## Data Access
 
-Analytics data is only accessible to Esprit de Corps Gaming administrators for the purposes described above. It is never sold, shared with third parties, or used for advertising.
+Analytics data is only accessible to Comp HLL administrators for the purposes described above. It is never sold, shared with third parties, or used for advertising.
 
 ## Contact
 
-Questions about this policy can be directed to the Esprit de Corps Gaming community Discord.
+Questions about this policy can be directed to the Comp HLL community Discord.

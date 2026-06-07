@@ -1,5 +1,22 @@
 # CHLL Seeder — Rebrand + WinUI 3 Rewrite Plan
 
+## Status
+
+- ✅ **Step 0** (2026-06, WSL): plan committed, `rust-final` tag, Rust moved to `/src-rust`, branch `rewrite/winui3`.
+- ✅ **Phase 0 — Skeleton** (2026-06-07, Windows): solution + 3 projects build green
+  (`dotnet build src/ChllSeeder.sln -c Release`), 16/16 Core tests pass, app verified
+  running (frameless 5-tab shell, single-instance redirect, Serilog rolling logs,
+  `chllseeder://` deep links end-to-end), Inno installer compiles + smoke-tested
+  (per-user install, protocol keys), CI rewritten for dotnet.
+  - Versions: .NET SDK 9.0.314, Windows App SDK **1.8.260508005**, CommunityToolkit.Mvvm 8.4.2,
+    Microsoft.Extensions.Hosting 9.0.16, Serilog.Extensions.Hosting 9.0.0.
+  - Learned: plain `"exe" "%1"` protocol registry keys surface as **Launch** (not Protocol)
+    activation kind in unpackaged WAS — app self-registers via `ActivationRegistrationManager`
+    on startup (installer keys remain as first-run bootstrap), plus a launch-args URI fallback.
+  - Deferred: `[ObservableProperty]` partial-property form needs `LangVersion=preview`
+    (MVVMTK0045 suppressed, field form used) — revisit on the .NET 10 bump.
+- ⬜ **Phase 1 — Core seeding** is next: start with `src-rust/src/backend/seeding.rs` (highest-risk port).
+
 ## Context
 
 The app "Esprit Seeder" (Hell Let Loose server-seeding desktop tool, Rust + Dioxus 0.7, ~18.5K LOC, 65 files) is being:

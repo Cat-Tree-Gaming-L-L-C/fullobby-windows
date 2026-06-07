@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ChllSeeder.App.Views.LeaderboardPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <StackPanel Spacing="8" Padding="24" VerticalAlignment="Center" HorizontalAlignment="Center">
+        <TextBlock Text="Ranks" Style="{StaticResource TitleTextBlockStyle}" HorizontalAlignment="Center" />
+        <TextBlock
+            Text="The seeding leaderboard arrives in Phase 3."
+            Style="{StaticResource BodyTextBlockStyle}"
+            TextWrapping="Wrap"
+            TextAlignment="Center" />
+    </StackPanel>
+</Page>
