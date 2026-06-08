@@ -1,5 +1,6 @@
 using ChllSeeder.Core;
 using ChllSeeder.Core.Activation;
+using ChllSeeder.Core.Seeding;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
@@ -58,6 +59,19 @@ public partial class App : Application
         {
             // Close-to-tray arrives in Phase 2; for now closing the window exits.
             Log.Information("Main window closed, shutting down");
+
+            // If efficiency mode is applied, kill the game and restore the user's real
+            // graphics settings so HLL isn't left degraded after we exit.
+            try
+            {
+                AppHost.Services.GetRequiredService<SeedingEngine>()
+                    .CleanupEfficiencyOnExitAsync().GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Efficiency-mode cleanup on exit failed");
+            }
+
             AppHost.StopAsync().GetAwaiter().GetResult();
             Log.CloseAndFlush();
         };
@@ -149,8 +163,11 @@ public partial class App : Application
             .UseSerilog()
             .ConfigureServices(services =>
             {
+                // Core: config, API, native/tools, seeding engine, startup worker.
+                services.AddChllSeederCore();
+
                 services.AddSingleton<MainWindow>();
-                services.AddSingleton<ViewModels.ShellViewModel>();
+                services.AddSingleton<ViewModels.SeedingViewModel>();
             })
             .Build();
     }

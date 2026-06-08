@@ -134,6 +134,27 @@ public sealed class SeedingEngine : IDisposable
     public Task MonitorSeedAsync(int serverNumber, string region = "na", CancellationToken ct = default) =>
         MonitorSeedImplAsync(serverNumber, region, ct);
 
+    /// <summary>Whether the game currently being seeded is running. UI guard for the
+    /// "game already running" confirmation before (re)starting a seed or launch.</summary>
+    public bool IsGameRunning => _process.IsGameRunning(_currentGame);
+
+    /// <summary>Kill the current game and wait (up to <paramref name="maxWaitSecs"/>) for it to exit.
+    /// Used by the UI when the user confirms closing a running game before seeding/launching;
+    /// mirrors the kill-and-poll loop in the Rust seed/launch components.</summary>
+    public async Task KillGameAndWaitAsync(int maxWaitSecs = 20, CancellationToken ct = default)
+    {
+        var game = _currentGame;
+        KillGameProcess(game);
+        for (var i = 0; i < maxWaitSecs * 2; i++)
+        {
+            if (!_process.IsGameRunning(game))
+            {
+                return;
+            }
+            await Task.Delay(TimeSpan.FromMilliseconds(500), ct).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>Snooze a pending server switch for the given duration (clamped to 60–1800s).</summary>
     public void SnoozeServerSwitch(long durationSecs)
     {
@@ -699,7 +720,18 @@ public sealed class SeedingEngine : IDisposable
         var server = _servers.GetServerByRegion(region, serverNumber)
             ?? throw new SeedingException($"No server at {region}:{serverNumber}");
 
-        await MonitorLoopAsync(elapsed, server, region, serverNumber, ct).ConfigureAwait(false);
+        try
+        {
+            await MonitorLoopAsync(elapsed, server, region, serverNumber, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            // Mirror the Rust do_monitor_seed cleanup: restore the user's real settings (this also
+            // resets the efficiency-applied flag so it can re-apply on the next seed) and drop the
+            // keep-awake hold. Both are idempotent, so any monitor-exit path lands clean.
+            _backup.RestoreAfterSeeding();
+            _keepAwake.Release();
+        }
     }
 
     // ── Monitor loop (port of monitor_loop) ────────────────────────────────────

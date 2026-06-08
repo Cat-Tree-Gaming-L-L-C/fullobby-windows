@@ -15,7 +15,11 @@
     on startup (installer keys remain as first-run bootstrap), plus a launch-args URI fallback.
   - Deferred: `[ObservableProperty]` partial-property form needs `LangVersion=preview`
     (MVVMTK0045 suppressed, field form used) — revisit on the .NET 10 bump.
-- 🔄 **Phase 1 — Core seeding** in progress (2026-06-07, Windows):
+- ✅ **Phase 1 — Core seeding** complete (2026-06-07, Windows): all subsystems below plus the
+  Seed + Launch tab UI are wired end-to-end; solution builds clean (0 warnings), 227/227 tests pass,
+  app smoke-tested (DI graph resolves, bootstrapper guest-auth + server fetch run and degrade
+  gracefully when the TBD API host doesn't resolve, clean shutdown). Live seeding is a manual test
+  (needs the real API + Steam + HLL).
   - ✅ **Config foundation:** `Core.Security.DpapiProtector` (port of `crypto.rs`, `dpapi:<base64>` format),
     `Core.Config.AtomicFile` (port of `write_file_safe`), `Core.Config.ConfigService`
     (STJ store, 500ms save throttle, `icacls` ACL hardening, transparent DPAPI for sensitive keys,
@@ -62,12 +66,24 @@
     launch mechanics only — efficiency-apply / config-restore / the enigo mouse-nudge are left to the
     SeedingEngine orchestration; backup dir rebranded `espritseeder-backup` → `chllseeder-backup`
     (`Branding.BackupDirName`).
-  - ⬜ **Remaining Phase 1:** **Seed + Launch tab UI** wired to `SeedingEngine` + `SeedingApiClient`
-    (subscribe to `SeedingEngine.Event`; call `StartSeedingAsync` → `MonitorSeedAsync`; Stop button →
-    `StopSeedingAsync`). Splash-bypass duration / efficiency_mode / switch_notification are read from
-    `ConfigService` keys (`splash_bypass_duration`, `efficiency_mode`, `switch_notification`).
-  - Not yet wired: `App` host still uses the Phase 0 `BuildHost`; call `AddChllSeederCore` when the UI
-    lands (the engine DI graph — `SeedingEngine`→all native/API/config services — resolves through it).
+  - ✅ **Seed + Launch tab UI (2026-06-07):** `App.ViewModels.SeedingViewModel` (shared DI singleton)
+    drives the engine and mirrors `SeedingEngine.Event` into observable UI state — status banner,
+    splash-bypass banner w/ countdown, server-switch overlay (snooze +5/+15/+30, switch-now), stop
+    controls. `Core.Bootstrap.AppBootstrapper : IHostedService` does guest-register → server-list load
+    → 10s stats poll (Phase 2 → SSE), raising `ServersLoaded`/`ServersLoadFailed`/`StatsUpdated`.
+    `SeedPage` = banner + NA/EU(or single) seed buttons + stats lists + switch overlay; `LaunchPage` =
+    per-server launch buttons (one-click `StartAsync`). `App.Converters.BoolToVisibilityConverter`
+    (`invert` param) for visibility. Added small engine UI surface (`IsGameRunning`,
+    `KillGameAndWaitAsync`, post-monitor restore+keep-awake cleanup in `MonitorSeedImplAsync`).
+    Added `Microsoft.Extensions.Hosting.Abstractions` to Core for `IHostedService`.
+  - ✅ **`AddChllSeederCore` wired:** `App.BuildHost` now calls it + registers `MainWindow` and
+    `SeedingViewModel`; window-close path runs `SeedingEngine.CleanupEfficiencyOnExitAsync` before
+    `AppHost.StopAsync` (which flushes config via the bootstrapper's `StopAsync`).
+  - Phase 1 deviations / deferred: **session + heartbeat** (`/api/seeding/start-session` + `heartbeat.rs`)
+    are NOT ported — they're analytics, non-fatal in Rust too; deferred with SSE to Phase 2. "Seed All"
+    rotation across servers/games is Phase 2 (the single-server monitor + in-place switch countdown work
+    now). Switch toast/sound stay Phase 2. The switch-overlay countdown is visual only (the engine drives
+    the real timing server-side).
 
 ## Context
 

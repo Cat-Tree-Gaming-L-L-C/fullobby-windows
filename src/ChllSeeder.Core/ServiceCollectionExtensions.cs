@@ -1,10 +1,12 @@
 using ChllSeeder.Core.Api;
+using ChllSeeder.Core.Bootstrap;
 using ChllSeeder.Core.Config;
 using ChllSeeder.Core.Native;
 using ChllSeeder.Core.Seeding;
 using ChllSeeder.Core.Servers;
 using ChllSeeder.Core.Tools;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace ChllSeeder.Core;
 
@@ -30,6 +32,10 @@ public static class ServiceCollectionExtensions
         // Seeding engine: the state machine that orchestrates the native + API layers.
         services.AddSingleton<SeedingState>();
         services.AddSingleton<SeedingEngine>();
+
+        // Startup worker: guest auth + server-list load + stats polling (Phase 2 → SSE).
+        services.AddSingleton<AppBootstrapper>();
+        services.AddHostedService(sp => sp.GetRequiredService<AppBootstrapper>());
 
         services.AddTransient<AuthHandler>();
         services.AddTransient<ResilienceHandler>();
