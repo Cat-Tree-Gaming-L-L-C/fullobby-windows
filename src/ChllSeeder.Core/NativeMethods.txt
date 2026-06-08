@@ -38,3 +38,9 @@ CoUninitialize
 IUIAutomation
 IUIAutomationElement
 CUIAutomation
+
+// ── steam.rs mouse-nudge (enigo replacement) ──
+SetCursorPos
+
+// ── keep-awake (new feature; no Rust source) ──
+SetThreadExecutionState

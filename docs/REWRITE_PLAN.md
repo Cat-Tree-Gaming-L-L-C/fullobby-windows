@@ -36,17 +36,38 @@
     validation), `Core.Native.PowerStatus` (`power.rs` — powercfg modern-standby/wake-timer warnings),
     `Core.Tools.HllConfigBackupService` (`backup_restore_hll_config.rs` — efficiency INI rewrite,
     atomic backup/restore, write-ahead crash-recovery flag). All registered in `AddChllSeederCore`.
-  - Verification: `dotnet test` → **216/216 pass**; full solution builds clean (0 warnings).
+  - ✅ **SeedingEngine + keep-awake (2026-06-07):** `Core.Seeding.SeedingEngine` (port of the
+    1183-LOC `backend/seeding.rs` state machine — open/launch retries, 3-phase splash bypass,
+    monitor loop w/ linear backoff + dynamic fill-based stagger + jitter, server-switch countdown
+    w/ snooze/switch-now, launch watcher for phantom/update relaunch, stop/stop-only/efficiency-
+    cleanup). Process-global atomics → DI-singleton instance state; tokio tasks → `Task.Run` on a
+    lifetime `CancellationTokenSource`; `tokio::select` SSE-wake → edge-triggered `SemaphoreSlim`
+    (`NotifyMonitor`, dormant until Phase 2 SSE). Testable `Core.Seeding.SeedingState`
+    (stop/snooze/switch-now atomics) + pure static `ComputeStaggerSecs` mirror the Rust
+    `#[cfg(test)]` block. Engine events → `Core.Seeding.SeedingEvent` record hierarchy raised via
+    `SeedingEngine.Event` (the AppEvent subset the engine emits). **Keep-awake** (new feature, no
+    Rust source): `Core.Native.KeepAwake` holds `SetThreadExecutionState` (ES_CONTINUOUS|SYSTEM|
+    DISPLAY) on a dedicated re-asserting thread; engine `Acquire`s on seed start, `Release`s on
+    stop. Added `SetCursorPos` (enigo mouse-nudge replacement) + `SetThreadExecutionState` to
+    `NativeMethods.txt`; `WindowFocus.HasHllWindow()` added to avoid leaking Win32 HWND to the engine.
+    All registered in `AddChllSeederCore`.
+  - Deviations: OS switch-notification toast + switch sound (Rust `platform::notification`) are
+    deferred to Phase 2 — the engine emits `ServerSwitchPending` (UI subscribes) and focuses the
+    seeder window, but does not yet play sound / show a toast. Autoseed flags (`AUTOSEED_*`,
+    `cancel_autoseed`) left out — they belong to the Phase 4 autoseed feature, not the engine core.
+  - Verification: `dotnet test` → **227/227 pass** (216 prior + 11 new: stop/snooze/switch-now/
+    stagger/constants); full solution builds clean (0 warnings).
   - Native-layer deviations from the Rust monolith (deliberate): `game.rs` is a plain data record
     (no `IGameProfile` interface — Rust has no per-game behavior); `SteamLauncher.OpenGameAsync` does
     launch mechanics only — efficiency-apply / config-restore / the enigo mouse-nudge are left to the
     SeedingEngine orchestration; backup dir rebranded `espritseeder-backup` → `chllseeder-backup`
     (`Branding.BackupDirName`).
-  - ⬜ **Remaining Phase 1:** **SeedingEngine** (`backend/seeding.rs`, highest-risk 1183-LOC state
-    machine; ported test list lives in that file — stop/snooze/stagger) → Seed + Launch tab UI wired
-    to engine + API → keep-awake (a *new* feature, no Rust source — implement via
-    `SetThreadExecutionState` ES_CONTINUOUS|ES_SYSTEM_REQUIRED|ES_DISPLAY_REQUIRED while seeding).
-  - Not yet wired: `App` host still uses the Phase 0 `BuildHost`; call `AddChllSeederCore` when the UI lands.
+  - ⬜ **Remaining Phase 1:** **Seed + Launch tab UI** wired to `SeedingEngine` + `SeedingApiClient`
+    (subscribe to `SeedingEngine.Event`; call `StartSeedingAsync` → `MonitorSeedAsync`; Stop button →
+    `StopSeedingAsync`). Splash-bypass duration / efficiency_mode / switch_notification are read from
+    `ConfigService` keys (`splash_bypass_duration`, `efficiency_mode`, `switch_notification`).
+  - Not yet wired: `App` host still uses the Phase 0 `BuildHost`; call `AddChllSeederCore` when the UI
+    lands (the engine DI graph — `SeedingEngine`→all native/API/config services — resolves through it).
 
 ## Context
 

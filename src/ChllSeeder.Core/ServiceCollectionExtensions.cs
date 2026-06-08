@@ -1,6 +1,7 @@
 using ChllSeeder.Core.Api;
 using ChllSeeder.Core.Config;
 using ChllSeeder.Core.Native;
+using ChllSeeder.Core.Seeding;
 using ChllSeeder.Core.Servers;
 using ChllSeeder.Core.Tools;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,6 +25,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SteamLauncher>();
         services.AddSingleton<PowerStatus>();
         services.AddSingleton<HllConfigBackupService>();
+        services.AddSingleton<KeepAwake>();
+
+        // Seeding engine: the state machine that orchestrates the native + API layers.
+        services.AddSingleton<SeedingState>();
+        services.AddSingleton<SeedingEngine>();
 
         services.AddTransient<AuthHandler>();
         services.AddTransient<ResilienceHandler>();

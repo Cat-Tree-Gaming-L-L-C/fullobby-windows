@@ -31,6 +31,9 @@ public sealed class WindowFocus
 
     public WindowFocus(ILogger<WindowFocus> log) => _log = log;
 
+    /// <summary>Whether the HLL game window currently exists (used by the splash-bypass window wait).</summary>
+    public bool HasHllWindow() => !FindHllHwnd().IsNull;
+
     /// <summary>Invalidate the cached HLL window handle. Call when the game is killed/closed.</summary>
     public void InvalidateCache()
     {
