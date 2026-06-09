@@ -17,8 +17,11 @@ public static class ServiceCollectionExtensions
     {
         services.AddSingleton<ConfigService>();
         services.AddSingleton<AuthSession>();
+        services.AddSingleton<AuthRefresher>();
         services.AddSingleton<SeedingStatusCache>();
         services.AddSingleton<ServerStore>();
+        services.AddSingleton<LiveStats>();
+        services.AddSingleton<SseConnectionState>();
 
         // Native + tools layer (process/window/input/Steam launch, efficiency mode, power).
         services.AddSingleton<ProcessMonitor>();
@@ -32,25 +35,49 @@ public static class ServiceCollectionExtensions
         // Seeding engine: the state machine that orchestrates the native + API layers.
         services.AddSingleton<SeedingState>();
         services.AddSingleton<SeedingEngine>();
+        services.AddSingleton<HeartbeatService>();
 
-        // Startup worker: guest auth + server-list load + stats polling (Phase 2 → SSE).
+        // Startup worker: guest auth + server-list load + stats polling fallback.
         services.AddSingleton<AppBootstrapper>();
         services.AddHostedService(sp => sp.GetRequiredService<AppBootstrapper>());
+
+        // Live data: SSE stats stream (primary; the bootstrapper poll is the fallback).
+        services.AddSingleton<SseStreamClient>();
+        services.AddHostedService(sp => sp.GetRequiredService<SseStreamClient>());
 
         services.AddTransient<AuthHandler>();
         services.AddTransient<ResilienceHandler>();
 
         var version = typeof(SeedingApiClient).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+        var userAgent = $"CHLLSeeder/{version}";
 
         services.AddHttpClient<SeedingApiClient>(client =>
             {
                 client.Timeout = TimeSpan.FromSeconds(30);
-                client.DefaultRequestHeaders.UserAgent.ParseAdd($"CHLLSeeder/{version}");
+                client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
                 client.DefaultRequestHeaders.Add("x-client-version", version);
             })
             // Outer → inner: auth/refresh wraps transient-retry wraps the socket handler.
             .AddHttpMessageHandler<AuthHandler>()
             .AddHttpMessageHandler<ResilienceHandler>();
+
+        // Refresh client: resilience only, NO AuthHandler (a refresh must not recurse through auth).
+        services.AddHttpClient(AuthRefresher.ClientName, client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(30);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
+                client.DefaultRequestHeaders.Add("x-client-version", version);
+            })
+            .AddHttpMessageHandler<ResilienceHandler>();
+
+        // SSE client: effectively no timeout (a stream stays open), no delegating handlers
+        // (auth headers are applied per-connection; the 30s timeout would kill the stream).
+        services.AddHttpClient(SseStreamClient.ClientName, client =>
+            {
+                client.Timeout = Timeout.InfiniteTimeSpan;
+                client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
+                client.DefaultRequestHeaders.Add("x-client-version", version);
+            });
 
         return services;
     }

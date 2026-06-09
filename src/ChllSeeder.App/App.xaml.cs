@@ -60,6 +60,16 @@ public partial class App : Application
             // Close-to-tray arrives in Phase 2; for now closing the window exits.
             Log.Information("Main window closed, shutting down");
 
+            // End any open seeding session (analytics, fire-and-forget so it doesn't block exit).
+            try
+            {
+                AppHost.Services.GetRequiredService<HeartbeatService>().StopFireAndForget("app_exit");
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Heartbeat stop on exit failed");
+            }
+
             // If efficiency mode is applied, kill the game and restore the user's real
             // graphics settings so HLL isn't left degraded after we exit.
             try

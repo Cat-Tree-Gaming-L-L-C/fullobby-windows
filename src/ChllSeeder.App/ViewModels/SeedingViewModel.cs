@@ -26,8 +26,15 @@ public sealed partial class SeedingViewModel : ObservableObject
     private readonly ServerStore _servers;
     private readonly ConfigService _config;
     private readonly AppBootstrapper _bootstrap;
+    private readonly LiveStats _live;
+    private readonly AuthSession _auth;
+    private readonly HeartbeatService _heartbeat;
     private readonly DispatcherQueue _dispatcher;
     private readonly DispatcherTimer _timer;
+
+    /// <summary>The active seeding session id (from start-session), heartbeat-ed until stop. Null
+    /// when no session is open. Analytics only — non-fatal if session creation failed.</summary>
+    private string? _sessionId;
 
     /// <summary>Set by the hosting page (which has a XamlRoot) so the VM can ask the user to
     /// confirm closing a running game. Returns true when the user confirms.</summary>
@@ -39,7 +46,10 @@ public sealed partial class SeedingViewModel : ObservableObject
         SeedingApiClient api,
         ServerStore servers,
         ConfigService config,
-        AppBootstrapper bootstrap)
+        AppBootstrapper bootstrap,
+        LiveStats live,
+        AuthSession auth,
+        HeartbeatService heartbeat)
     {
         _log = log;
         _engine = engine;
@@ -47,6 +57,9 @@ public sealed partial class SeedingViewModel : ObservableObject
         _servers = servers;
         _config = config;
         _bootstrap = bootstrap;
+        _live = live;
+        _auth = auth;
+        _heartbeat = heartbeat;
 
         // Constructed on the UI thread (first page resolve), so this captures the UI queue.
         _dispatcher = DispatcherQueue.GetForCurrentThread();
@@ -57,7 +70,7 @@ public sealed partial class SeedingViewModel : ObservableObject
         _engine.Event += OnEngineEvent;
         _bootstrap.ServersLoaded += OnServersLoaded;
         _bootstrap.ServersLoadFailed += OnServersLoadFailed;
-        _bootstrap.StatsUpdated += OnStatsUpdated;
+        _live.StatsUpdated += OnStatsUpdated;
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _timer.Tick += OnTimerTick;
@@ -258,7 +271,14 @@ public sealed partial class SeedingViewModel : ObservableObject
         {
             var actual = await _engine.StartSeedingAsync(index, region).ConfigureAwait(true);
             SetStatus(SeedingStatus.Seeding);
+
+            // Create the analytics session + heartbeat after a successful launch (non-fatal).
+            await StartSessionAsync(region, actual).ConfigureAwait(true);
+
             await _engine.MonitorSeedAsync(actual, region).ConfigureAwait(true);
+
+            // Monitor returned on its own (HLL closed / switched / stop) — end the session.
+            await StopSessionAsync("monitor_complete").ConfigureAwait(true);
         }
         catch (SeedingException e) when (e.Message.Contains("could not open", StringComparison.OrdinalIgnoreCase))
         {
@@ -282,6 +302,41 @@ public sealed partial class SeedingViewModel : ObservableObject
             SetStatus(Status == SeedingStatus.Stopping ? SeedingStatus.Stopped : SeedingStatus.Idle);
         }
         IsSeeding = false;
+    }
+
+    // ── Seeding session + heartbeat (analytics; non-fatal) ─────────────────────
+
+    /// <summary>Create a seeding session after a successful launch and start its heartbeat.
+    /// Guest/auth required; failures are logged and swallowed (mirrors the Rust seed flow).</summary>
+    private async Task StartSessionAsync(string region, int index)
+    {
+        if (!_auth.IsAuthenticated)
+        {
+            return;
+        }
+        try
+        {
+            var analytics = Analytics.Gather(_config, autoSeed: false);
+            var resp = await _api.StartSessionAsync(
+                _engine.CurrentGame.Id, region, index, steamId: null, analytics).ConfigureAwait(true);
+            _sessionId = resp.SessionId;
+            await _heartbeat.StartAsync(resp.SessionId).ConfigureAwait(true);
+        }
+        catch (Exception e)
+        {
+            _log.LogWarning(e, "Failed to create seeding session (non-fatal)");
+        }
+    }
+
+    /// <summary>Stop the heartbeat and end the session with a reason. No-op when no session is open.</summary>
+    private async Task StopSessionAsync(string reason)
+    {
+        if (_sessionId is null)
+        {
+            return;
+        }
+        _sessionId = null;
+        await _heartbeat.StopAsync(reason).ConfigureAwait(true);
     }
 
     // ── Launch command (Launch tab) ────────────────────────────────────────────
@@ -350,6 +405,7 @@ public sealed partial class SeedingViewModel : ObservableObject
     {
         SetStatus(SeedingStatus.Stopping);
         ResetSwitchOverlay();
+        await StopSessionAsync("user_stopped").ConfigureAwait(true);
         try
         {
             await _engine.StopSeedingAsync().ConfigureAwait(true);
@@ -370,6 +426,7 @@ public sealed partial class SeedingViewModel : ObservableObject
     {
         SetStatus(SeedingStatus.Stopping);
         ResetSwitchOverlay();
+        await StopSessionAsync("user_stopped_keep_game").ConfigureAwait(true);
         try
         {
             await _engine.StopSeedingOnlyAsync().ConfigureAwait(true);

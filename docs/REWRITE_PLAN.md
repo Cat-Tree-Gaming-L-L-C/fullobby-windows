@@ -84,6 +84,32 @@
     rotation across servers/games is Phase 2 (the single-server monitor + in-place switch countdown work
     now). Switch toast/sound stay Phase 2. The switch-overlay countdown is visual only (the engine drives
     the real timing server-side).
+- 🚧 **Phase 2 — Live data (part 1: SSE + session/heartbeat)** done (2026-06-09, Windows): solution builds
+  clean (0 warnings), 273/273 tests pass (227 prior + 46 new). Live LAN test against the WSL backend still
+  pending (manual).
+  - ✅ **SSE stream:** `Core.Api.SseFrameParser` (pure SSE frame parser replacing the Rust
+    `reqwest_eventsource` dep — `event:`/`data:`/multiline/comment/blank-line dispatch) + `Core.Api.SseStreamClient`
+    (`IHostedService`, port of `api/sse.rs`): own infinite-timeout named `"sse"` HttpClient (no delegating
+    handlers; per-connection bearer/x-api-key via `Core.Api.AuthHeaders`), 30s connect bound, 60s keepalive via
+    reset `CancelAfter` (>120s ⇒ wake-from-sleep 3s settle), exponential backoff + jitter (`ComputeBackoffSecs`),
+    429 `Retry-After` (≤120s), 401 ⇒ refresh. `stats` ⇒ `LiveStats.Apply`, `seeding_status` ⇒
+    `SeedingStatusCache.Update`; on (re)connect invalidates the cache + `SeedingEngine.NotifyMonitor()`.
+  - ✅ **Coordination:** `Core.Servers.LiveStats` (shared stats sink — `Apply` + `StatsUpdated`, moved out of
+    `AppBootstrapper`; both SSE and the poll fallback feed it) and `Core.Api.SseConnectionState`
+    (`Connected`/`FailureCount` + `RequestPoll`/`WaitForPollOrInterval` = Rust `SSE_CONNECTED`/`POLL_NOTIFY`,
+    + `RequestReconnect`). `AppBootstrapper` poll loop is now the SSE-aware **fallback** (idles 60s while
+    connected, polls 10s + wakes on disconnect; nudges `RequestReconnect` after guest auth).
+  - ✅ **Auth extraction:** `Core.Api.AuthRefresher` (single-flight JWT refresh, extracted from `AuthHandler`,
+    uses a dedicated `"auth"` named client = resilience only, no auth, no recursion) + `Core.Api.AuthHeaders`,
+    both now shared by `AuthHandler` and the SSE client. (Phase 2 auth is the guest `x-api-key`; the 401-refresh
+    path isn't exercised until Phase 3 OAuth.)
+  - ✅ **Session + heartbeat:** `Core.Seeding.HeartbeatService` (port of `heartbeat.rs` — single active loop,
+    30s + capped exponential backoff `BackoffIntervalSecs`, wake-from-sleep at `interval*3`, `StartAsync`/
+    `StopAsync(reason)`/`StopFireAndForget`), `Core.Native.OsInfo` + `Core.Api.Analytics.Gather` (reads config
+    `efficiency_mode`/`eu_enabled`). Wired in `SeedingViewModel.RunSeedAsync` (start session+heartbeat after a
+    successful launch, auth-gated/non-fatal; stop reasons `monitor_complete`/`user_stopped`/
+    `user_stopped_keep_game`) and `App.xaml.cs` window-close (`app_exit`, fire-and-forget).
+  - Deferred to Phase 2 part 2: Seed-All rotation, tray + close-to-tray, desktop toasts + switch sound, in-app toasts.
 
 ## Context
 
