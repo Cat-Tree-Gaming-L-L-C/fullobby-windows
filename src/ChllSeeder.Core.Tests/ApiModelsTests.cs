@@ -15,10 +15,9 @@ public class ApiModelsTests
     [Fact]
     public void ServerInfo_SnakeCaseMapping()
     {
-        var json = """{"ip":"1.2.3.4","bm_id":100,"short_name":"PF","name":"Comp PF","seeding_threshold":50,"game":"hll"}""";
+        var json = """{"ip":"1.2.3.4","short_name":"PF","name":"Comp PF","seeding_threshold":50,"game":"hll"}""";
         var s = Parse<ServerInfo>(json);
         Assert.Equal("1.2.3.4", s.Ip);
-        Assert.Equal(100, s.BmId);
         Assert.Equal("PF", s.ShortName);
         Assert.Equal(50, s.SeedingThreshold);
     }
@@ -26,7 +25,7 @@ public class ApiModelsTests
     [Fact]
     public void ServerInfo_GameDefaultsEmpty()
     {
-        var s = Parse<ServerInfo>("""{"ip":"1.2.3.4","bm_id":1,"short_name":"S","name":"S","seeding_threshold":50}""");
+        var s = Parse<ServerInfo>("""{"ip":"1.2.3.4","short_name":"S","name":"S","seeding_threshold":50}""");
         Assert.Equal("", s.Game);
     }
 
@@ -79,7 +78,7 @@ public class ApiModelsTests
     [Fact]
     public void NextServerResponse_SessionIdDefaultsNull()
     {
-        var json = """{"game":"hll","region":"na","index":0,"server":{"ip":"1.2.3.4","bm_id":1,"short_name":"S","name":"S","seeding_threshold":50},"all_exhausted":true}""";
+        var json = """{"game":"hll","region":"na","index":0,"server":{"ip":"1.2.3.4","short_name":"S","name":"S","seeding_threshold":50},"all_exhausted":true}""";
         var r = Parse<NextServerResponse>(json);
         Assert.Null(r.SessionId);
         Assert.True(r.AllExhausted);

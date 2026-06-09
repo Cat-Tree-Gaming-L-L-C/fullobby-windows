@@ -9,7 +9,6 @@ namespace ChllSeeder.Core.Api;
 public sealed class ServerInfo
 {
     public string Ip { get; set; } = "";
-    public long BmId { get; set; }
     public string ShortName { get; set; } = "";
     public string Name { get; set; } = "";
     public int SeedingThreshold { get; set; }

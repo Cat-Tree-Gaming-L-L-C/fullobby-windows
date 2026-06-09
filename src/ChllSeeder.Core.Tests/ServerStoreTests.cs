@@ -10,7 +10,6 @@ public class ServerStoreTests
     private static ServerInfo Make(string name) => new()
     {
         Ip = "127.0.0.1",
-        BmId = 1,
         ShortName = name,
         Name = name,
         SeedingThreshold = 50,
