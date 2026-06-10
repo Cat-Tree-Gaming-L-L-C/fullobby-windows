@@ -116,8 +116,20 @@ public sealed partial class SeedingViewModel : ObservableObject
     [ObservableProperty]
     private bool showStatusBanner;
 
+    // Error banners are page-scoped: a Seed-page failure (e.g. "All NA servers are full") must not
+    // bleed onto the Launch page and vice-versa. Each page binds only its own pair. The lifecycle
+    // status banner above (StatusBanner) stays shared because active seeding is genuine global state.
     [ObservableProperty]
-    private string errorMessage = "";
+    private string seedError = "";
+
+    [ObservableProperty]
+    private bool showSeedError;
+
+    [ObservableProperty]
+    private string launchError = "";
+
+    [ObservableProperty]
+    private bool showLaunchError;
 
     [ObservableProperty]
     private bool showSeedButtons = true;
@@ -167,13 +179,74 @@ public sealed partial class SeedingViewModel : ObservableObject
 
     partial void OnIsSeedingChanged(bool value) => RefreshDerived();
 
-    partial void OnErrorMessageChanged(string value) => RefreshDerived();
+    /// <summary>Which of the two banner-bearing pages is currently shown. Stop/update failures can
+    /// be triggered from either (both carry the active-seeding stop controls), so they surface on
+    /// the page the user is actually looking at rather than always defaulting to one. Set by each
+    /// page's OnNavigatedTo.</summary>
+    private bool _launchPageActive;
+
+    /// <summary>Records the visible page so shared (non-page-specific) errors land on it.</summary>
+    public void SetActivePage(bool isLaunchPage) => _launchPageActive = isLaunchPage;
+
+    /// <summary>Dismiss the Seed page's error banner. Called when navigating away from the page so a
+    /// stale error doesn't linger on the next visit.</summary>
+    public void ClearSeedError()
+    {
+        SeedError = "";
+        ShowSeedError = false;
+    }
+
+    /// <summary>Dismiss the Launch page's error banner. Called when navigating away from the page so a
+    /// stale error doesn't linger on the next visit.</summary>
+    public void ClearLaunchError()
+    {
+        LaunchError = "";
+        ShowLaunchError = false;
+    }
+
+    /// <summary>Show an error on whichever page is currently visible (for failures not tied to a
+    /// specific page's action, e.g. a failed stop or an update timeout).</summary>
+    private void SetActivePageError(string message)
+    {
+        if (_launchPageActive)
+        {
+            SetLaunchError(message);
+        }
+        else
+        {
+            SetSeedError(message);
+        }
+    }
+
+    /// <summary>Show a page-scoped error on the Seed page (seeding/stop/update failures) and drop
+    /// back to an idle state so the seed buttons reappear. Clears any stale Launch-page error.</summary>
+    private void SetSeedError(string message)
+    {
+        LaunchError = "";
+        ShowLaunchError = false;
+        SeedError = message;
+        ShowSeedError = true;
+        IsSeeding = false;
+        SetStatus(SeedingStatus.Idle);
+    }
+
+    /// <summary>Show a page-scoped error on the Launch page (launch failures / blocked launches) and
+    /// drop back to an idle state so the launch buttons reappear. Clears any stale Seed-page error.</summary>
+    private void SetLaunchError(string message)
+    {
+        SeedError = "";
+        ShowSeedError = false;
+        LaunchError = message;
+        ShowLaunchError = true;
+        IsSeeding = false;
+        SetStatus(SeedingStatus.Idle);
+    }
 
     /// <summary>Recompute the banner text and which button group is visible. Mirrors the
     /// show_* derivations in seed.rs and the status_config map in seed_banner.rs.</summary>
     private void RefreshDerived()
     {
-        ShowSeedButtons = Status is SeedingStatus.Idle or SeedingStatus.Stopped or SeedingStatus.Error
+        ShowSeedButtons = Status is SeedingStatus.Idle or SeedingStatus.Stopped
             || (Status == SeedingStatus.Running && !IsSeeding);
 
         ShowWaitingForUpdate = Status == SeedingStatus.WaitingForUpdate;
@@ -191,7 +264,6 @@ public sealed partial class SeedingViewModel : ObservableObject
             SeedingStatus.Switching => "Switching…",
             SeedingStatus.Stopped => "Stopped",
             SeedingStatus.WaitingForUpdate => "Waiting for game update…",
-            SeedingStatus.Error => ErrorMessage.Length > 0 ? ErrorMessage : "An error occurred. Please try again.",
             _ => "",
         };
         StatusBanner = banner;
@@ -223,7 +295,7 @@ public sealed partial class SeedingViewModel : ObservableObject
             return;
         }
 
-        ErrorMessage = "";
+        ClearSeedError();
         IsSeeding = true;
         SetStatus(SeedingStatus.Initializing);
 
@@ -235,20 +307,16 @@ public sealed partial class SeedingViewModel : ObservableObject
         catch (Exception e)
         {
             _log.LogError(e, "Failed to fetch seeding status");
-            ErrorMessage = "Couldn't reach the seeding service. Please try again.";
-            IsSeeding = false;
-            SetStatus(SeedingStatus.Error);
+            SetSeedError("Couldn't reach the seeding service. Please try again.");
             return;
         }
 
         var candidate = region == "eu" ? status.Hll.Eu : status.Hll.Na;
         if (candidate is null)
         {
-            ErrorMessage = region == "eu"
+            SetSeedError(region == "eu"
                 ? "All EU servers are full — no seeding needed."
-                : "All NA servers are full — no seeding needed.";
-            IsSeeding = false;
-            SetStatus(SeedingStatus.Error);
+                : "All NA servers are full — no seeding needed.");
             return;
         }
 
@@ -290,14 +358,12 @@ public sealed partial class SeedingViewModel : ObservableObject
         catch (Exception e)
         {
             _log.LogError(e, "Seeding failed");
-            ErrorMessage = "Failed to launch the game. Please try again.";
-            IsSeeding = false;
-            SetStatus(SeedingStatus.Error);
+            SetSeedError("Failed to launch the game. Please try again.");
             return;
         }
 
         // Monitor returned: HLL closed, switched away, or a stop was requested.
-        if (Status is not (SeedingStatus.Error or SeedingStatus.WaitingForUpdate))
+        if (Status != SeedingStatus.WaitingForUpdate)
         {
             SetStatus(Status == SeedingStatus.Stopping ? SeedingStatus.Stopped : SeedingStatus.Idle);
         }
@@ -355,15 +421,13 @@ public sealed partial class SeedingViewModel : ObservableObject
         // launcher). The button is disabled for these too; this guards the gap before stats land.
         if (!row.CanLaunch)
         {
-            ErrorMessage = row.IsOffline
+            SetLaunchError(row.IsOffline
                 ? $"{row.ShortName} is offline right now."
-                : $"{row.ShortName} is password-protected — HLL can't join it via the launcher.";
-            IsSeeding = false;
-            SetStatus(SeedingStatus.Error);
+                : $"{row.ShortName} is password-protected — HLL can't join it via the launcher.");
             return;
         }
 
-        ErrorMessage = "";
+        ClearLaunchError();
         IsSeeding = false;
         SetStatus(SeedingStatus.Initializing);
 
@@ -381,8 +445,7 @@ public sealed partial class SeedingViewModel : ObservableObject
         catch (Exception e)
         {
             _log.LogError(e, "Launch failed");
-            ErrorMessage = "Failed to launch the game. Please try again.";
-            SetStatus(SeedingStatus.Error);
+            SetLaunchError("Failed to launch the game. Please try again.");
         }
     }
 
@@ -427,8 +490,7 @@ public sealed partial class SeedingViewModel : ObservableObject
         catch (Exception e)
         {
             _log.LogError(e, "Error stopping seeding");
-            ErrorMessage = "Failed to stop seeding cleanly.";
-            SetStatus(SeedingStatus.Error);
+            SetActivePageError("Failed to stop seeding cleanly.");
         }
         IsSeeding = false;
     }
@@ -448,8 +510,7 @@ public sealed partial class SeedingViewModel : ObservableObject
         catch (Exception e)
         {
             _log.LogError(e, "Error stopping seeding (keep game)");
-            ErrorMessage = "Failed to stop seeding cleanly.";
-            SetStatus(SeedingStatus.Error);
+            SetActivePageError("Failed to stop seeding cleanly.");
         }
         IsSeeding = false;
     }
@@ -524,9 +585,7 @@ public sealed partial class SeedingViewModel : ObservableObject
                 SetStatus(SeedingStatus.Seeding);
                 break;
             case SeedingEvent.SeedingUpdateTimeout:
-                ErrorMessage = "The game didn't finish updating in time. Please try again.";
-                IsSeeding = false;
-                SetStatus(SeedingStatus.Error);
+                SetActivePageError("The game didn't finish updating in time. Please try again.");
                 break;
         }
     }

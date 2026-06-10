@@ -22,6 +22,15 @@ public sealed partial class SeedPage : Page
         base.OnNavigatedTo(e);
         // Provide the "close the running game?" confirmation using this page's XamlRoot.
         ViewModel.ConfirmAsync = ConfirmAsync;
+        // Route page-agnostic errors (stop/update failures) to this page's banner while it's shown.
+        ViewModel.SetActivePage(isLaunchPage: false);
+    }
+
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        // Dismiss this page's error banner on leave so it doesn't linger on the next visit.
+        ViewModel.ClearSeedError();
     }
 
     private async Task<bool> ConfirmAsync(string message, string title)

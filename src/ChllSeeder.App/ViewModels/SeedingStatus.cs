@@ -27,9 +27,6 @@ public enum SeedingStatus
     /// <summary>Seeding ended cleanly (user-stopped or game closed).</summary>
     Stopped,
 
-    /// <summary>An error occurred; <see cref="SeedingViewModel.ErrorMessage"/> holds the detail.</summary>
-    Error,
-
     /// <summary>Game would not open (likely a Steam update); the launch watcher is retrying.</summary>
     WaitingForUpdate,
 }

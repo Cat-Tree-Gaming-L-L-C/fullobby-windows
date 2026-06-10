@@ -20,6 +20,15 @@ public sealed partial class LaunchPage : Page
     {
         base.OnNavigatedTo(e);
         ViewModel.ConfirmAsync = ConfirmAsync;
+        // Route page-agnostic errors (stop/update failures) to this page's banner while it's shown.
+        ViewModel.SetActivePage(isLaunchPage: true);
+    }
+
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        // Dismiss this page's error banner on leave so it doesn't linger on the next visit.
+        ViewModel.ClearLaunchError();
     }
 
     // Per-item launch buttons are bound inside an ItemsControl template (separate namescope),

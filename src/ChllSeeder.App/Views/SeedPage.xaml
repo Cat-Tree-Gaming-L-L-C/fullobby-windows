@@ -9,7 +9,7 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,12">
             <StackPanel Spacing="8">
 
-                <!-- Status banner -->
+                <!-- Status banner (shared seeding lifecycle) -->
                 <Border
                     Visibility="{x:Bind ViewModel.ShowStatusBanner, Mode=OneWay, Converter={StaticResource BoolToVis}}"
                     Background="{ThemeResource SystemControlBackgroundBaseLowBrush}"
@@ -17,6 +17,20 @@
                     Padding="12,6">
                     <TextBlock
                         Text="{x:Bind ViewModel.StatusBanner, Mode=OneWay}"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap"
+                        HorizontalAlignment="Center" />
+                </Border>
+
+                <!-- Error banner (Seed-page scoped; does not bleed onto other pages) -->
+                <Border
+                    Visibility="{x:Bind ViewModel.ShowSeedError, Mode=OneWay, Converter={StaticResource BoolToVis}}"
+                    Background="{ThemeResource SystemFillColorCriticalBackgroundBrush}"
+                    CornerRadius="6"
+                    Padding="12,6">
+                    <TextBlock
+                        Text="{x:Bind ViewModel.SeedError, Mode=OneWay}"
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                         TextAlignment="Center"
                         TextWrapping="Wrap"
                         HorizontalAlignment="Center" />
