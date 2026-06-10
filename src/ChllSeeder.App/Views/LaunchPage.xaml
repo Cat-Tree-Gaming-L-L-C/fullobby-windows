@@ -60,13 +60,21 @@
                 <ItemsControl ItemsSource="{x:Bind ViewModel.NaServers}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:ServerRow">
-                            <Button
-                                Content="{x:Bind LaunchLabel}"
-                                Height="44"
-                                Margin="0,2"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Center"
-                                Click="OnLaunchClick" />
+                            <StackPanel Margin="0,2" Spacing="2">
+                                <Button
+                                    Content="{x:Bind LaunchLabel}"
+                                    Height="44"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    IsEnabled="{x:Bind CanLaunch, Mode=OneWay}"
+                                    Click="OnLaunchClick" />
+                                <TextBlock
+                                    Text="{x:Bind LaunchBlockedReason, Mode=OneWay}"
+                                    FontSize="11"
+                                    Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                    HorizontalAlignment="Center"
+                                    Visibility="{x:Bind CanLaunch, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                            </StackPanel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
@@ -81,14 +89,21 @@
                     Visibility="{x:Bind ViewModel.EuEnabled, Mode=OneWay, Converter={StaticResource BoolToVis}}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:ServerRow">
-                            <Button
-                                Content="{x:Bind LaunchLabel}"
-                                Height="44"
-                                Margin="0,2"
-                                Opacity="0.85"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Center"
-                                Click="OnLaunchClick" />
+                            <StackPanel Margin="0,2" Spacing="2" Opacity="0.85">
+                                <Button
+                                    Content="{x:Bind LaunchLabel}"
+                                    Height="44"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    IsEnabled="{x:Bind CanLaunch, Mode=OneWay}"
+                                    Click="OnLaunchClick" />
+                                <TextBlock
+                                    Text="{x:Bind LaunchBlockedReason, Mode=OneWay}"
+                                    FontSize="11"
+                                    Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                    HorizontalAlignment="Center"
+                                    Visibility="{x:Bind CanLaunch, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                            </StackPanel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>

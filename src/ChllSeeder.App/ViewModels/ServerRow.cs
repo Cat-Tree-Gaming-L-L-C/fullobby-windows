@@ -23,13 +23,31 @@ public sealed partial class ServerRow : ObservableObject
     private string statsLine;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanLaunch))]
+    [NotifyPropertyChangedFor(nameof(LaunchBlockedReason))]
     private bool isOffline;
 
     /// <summary>Server is password-protected. The backend excludes these from seeding
     /// candidates (HLL can't join a passworded server via the launcher), so the Seed list
     /// badges them to explain why they're never picked.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanLaunch))]
+    [NotifyPropertyChangedFor(nameof(LaunchBlockedReason))]
     private bool isPassworded;
+
+    /// <summary>Whether a direct launch to this server is allowed. The Launch tab lets the user
+    /// pick a server by hand (no backend candidate filtering), so it must apply the same
+    /// exclusions the seeding path gets for free: an offline server has nothing to join, and HLL
+    /// can't join a passworded server via the launcher (confirmed live — all +connect syntaxes
+    /// failed). Buttons bind to this and the launch command re-checks it.</summary>
+    public bool CanLaunch => !IsOffline && !IsPassworded;
+
+    /// <summary>Caption shown under a disabled launch button explaining why it's blocked. Offline
+    /// takes priority — a down server is the more immediate blocker. Empty when launchable.</summary>
+    public string LaunchBlockedReason =>
+        IsOffline ? "Offline — can't launch"
+        : IsPassworded ? "Password-protected — can't join via launcher"
+        : "";
 
     public ServerRow(int index, string region, ServerInfo info)
     {

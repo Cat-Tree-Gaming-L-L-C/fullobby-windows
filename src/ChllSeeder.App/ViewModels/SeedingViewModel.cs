@@ -350,6 +350,19 @@ public sealed partial class SeedingViewModel : ObservableObject
             return;
         }
 
+        // Same exclusions the seeding path gets from backend candidate filtering: never launch
+        // into an offline server (nothing to join) or a passworded one (HLL can't join via the
+        // launcher). The button is disabled for these too; this guards the gap before stats land.
+        if (!row.CanLaunch)
+        {
+            ErrorMessage = row.IsOffline
+                ? $"{row.ShortName} is offline right now."
+                : $"{row.ShortName} is password-protected — HLL can't join it via the launcher.";
+            IsSeeding = false;
+            SetStatus(SeedingStatus.Error);
+            return;
+        }
+
         ErrorMessage = "";
         IsSeeding = false;
         SetStatus(SeedingStatus.Initializing);
