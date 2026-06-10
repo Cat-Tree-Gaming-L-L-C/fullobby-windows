@@ -24,6 +24,10 @@ public sealed class BatchStatsResult
     public int? PlayerCount { get; set; }
     public int? MaxPlayerCount { get; set; }
     public bool Offline { get; set; }
+    /// <summary>Server requires a join password — unjoinable for seeding. The backend already
+    /// excludes passworded servers from seeding candidates (see seeding_status.rs); this flag
+    /// lets the UI badge them. Sourced from CRCON get_public_info → config.password_protected.</summary>
+    public bool PasswordProtected { get; set; }
     public string? Error { get; set; }
 }
 

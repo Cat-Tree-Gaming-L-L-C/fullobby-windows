@@ -76,7 +76,21 @@
                                 CornerRadius="6"
                                 Padding="10,4"
                                 Margin="0,2">
-                                <TextBlock Text="{x:Bind StatsLine, Mode=OneWay}" FontSize="12" />
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <TextBlock Text="{x:Bind StatsLine, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" />
+                                    <Border
+                                        Visibility="{x:Bind IsPassworded, Mode=OneWay, Converter={StaticResource BoolToVis}}"
+                                        Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                                        CornerRadius="4"
+                                        Padding="6,1"
+                                        VerticalAlignment="Center"
+                                        ToolTipService.ToolTip="Password-protected — excluded from seeding (HLL can't join a passworded server via the launcher)">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <FontIcon Glyph="&#xE72E;" FontSize="11" />
+                                            <TextBlock Text="Passworded" FontSize="11" />
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -100,7 +114,21 @@
                                 Padding="10,4"
                                 Margin="0,2"
                                 Opacity="0.85">
-                                <TextBlock Text="{x:Bind StatsLine, Mode=OneWay}" FontSize="12" />
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <TextBlock Text="{x:Bind StatsLine, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" />
+                                    <Border
+                                        Visibility="{x:Bind IsPassworded, Mode=OneWay, Converter={StaticResource BoolToVis}}"
+                                        Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                                        CornerRadius="4"
+                                        Padding="6,1"
+                                        VerticalAlignment="Center"
+                                        ToolTipService.ToolTip="Password-protected — excluded from seeding (HLL can't join a passworded server via the launcher)">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <FontIcon Glyph="&#xE72E;" FontSize="11" />
+                                            <TextBlock Text="Passworded" FontSize="11" />
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>

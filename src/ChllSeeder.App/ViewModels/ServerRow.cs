@@ -25,6 +25,12 @@ public sealed partial class ServerRow : ObservableObject
     [ObservableProperty]
     private bool isOffline;
 
+    /// <summary>Server is password-protected. The backend excludes these from seeding
+    /// candidates (HLL can't join a passworded server via the launcher), so the Seed list
+    /// badges them to explain why they're never picked.</summary>
+    [ObservableProperty]
+    private bool isPassworded;
+
     public ServerRow(int index, string region, ServerInfo info)
     {
         Index = index;
@@ -45,6 +51,7 @@ public sealed partial class ServerRow : ObservableObject
         }
 
         IsOffline = stat.Offline;
+        IsPassworded = stat.PasswordProtected;
         var map = stat.Offline
             ? "Offline"
             : string.IsNullOrEmpty(stat.MapName) ? "—" : stat.MapName;
