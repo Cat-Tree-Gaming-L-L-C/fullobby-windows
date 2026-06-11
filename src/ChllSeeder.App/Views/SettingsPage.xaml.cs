@@ -19,7 +19,7 @@ public sealed partial class SettingsPage : Page
 
         _loading = true;
         CloseToTrayToggle.IsOn = _config.GetBool("close_to_tray", true);
-        SwitchNotificationToggle.IsOn = _config.GetBool("switch_notification", false);
+        SwitchNotificationToggle.IsOn = _config.GetBool("switch_notification", true);
         _loading = false;
     }
 

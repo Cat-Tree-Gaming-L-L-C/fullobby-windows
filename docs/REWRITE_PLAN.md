@@ -132,7 +132,9 @@
       games, killing + 20s + switching `CurrentGame`) and re-enters; ends with an in-app success toast when exhausted.
       Cross-game hop is dormant (`GameCatalog.Released` = [hll] only). Stop commands clear `_isSeedAll`.
     - **Settings toggles:** minimal `SettingsPage` `ToggleSwitch`es for `close_to_tray` + `switch_notification`
-      (read/write via `ConfigService`); the full Settings tab stays Phase 3.
+      (read/write via `ConfigService`); the full Settings tab stays Phase 3. **`switch_notification` defaults to
+      `true`** (deviation from Rust's `false`) — otherwise the switch countdown/toast/sound is invisible out of the
+      box and every server switch is an abrupt game-kill. Engine + Settings both default it on when the key is unset.
     - **Deviations / deferred:** the Rust 30s Seed-All cooldown (anti-spam after "all full"/error) is NOT ported —
       the `IsBusy` guard already blocks re-entry while seeding; cooldown only gates rapid retry. The Seed-All cascade
       helpers live in the App VM (matching Rust's component placement) and aren't covered by Core.Tests (no App test

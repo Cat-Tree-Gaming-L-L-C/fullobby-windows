@@ -817,7 +817,7 @@ public sealed class SeedingEngine : IDisposable
             {
                 if (_state.IsStopRequested) break;
 
-                if (!_config.GetBool("switch_notification"))
+                if (!_config.GetBool("switch_notification", true))
                 {
                     _log.LogInformation("Switch notification disabled, killing HLL immediately - {Name}", server.Name);
                     KillGameProcess();
