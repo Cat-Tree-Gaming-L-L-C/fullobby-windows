@@ -283,5 +283,35 @@
                 </StackPanel>
             </Border>
         </Grid>
+
+        <!-- Auto-seed countdown overlay (scheduled / missed-task triggered) -->
+        <Grid
+            Background="#B0000000"
+            Visibility="{x:Bind ViewModel.AutoseedCountdownActive, Mode=OneWay, Converter={StaticResource BoolToVis}}">
+            <Border
+                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                CornerRadius="8"
+                Padding="20"
+                Margin="24"
+                VerticalAlignment="Center">
+                <StackPanel Spacing="12" HorizontalAlignment="Center">
+                    <TextBlock
+                        Text="Auto-Seed"
+                        FontWeight="SemiBold"
+                        FontSize="16"
+                        HorizontalAlignment="Center" />
+                    <TextBlock
+                        Text="{x:Bind ViewModel.AutoseedCountdownText, Mode=OneWay}"
+                        Opacity="0.85"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap"
+                        HorizontalAlignment="Center" />
+                    <Button
+                        Content="Cancel"
+                        HorizontalAlignment="Center"
+                        Command="{x:Bind ViewModel.CancelAutoseedCommand}" />
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </Page>

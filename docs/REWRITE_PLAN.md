@@ -183,6 +183,51 @@
     visible-but-disabled stubs, not wired. App VM code isn't covered by Core.Tests (no App test project) — only the
     new Core helpers are. Live OAuth/link callbacks + leaderboard data need a reachable backend to verify end-to-end.
 
+- ✅ **Phase 4 — Automation & tools** complete (2026-06-10, Windows). Solution builds clean (0 warnings),
+  348/348 tests pass (289 + 59 new: auto-seed time parse/normalize, task XML + next-run parse, missed-seed
+  window, auto-seed coordination state, manual-backup timestamp/unchanged helpers). App smoke-tested (fresh
+  instance: DI graph + new hosted `MissedAutoseedMonitor` resolve, window up, degrades gracefully against the
+  unresolved TBD API host, clean). Live task creation / a real missed-seed fire need a reachable backend + Steam/HLL.
+  - ✅ **Startup registry:** `Core.Platform.StartupRegistry` (HKCU `…\Run` value `CHLLSeeder`; Enable/Disable/
+    IsEnabled/UpdatePathIfNeeded — port of `startup.rs`). Wired to a working "Start with Windows" toggle in
+    Settings; `UpdatePathIfNeeded()` runs once at launch (stale-path refresh after an installer move).
+  - ✅ **Auto-seed scheduling (Core.Scheduling):** `AutoSeedTime` (UTC HH:MM parse/validate, `NormalizeHms`,
+    UTC→local for the task + display — port of `validate_start_time` + `components/settings.rs` time helpers),
+    `ScheduledTaskService` (**schtasks `/create /xml`** with a generated Task v1.2 XML so WakeToRun +
+    StartWhenAvailable survive — replaces the Rust `planif` COM path; delete/query/next-run via schtasks; XML
+    builder + `ParseNextRunTime` are pure + tested), `AutoSeedSlot`/`AutoseedStatus` (NA→`CHLL-Seeder`/`--autoseed-na`/
+    `auto_seed_time`, EU→`CHLL-Seeder-EU`/`--autoseed-eu`/`auto_seed_time_secondary`; **clean break — no legacy
+    `Esprit-Seeder-2` fallbacks**), `AutoSeedService` (setup/uninstall/status; persists the UTC time, registers the
+    task at the local-equivalent, appends `PowerStatus` warnings), `AutoSeedState` (DI-singleton replacing the Rust
+    `AUTOSEED_IN_PROGRESS`/`AUTOSEED_CANCELLED`/`LAST_AUTOSEED_TRIGGER` atomics — exclusive begin/cancel + per-region
+    per-UTC-day triggered log).
+  - ✅ **Missed-task detection:** `Core.Scheduling.MissedAutoseedMonitor : IHostedService` (60s poll, wake heuristic
+    >180s, **4h** UTC catch-up window, guards on triggered-today / in-progress / HLL-running; pure `IsWithinMissedWindow`
+    tested). Raises `AutoseedDue(region)`; `App` marshals it onto the UI and runs the countdown. Port of
+    `check_missed_autoseed` + the `app.rs` 60s loop. **Time model (UTC↔local):** user enters the daily time in **UTC**,
+    we store the UTC string + create the task at the local-equivalent (schtasks triggers are local), and the monitor
+    compares the stored UTC against the UTC clock.
+  - ✅ **Auto-seed run + countdown + CLI:** `SeedingViewModel.RunAutoseedAsync(region)` (60s cancellable countdown
+    overlay on `SeedPage`, then launch the best candidate — requested region first, the other region when EU is
+    enabled — with `autoSeed:true` analytics; port of `run_autoseed`). `App` parses `--autoseed-na`/`--autoseed-eu`
+    (+ legacy `--seed-*`) from both a fresh scheduled-task launch (`Environment.GetCommandLineArgs`) and a redirected
+    second-instance activation (`ILaunchActivatedEventArgs.Arguments`), and subscribes to `MissedAutoseedMonitor`.
+  - ✅ **Efficiency crash-recovery wiring (Phase 1 gap closed):** `App.OnLaunched` now calls
+    `HllConfigBackupService.CheckAndRestoreOnStartup()` early and surfaces `TakeStartupRestoreNotice()` as an in-app
+    toast once the window is up — a run killed mid-seed with degraded settings is restored on next launch.
+  - ✅ **Manual backup + Tools tab:** `Core.Tools.ManualBackupService` (port of `backend/backup.rs` —
+    timestamped incremental backups under `chllseeder-backup\HLL\manual\`, `CreateHardLinkW` P/Invoke dedup of
+    unchanged files with copy fallback, restore with symlink-skip + containment guards, `RestoreFromAutoBackup`,
+    `OpenLogs`; pure `IsTimestampFolder` + `IsFileUnchanged` tested). `ToolsPage` rebuilt (handler-driven, matching
+    the Rust component): Backup Settings / Restore Manual / Restore Auto / View Logs / Links & Resources, with a
+    WinUI `FolderPicker` (HWND-initialized).
+  - **Deviations / deferred:** task creation uses generated schtasks XML rather than COM (the plan's
+    "port task_scheduler.rs verbatim" via schtasks — XML is the only schtasks path that sets WakeToRun). The WinUI
+    `FolderPicker` can't pre-seed a start directory (no rfd `set_directory` equivalent) — picker opens at "This PC".
+    Web-resource URLs rebranded to `comp-hll.org/{faq,termsandconditions,privacypolicy}` (exact paths TBD). App
+    VM/page code isn't covered by Core.Tests (no App test project) — only the new Core helpers are. Updater +
+    beta-channel rows in Settings stay disabled stubs (Phase 5).
+
 ## Context
 
 The app "Esprit Seeder" (Hell Let Loose server-seeding desktop tool, Rust + Dioxus 0.7, ~18.5K LOC, 65 files) is being:

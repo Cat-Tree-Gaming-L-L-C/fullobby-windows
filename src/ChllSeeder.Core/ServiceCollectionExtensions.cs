@@ -2,6 +2,8 @@ using ChllSeeder.Core.Api;
 using ChllSeeder.Core.Bootstrap;
 using ChllSeeder.Core.Config;
 using ChllSeeder.Core.Native;
+using ChllSeeder.Core.Platform;
+using ChllSeeder.Core.Scheduling;
 using ChllSeeder.Core.Seeding;
 using ChllSeeder.Core.Servers;
 using ChllSeeder.Core.Tools;
@@ -31,7 +33,16 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SteamLauncher>();
         services.AddSingleton<PowerStatus>();
         services.AddSingleton<HllConfigBackupService>();
+        services.AddSingleton<ManualBackupService>();
         services.AddSingleton<KeepAwake>();
+
+        // Automation & tools (Phase 4): startup registry + auto-seed scheduling.
+        services.AddSingleton<StartupRegistry>();
+        services.AddSingleton<ScheduledTaskService>();
+        services.AddSingleton<AutoSeedService>();
+        services.AddSingleton<AutoSeedState>();
+        services.AddSingleton<MissedAutoseedMonitor>();
+        services.AddHostedService(sp => sp.GetRequiredService<MissedAutoseedMonitor>());
 
         // Seeding engine: the state machine that orchestrates the native + API layers.
         services.AddSingleton<SeedingState>();

@@ -4,6 +4,7 @@ using ChllSeeder.Core.Api;
 using ChllSeeder.Core.Bootstrap;
 using ChllSeeder.Core.Config;
 using ChllSeeder.Core.Games;
+using ChllSeeder.Core.Scheduling;
 using ChllSeeder.Core.Seeding;
 using ChllSeeder.Core.Servers;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -33,6 +34,7 @@ public sealed partial class SeedingViewModel : ObservableObject
     private readonly HeartbeatService _heartbeat;
     private readonly ToastService _toast;
     private readonly InAppToastService _inAppToast;
+    private readonly AutoSeedState _autoSeedState;
     private readonly DispatcherQueue _dispatcher;
     private readonly DispatcherTimer _timer;
 
@@ -60,7 +62,8 @@ public sealed partial class SeedingViewModel : ObservableObject
         AuthSession auth,
         HeartbeatService heartbeat,
         ToastService toast,
-        InAppToastService inAppToast)
+        InAppToastService inAppToast,
+        AutoSeedState autoSeedState)
     {
         _log = log;
         _engine = engine;
@@ -73,6 +76,7 @@ public sealed partial class SeedingViewModel : ObservableObject
         _heartbeat = heartbeat;
         _toast = toast;
         _inAppToast = inAppToast;
+        _autoSeedState = autoSeedState;
 
         // Constructed on the UI thread (first page resolve), so this captures the UI queue.
         _dispatcher = DispatcherQueue.GetForCurrentThread();
@@ -185,6 +189,14 @@ public sealed partial class SeedingViewModel : ObservableObject
 
     private long _switchCountdown;
     private long _switchSnoozeRemaining;
+
+    // Auto-seed countdown overlay (a scheduled or missed auto-seed shows a 60s cancellable countdown
+    // before launching). Port of the AutoseedCountdown* AppEvents in setup.rs run_autoseed.
+    [ObservableProperty]
+    private bool autoseedCountdownActive;
+
+    [ObservableProperty]
+    private string autoseedCountdownText = "";
 
     public ObservableCollection<ServerRow> NaServers { get; } = [];
     public ObservableCollection<ServerRow> EuServers { get; } = [];
@@ -376,7 +388,7 @@ public sealed partial class SeedingViewModel : ObservableObject
     /// Returns <c>true</c> when the monitor returned normally (the caller may continue/rotate), or
     /// <c>false</c> when the flow handed off to the launch watcher (WaitingForUpdate) or failed — in
     /// which case the status/error has already been set. Port of start_seeding_inner + the monitor await.</summary>
-    private async Task<bool> LaunchAndMonitorAsync(int index, string region)
+    private async Task<bool> LaunchAndMonitorAsync(int index, string region, bool autoSeed = false)
     {
         SetStatus(SeedingStatus.Initializing);
         try
@@ -385,7 +397,7 @@ public sealed partial class SeedingViewModel : ObservableObject
             SetStatus(SeedingStatus.Seeding);
 
             // Create the analytics session + heartbeat after a successful launch (non-fatal).
-            await StartSessionAsync(region, actual).ConfigureAwait(true);
+            await StartSessionAsync(region, actual, autoSeed).ConfigureAwait(true);
 
             await _engine.MonitorSeedAsync(actual, region).ConfigureAwait(true);
 
@@ -611,11 +623,122 @@ public sealed partial class SeedingViewModel : ObservableObject
         return filtered.Count > 0 ? filtered : new List<string> { GameCatalog.Hll.Id };
     }
 
+    // ── Auto-seed (scheduled / missed-task triggered) ──────────────────────────
+
+    /// <summary>
+    /// Run an auto-seed for a region: a 60s cancellable countdown, then launch the best candidate
+    /// (primary region, falling back to the other region when EU is enabled). Invoked on the UI thread
+    /// from a <c>--autoseed-*</c> CLI launch or the missed-task monitor. Port of <c>run_autoseed</c>.
+    /// </summary>
+    public async Task RunAutoseedAsync(string region)
+    {
+        // Guard: only one auto-seed at a time (mirrors AUTOSEED_IN_PROGRESS).
+        if (!_autoSeedState.TryBegin())
+        {
+            _log.LogInformation("Auto-seed already in progress — ignoring {Region}", region);
+            return;
+        }
+        _autoSeedState.RecordTriggered(region);
+
+        try
+        {
+            var regionUpper = region.ToUpperInvariant();
+            if (_engine.IsGameRunning || IsBusy)
+            {
+                _log.LogInformation("Game/seeding already active — skipping {Region} auto-seed", regionUpper);
+                return;
+            }
+
+            // 60s countdown the user can cancel.
+            AutoseedCountdownActive = true;
+            for (var i = 60; i > 0; i--)
+            {
+                AutoseedCountdownText = $"Auto-seeding {regionUpper} servers in {i}s…";
+                await Task.Delay(TimeSpan.FromSeconds(1)).ConfigureAwait(true);
+                if (_autoSeedState.IsCancelled)
+                {
+                    _log.LogInformation("Auto-seed countdown cancelled by user");
+                    return;
+                }
+            }
+            AutoseedCountdownActive = false;
+
+            // Re-check HLL didn't get launched during the countdown.
+            if (_engine.IsGameRunning)
+            {
+                _log.LogInformation("HLL started during countdown — skipping auto-seed");
+                return;
+            }
+
+            SeedingStatusResponse status;
+            try
+            {
+                status = await _api.GetSeedingStatusAsync().ConfigureAwait(true);
+            }
+            catch (Exception e)
+            {
+                _log.LogError(e, "Auto-seed: failed to fetch seeding status");
+                return;
+            }
+
+            // Best candidate: the requested region first, then the other region when EU is enabled.
+            var euEnabled = region == "eu" || _config.GetBool("eu_enabled");
+            var (primary, primaryRegion) = region == "eu" ? (status.Hll.Eu, "eu") : (status.Hll.Na, "na");
+            var (fallback, fallbackRegion) = region == "eu" ? (status.Hll.Na, "na") : (status.Hll.Eu, "eu");
+
+            int index;
+            string pickedRegion;
+            if (primary is not null)
+            {
+                index = primary.Index;
+                pickedRegion = primaryRegion;
+            }
+            else if (euEnabled && fallback is not null)
+            {
+                index = fallback.Index;
+                pickedRegion = fallbackRegion;
+            }
+            else
+            {
+                _log.LogInformation("Auto-seed: no candidate available for {Region}", regionUpper);
+                return;
+            }
+
+            _log.LogInformation("Auto-seed: seeding {Region} server {Index}", pickedRegion.ToUpperInvariant(), index);
+            IsSeeding = true;
+            SetStatus(SeedingStatus.Initializing);
+
+            if (!await LaunchAndMonitorAsync(index, pickedRegion, autoSeed: true).ConfigureAwait(true))
+            {
+                return; // launch watcher / failure already set the state
+            }
+
+            if (Status != SeedingStatus.WaitingForUpdate)
+            {
+                SetStatus(Status == SeedingStatus.Stopping ? SeedingStatus.Stopped : SeedingStatus.Idle);
+            }
+            IsSeeding = false;
+        }
+        finally
+        {
+            AutoseedCountdownActive = false;
+            _autoSeedState.End();
+        }
+    }
+
+    /// <summary>Cancel an in-progress auto-seed countdown.</summary>
+    [RelayCommand]
+    private void CancelAutoseed()
+    {
+        _autoSeedState.Cancel();
+        AutoseedCountdownActive = false;
+    }
+
     // ── Seeding session + heartbeat (analytics; non-fatal) ─────────────────────
 
     /// <summary>Create a seeding session after a successful launch and start its heartbeat.
     /// Guest/auth required; failures are logged and swallowed (mirrors the Rust seed flow).</summary>
-    private async Task StartSessionAsync(string region, int index)
+    private async Task StartSessionAsync(string region, int index, bool autoSeed = false)
     {
         if (!_auth.IsAuthenticated)
         {
@@ -623,7 +746,7 @@ public sealed partial class SeedingViewModel : ObservableObject
         }
         try
         {
-            var analytics = Analytics.Gather(_config, autoSeed: false);
+            var analytics = Analytics.Gather(_config, autoSeed);
             var resp = await _api.StartSessionAsync(
                 _engine.CurrentGame.Id, region, index, steamId: null, analytics).ConfigureAwait(true);
             _sessionId = resp.SessionId;

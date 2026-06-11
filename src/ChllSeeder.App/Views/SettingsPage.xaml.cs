@@ -1,5 +1,7 @@
 using ChllSeeder.App.ViewModels;
 using ChllSeeder.Core.Config;
+using ChllSeeder.Core.Platform;
+using ChllSeeder.Core.Scheduling;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -11,6 +13,8 @@ public sealed partial class SettingsPage : Page
 {
     private readonly ConfigService _config;
     private readonly MainWindow _window;
+    private readonly StartupRegistry _startup;
+    private readonly AutoSeedService _autoseed;
 
     public AccountViewModel Account { get; }
 
@@ -21,6 +25,8 @@ public sealed partial class SettingsPage : Page
     {
         _config = App.AppHost.Services.GetRequiredService<ConfigService>();
         _window = App.AppHost.Services.GetRequiredService<MainWindow>();
+        _startup = App.AppHost.Services.GetRequiredService<StartupRegistry>();
+        _autoseed = App.AppHost.Services.GetRequiredService<AutoSeedService>();
         Account = App.AppHost.Services.GetRequiredService<AccountViewModel>();
         InitializeComponent();
     }
@@ -50,8 +56,161 @@ public sealed partial class SettingsPage : Page
             "60" => 3,
             _ => 1, // 20s default
         };
+
+        StartupToggle.IsOn = _startup.IsEnabled();
         _loading = false;
+
+        // Auto-seed task status comes from schtasks — load it off the UI thread.
+        _ = LoadAutoseedStatusAsync();
     }
+
+    // ── Automation: Start with Windows ──────────────────────────────────────
+
+    private async void StartupToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading)
+        {
+            return;
+        }
+        try
+        {
+            if (StartupToggle.IsOn)
+            {
+                _startup.Enable();
+            }
+            else
+            {
+                _startup.Disable();
+            }
+        }
+        catch (Exception)
+        {
+            _loading = true;
+            StartupToggle.IsOn = !StartupToggle.IsOn; // revert on failure
+            _loading = false;
+            await AlertAsync("Error", "Couldn't update the Start with Windows setting.");
+        }
+    }
+
+    // ── Automation: Auto-Seed scheduling ────────────────────────────────────
+
+    private async Task LoadAutoseedStatusAsync()
+    {
+        try
+        {
+            var s = await _autoseed.GetStatusAsync();
+            UpdateAutoseedRow(s.NaInstalled, s.NaUtcTime, s.NaNextRun, AutoseedNaStatus, AutoseedNaSetup, AutoseedNaRemove);
+            UpdateAutoseedRow(s.EuInstalled, s.EuUtcTime, s.EuNextRun, AutoseedEuStatus, AutoseedEuSetup, AutoseedEuRemove);
+        }
+        catch (Exception)
+        {
+            AutoseedNaStatus.Text = "Status unavailable";
+            AutoseedEuStatus.Text = "Status unavailable";
+        }
+    }
+
+    private static void UpdateAutoseedRow(
+        bool installed, string? utc, string? nextRun, TextBlock status, Button setup, Button remove)
+    {
+        if (installed)
+        {
+            var text = utc is not null ? $"Daily at {utc} UTC" : "Scheduled";
+            if (!string.IsNullOrEmpty(nextRun))
+            {
+                text += $" · next: {nextRun}";
+            }
+            status.Text = text;
+            setup.Content = "Change";
+            remove.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            status.Text = "Not scheduled";
+            setup.Content = "Set up";
+            remove.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void AutoseedNaSetup_Click(object sender, RoutedEventArgs e) => _ = SetupAutoseedAsync("na", "12:00");
+
+    private void AutoseedEuSetup_Click(object sender, RoutedEventArgs e) => _ = SetupAutoseedAsync("eu", "06:00");
+
+    private void AutoseedNaRemove_Click(object sender, RoutedEventArgs e) => _ = RemoveAutoseedAsync("na");
+
+    private void AutoseedEuRemove_Click(object sender, RoutedEventArgs e) => _ = RemoveAutoseedAsync("eu");
+
+    private async Task SetupAutoseedAsync(string region, string defaultUtc)
+    {
+        var label = region.ToUpperInvariant();
+        var localHint = AutoSeedTime.TryParseUtc(defaultUtc, out var h, out var m)
+            ? $"\n\n{defaultUtc} UTC = {AutoSeedTime.UtcToLocalDisplay(h, m)} your time."
+            : "";
+
+        var input = new TextBox { PlaceholderText = "HH:MM", Text = defaultUtc, MaxLength = 5 };
+        var dialog = new ContentDialog
+        {
+            Title = $"{label} Auto-Seed",
+            Content = new StackPanel
+            {
+                Spacing = 8,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = $"Enter the daily {label} seed time in UTC (24-hour HH:MM).{localHint}",
+                        TextWrapping = TextWrapping.Wrap,
+                    },
+                    input,
+                },
+            },
+            PrimaryButtonText = "Save",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        try
+        {
+            var message = await _autoseed.SetupAsync(region, input.Text);
+            await LoadAutoseedStatusAsync();
+            await AlertAsync("Auto-Seed Setup", message);
+        }
+        catch (FormatException)
+        {
+            await AlertAsync("Invalid Time", $"Please enter the time as HH:MM (e.g. {defaultUtc}).");
+        }
+        catch (Exception)
+        {
+            await AlertAsync("Error", $"Failed to set up the {label} auto-seed task. Check the logs for details.");
+        }
+    }
+
+    private async Task RemoveAutoseedAsync(string region)
+    {
+        try
+        {
+            await _autoseed.UninstallAsync(region);
+        }
+        catch (Exception)
+        {
+            // Removal failures are non-fatal; reflect whatever the current status is.
+        }
+        await LoadAutoseedStatusAsync();
+    }
+
+    private Task AlertAsync(string title, string content) =>
+        new ContentDialog
+        {
+            Title = title,
+            Content = content,
+            CloseButtonText = "OK",
+            XamlRoot = XamlRoot,
+        }.ShowAsync().AsTask();
 
     // ── Account actions ─────────────────────────────────────────────────────
 

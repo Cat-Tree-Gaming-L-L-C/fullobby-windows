@@ -1,6 +1,9 @@
 using ChllSeeder.Core;
 using ChllSeeder.Core.Activation;
+using ChllSeeder.Core.Platform;
+using ChllSeeder.Core.Scheduling;
 using ChllSeeder.Core.Seeding;
+using ChllSeeder.Core.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
@@ -33,6 +36,33 @@ public partial class App : Application
         AppHost.Start();
         Log.Information("CHLL Seeder v{Version} starting",
             typeof(App).Assembly.GetName().Version?.ToString(3));
+
+        // Efficiency-mode crash recovery: if a previous run was killed mid-seed with degraded
+        // graphics settings applied, restore the user's real settings now (before any UI). Port of
+        // check_and_restore_on_startup(); the one-shot notice is surfaced once the window is up.
+        var backup = AppHost.Services.GetRequiredService<HllConfigBackupService>();
+        try
+        {
+            backup.CheckAndRestoreOnStartup();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Efficiency-mode startup recovery failed");
+        }
+
+        // If "Start with Windows" is enabled but points at a stale exe path (e.g. after an update
+        // moved the install), refresh it. Port of update_startup_path_if_needed().
+        try
+        {
+            AppHost.Services.GetRequiredService<StartupRegistry>().UpdatePathIfNeeded();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Startup path refresh failed");
+        }
+
+        // Fire a missed (scheduler-skipped or post-wake) auto-seed when the watchdog detects one.
+        AppHost.Services.GetRequiredService<MissedAutoseedMonitor>().AutoseedDue += OnAutoseedDue;
 
         // Register the chllseeder:// protocol for this exe (refreshes the
         // installer's bootstrap registration with the WAS activation marker so
@@ -108,8 +138,56 @@ public partial class App : Application
         var account = AppHost.Services.GetRequiredService<ViewModels.AccountViewModel>();
         _ = account.RestoreSessionAsync();
 
-        // The first instance itself may have been protocol-launched
+        // Surface the efficiency-mode crash-recovery notice now that the toast host exists.
+        var notice = backup.TakeStartupRestoreNotice();
+        if (notice is not null)
+        {
+            AppHost.Services.GetRequiredService<Services.InAppToastService>().Info(notice);
+        }
+
+        // The first instance itself may have been protocol-launched or scheduled-task-launched
+        // (chllseeder:// deep link, or --autoseed-na/--autoseed-eu from a scheduled task).
         HandleActivation(AppInstance.GetCurrent().GetActivatedEventArgs());
+
+        // Fallback for a fresh scheduled-task launch where the activation args don't carry the flag.
+        if (ExtractAutoseedRegion(Environment.GetCommandLineArgs()) is { } cliRegion)
+        {
+            StartAutoseed(cliRegion);
+        }
+    }
+
+    /// <summary>Missed-autoseed watchdog fired (off-thread) — marshal onto the UI and run it.</summary>
+    private void OnAutoseedDue(string region) => StartAutoseed(region);
+
+    /// <summary>Marshal to the UI thread and kick off the auto-seed countdown for a region.</summary>
+    private void StartAutoseed(string region)
+    {
+        Log.Information("Auto-seed requested for {Region}", region.ToUpperInvariant());
+        var vm = AppHost.Services.GetRequiredService<ViewModels.SeedingViewModel>();
+        var queue = _window?.DispatcherQueue;
+        if (queue is null)
+        {
+            _ = vm.RunAutoseedAsync(region);
+            return;
+        }
+        queue.TryEnqueue(() =>
+        {
+            _window?.BringToFront();
+            _ = vm.RunAutoseedAsync(region);
+        });
+    }
+
+    /// <summary>Find the auto-seed region in a token list, or null. Accepts --autoseed-* (+ legacy --seed-*).</summary>
+    private static string? ExtractAutoseedRegion(IReadOnlyList<string> args)
+    {
+        foreach (var arg in args)
+        {
+            if (AutoSeedSlot.ByCliArg(arg) is { } slot)
+            {
+                return slot.Region;
+            }
+        }
+        return null;
     }
 
     /// <summary>Raised on a non-UI thread; marshal before touching the window.</summary>
@@ -122,8 +200,18 @@ public partial class App : Application
         });
     }
 
-    private static void HandleActivation(AppActivationArguments args)
+    private void HandleActivation(AppActivationArguments args)
     {
+        // A scheduled task launching a second instance forwards its --autoseed-* flag here.
+        if (args.Kind == ExtendedActivationKind.Launch
+            && args.Data is Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs autoseedLaunch
+            && autoseedLaunch.Arguments is { Length: > 0 } rawArgs
+            && ExtractAutoseedRegion(rawArgs.Split(' ', StringSplitOptions.RemoveEmptyEntries)) is { } region)
+        {
+            StartAutoseed(region);
+            return;
+        }
+
         var uri = ExtractDeepLinkUri(args);
         if (uri is null)
         {

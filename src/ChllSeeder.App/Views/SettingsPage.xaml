@@ -148,19 +148,47 @@
                 </ComboBox>
             </Grid>
 
-            <!-- ── Coming in a later phase (disabled stubs) ────────────── -->
-            <TextBlock Text="Automation &amp; Updates" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
-            <TextBlock Text="These arrive in a later phase." FontSize="12" Opacity="0.5" />
+            <!-- ── Automation ──────────────────────────────────────────── -->
+            <TextBlock Text="Automation" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
 
-            <ToggleSwitch Header="Start with Windows" IsEnabled="False" />
+            <ToggleSwitch
+                x:Name="StartupToggle"
+                Header="Start with Windows"
+                OffContent="The app does not launch at sign-in"
+                OnContent="The app launches automatically at sign-in"
+                Toggled="StartupToggle_Toggled" />
 
-            <Grid>
+            <TextBlock Text="Auto-Seed" Margin="0,4,0,0" />
+            <TextBlock Text="Schedule daily seeding via Task Scheduler. Times are entered in UTC; your PC wakes from sleep to seed."
+                       FontSize="12" Opacity="0.5" TextWrapping="Wrap" />
+
+            <!-- NA auto-seed -->
+            <Grid Margin="0,2,0,0">
                 <StackPanel>
-                    <TextBlock Text="Auto-Seed (NA / EU)" />
-                    <TextBlock Text="Scheduled daily seeding via Task Scheduler" FontSize="12" Opacity="0.5" />
+                    <TextBlock Text="NA daily seed" />
+                    <TextBlock x:Name="AutoseedNaStatus" Text="Not scheduled" FontSize="12" Opacity="0.5" />
                 </StackPanel>
-                <Button Content="Set up" HorizontalAlignment="Right" IsEnabled="False" />
+                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                    <Button x:Name="AutoseedNaSetup" Content="Set up" Click="AutoseedNaSetup_Click" />
+                    <Button x:Name="AutoseedNaRemove" Content="Remove" Visibility="Collapsed" Click="AutoseedNaRemove_Click" />
+                </StackPanel>
             </Grid>
+
+            <!-- EU auto-seed -->
+            <Grid Margin="0,2,0,0">
+                <StackPanel>
+                    <TextBlock Text="EU daily seed" />
+                    <TextBlock x:Name="AutoseedEuStatus" Text="Not scheduled" FontSize="12" Opacity="0.5" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                    <Button x:Name="AutoseedEuSetup" Content="Set up" Click="AutoseedEuSetup_Click" />
+                    <Button x:Name="AutoseedEuRemove" Content="Remove" Visibility="Collapsed" Click="AutoseedEuRemove_Click" />
+                </StackPanel>
+            </Grid>
+
+            <!-- ── Coming in a later phase (disabled stubs) ────────────── -->
+            <TextBlock Text="Updates" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
+            <TextBlock Text="Self-update arrives in a later phase." FontSize="12" Opacity="0.5" />
 
             <Grid>
                 <StackPanel>
