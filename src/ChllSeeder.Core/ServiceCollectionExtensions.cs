@@ -18,6 +18,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ConfigService>();
         services.AddSingleton<AuthSession>();
         services.AddSingleton<AuthRefresher>();
+        services.AddSingleton<Activation.OAuthStateStore>();
         services.AddSingleton<SeedingStatusCache>();
         services.AddSingleton<ServerStore>();
         services.AddSingleton<LiveStats>();

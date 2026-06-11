@@ -103,6 +103,11 @@ public partial class App : Application
         };
         _window.Activate();
 
+        // Restore any persisted account session in the background (guest API key or JWT),
+        // then refresh linked providers/Steam IDs. Non-fatal — failures just leave us signed out.
+        var account = AppHost.Services.GetRequiredService<ViewModels.AccountViewModel>();
+        _ = account.RestoreSessionAsync();
+
         // The first instance itself may have been protocol-launched
         HandleActivation(AppInstance.GetCurrent().GetActivatedEventArgs());
     }
@@ -125,15 +130,19 @@ public partial class App : Application
             return; // plain launch, nothing to do
         }
 
-        // Phase 0: prove the deep-link pipeline; OAuth wiring lands in Phase 3.
-        // Never log token values.
+        // Route OAuth deep links into the account VM. Runs on the UI thread (OnLaunched, or
+        // marshalled by OnRedirectedActivation). The VM marshals its own state writes; never
+        // log token values.
+        var account = AppHost.Services.GetRequiredService<ViewModels.AccountViewModel>();
         switch (DeepLinkParser.Parse(uri))
         {
-            case DeepLinkAction.AuthCallback:
+            case DeepLinkAction.AuthCallback auth:
                 Log.Information("Deep link: auth callback received");
+                _ = account.HandleAuthCallbackAsync(auth.State, auth.Token, auth.RefreshToken);
                 break;
             case DeepLinkAction.LinkCallback link:
                 Log.Information("Deep link: link callback for provider {Provider}", link.Provider);
+                _ = account.HandleLinkCallbackAsync(link.Provider);
                 break;
             case DeepLinkAction.Unknown unknown:
                 Log.Warning("Deep link: unknown action for {Url}", unknown.Url);
@@ -196,6 +205,8 @@ public partial class App : Application
                 services.AddSingleton<Services.ToastService>();
                 services.AddSingleton<MainWindow>();
                 services.AddSingleton<ViewModels.SeedingViewModel>();
+                services.AddSingleton<ViewModels.AccountViewModel>();
+                services.AddSingleton<ViewModels.LeaderboardViewModel>();
             })
             .Build();
     }

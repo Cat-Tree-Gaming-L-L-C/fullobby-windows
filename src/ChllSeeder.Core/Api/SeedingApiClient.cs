@@ -93,10 +93,90 @@ public sealed class SeedingApiClient(HttpClient http)
     public Task<UserInfo> GetMeAsync(CancellationToken ct = default) =>
         SendAsync<UserInfo>(HttpMethod.Get, "/api/auth/me", null, ct);
 
+    /// <summary>Update the current user's display name (auth required).</summary>
+    public Task<UserInfo> UpdateDisplayNameAsync(string name, CancellationToken ct = default) =>
+        SendAsync<UserInfo>(HttpMethod.Patch, "/api/auth/me",
+            new Dictionary<string, object?> { ["display_name"] = name }, ct);
+
+    /// <summary>Generate a random anonymous nickname via the API (auth required).</summary>
+    public Task<UserInfo> RandomizeDisplayNameAsync(CancellationToken ct = default) =>
+        SendAsync<UserInfo>(HttpMethod.Patch, "/api/auth/me",
+            new Dictionary<string, object?> { ["randomize"] = true }, ct);
+
+    /// <summary>Update the leaderboard opt-out preference (auth required).</summary>
+    public Task<UserInfo> UpdateLeaderboardOptOutAsync(bool optOut, CancellationToken ct = default) =>
+        SendAsync<UserInfo>(HttpMethod.Patch, "/api/auth/me",
+            new Dictionary<string, object?> { ["leaderboard_opt_out"] = optOut }, ct);
+
+    /// <summary>Get all linked providers for the current user (auth required).</summary>
+    public Task<List<LinkedProvider>> GetLinkedProvidersAsync(CancellationToken ct = default) =>
+        SendAsync<List<LinkedProvider>>(HttpMethod.Get, "/api/auth/providers", null, ct);
+
+    /// <summary>Get the HMAC-signed OAuth URL to link an additional provider (auth required).</summary>
+    public Task<LinkInitResponse> GetLinkRedirectUrlAsync(string provider, CancellationToken ct = default)
+    {
+        if (!ApiValidation.IsValidProvider(provider))
+        {
+            throw new ApiException($"Invalid provider: '{provider}'");
+        }
+        return SendAsync<LinkInitResponse>(HttpMethod.Post, $"/api/auth/{provider}/link-init", null, ct);
+    }
+
+    /// <summary>Unlink a provider from the current account (auth required).</summary>
+    public Task UnlinkProviderAsync(string provider, CancellationToken ct = default)
+    {
+        if (!ApiValidation.IsValidProvider(provider))
+        {
+            throw new ApiException($"Invalid provider: '{provider}'");
+        }
+        return SendNoContentAsync(HttpMethod.Delete, $"/api/auth/providers/{provider}", null, ct);
+    }
+
+    /// <summary>List linked Steam IDs (auth required).</summary>
+    public Task<List<SteamIdEntry>> GetSteamIdsAsync(CancellationToken ct = default) =>
+        SendAsync<List<SteamIdEntry>>(HttpMethod.Get, "/api/auth/steam-ids", null, ct);
+
+    /// <summary>Remove a linked Steam ID (auth required).</summary>
+    public Task RemoveSteamIdAsync(string steamId, CancellationToken ct = default)
+    {
+        if (!ApiValidation.IsValidSteamId(steamId))
+        {
+            throw new ApiException("Invalid Steam ID");
+        }
+        return SendNoContentAsync(HttpMethod.Delete, $"/api/auth/steam-ids/{steamId}", null, ct);
+    }
+
+    /// <summary>Rotate the API key for guest accounts. Returns the new key (auth required).</summary>
+    public async Task<string> RotateApiKeyAsync(CancellationToken ct = default)
+    {
+        var resp = await SendAsync<RotateApiKeyResponse>(
+            HttpMethod.Post, "/api/auth/rotate-api-key", null, ct).ConfigureAwait(false);
+        if (string.IsNullOrEmpty(resp.ApiKey))
+        {
+            throw new ApiException("Missing api_key in response");
+        }
+        return resp.ApiKey;
+    }
+
+    /// <summary>Delete the current user's account (auth required).</summary>
+    public Task DeleteAccountAsync(CancellationToken ct = default) =>
+        SendNoContentAsync(HttpMethod.Delete, "/api/auth/account", null, ct);
+
     /// <summary>Fetch the seeding leaderboard (no auth required).</summary>
     public Task<List<LeaderboardEntry>> GetLeaderboardAsync(long days, long limit, CancellationToken ct = default) =>
         SendAsync<List<LeaderboardEntry>>(HttpMethod.Get,
             $"/api/seeding/leaderboard?days={days}&limit={limit}", null, ct);
+
+    /// <summary>Fetch per-user seeding stats (auth required).</summary>
+    public Task<UserSeedingStats> GetUserStatsAsync(string userId, long days, CancellationToken ct = default)
+    {
+        if (!ApiValidation.IsValidUserId(userId))
+        {
+            throw new ApiException("Invalid user ID");
+        }
+        return SendAsync<UserSeedingStats>(HttpMethod.Get,
+            $"/api/seeding/stats/{userId}?days={days}", null, ct);
+    }
 
     // ── Internals ─────────────────────────────────────────────────────────
 
@@ -113,6 +193,20 @@ public sealed class SeedingApiClient(HttpClient http)
 
         var result = await response.Content.ReadFromJsonAsync<T>(ApiJson.Options, ct).ConfigureAwait(false);
         return result ?? throw new ApiException("API error: empty response body");
+    }
+
+    /// <summary>Send a request whose response body we don't care about (e.g. DELETE endpoints
+    /// that return <c>{ "ok": true }</c> or an empty body). Only success/failure matters.</summary>
+    private async Task SendNoContentAsync(HttpMethod method, string path, object? body, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(method, ApiConfig.BaseUrl + path);
+        if (body is not null)
+        {
+            request.Content = JsonContent.Create(body, options: ApiJson.Options);
+        }
+
+        using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, ct).ConfigureAwait(false);
     }
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken ct)

@@ -62,6 +62,14 @@ public enum AuthProvider
     Guest,
 }
 
+/// <summary>How the current session is authenticated. Port of the Rust <c>AuthMethod</c>.</summary>
+public enum AuthMethod
+{
+    None,
+    ApiKey,
+    Jwt,
+}
+
 public static class AuthProviderExtensions
 {
     /// <summary>Lowercase wire/display name, matching the Rust Display impl.</summary>
@@ -97,6 +105,12 @@ public sealed class AuthRefreshResponse
 public sealed class LinkInitResponse
 {
     public string RedirectUrl { get; set; } = "";
+}
+
+/// <summary>Response from POST /api/auth/rotate-api-key.</summary>
+public sealed class RotateApiKeyResponse
+{
+    public string ApiKey { get; set; } = "";
 }
 
 public sealed class SteamIdEntry

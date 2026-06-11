@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using ChllSeeder.App.Services;
+using ChllSeeder.App.ViewModels;
 using ChllSeeder.Core;
 using ChllSeeder.Core.Config;
 using CommunityToolkit.Mvvm.Input;
@@ -19,14 +20,18 @@ public sealed partial class MainWindow : Window
     private readonly ConfigService _config;
     private readonly InAppToastService _toasts;
 
+    /// <summary>Account/onboarding view model — bound by the onboarding overlay in the shell.</summary>
+    public AccountViewModel Account { get; }
+
     // Set when the user really wants to exit (tray Quit/Restart) so the close
     // handler stops minimizing to tray and lets the window close.
     private bool _forceQuit;
 
-    public MainWindow(ConfigService config, InAppToastService toasts)
+    public MainWindow(ConfigService config, InAppToastService toasts, AccountViewModel account)
     {
         _config = config;
         _toasts = toasts;
+        Account = account;
 
         InitializeComponent();
 
@@ -52,6 +57,9 @@ public sealed partial class MainWindow : Window
                 (int)(LogicalHeight * scale)));
         };
 
+        // Restore the saved theme (light/dark); absent → follow the system default.
+        ApplyTheme(_config.GetString("theme"));
+
         NavView.SelectedItem = SeedNavItem;
 
         // Tray: left-click restores the window; ForceCreate so the icon exists
@@ -65,6 +73,41 @@ public sealed partial class MainWindow : Window
 
         // In-app toast stack.
         ToastHost.ItemsSource = _toasts.Toasts;
+
+        // First-run onboarding overlay: shown until completed/skipped (x:Bind isn't available
+        // on a Window root, so drive visibility from the VM here).
+        UpdateOnboardingVisibility();
+        Account.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(AccountViewModel.ShowOnboarding))
+            {
+                UpdateOnboardingVisibility();
+            }
+        };
+    }
+
+    private void UpdateOnboardingVisibility() =>
+        Onboarding.Visibility = Account.ShowOnboarding ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Set the app theme (dark/light) on the window root and persist it.
+    /// Mirrors the Rust data-theme toggle in Settings.</summary>
+    public void SetTheme(bool dark)
+    {
+        RootGrid.RequestedTheme = dark ? ElementTheme.Dark : ElementTheme.Light;
+        _config.SetString("theme", dark ? "dark" : "light");
+    }
+
+    /// <summary>True when the saved theme is dark (used to seed the Settings toggle).</summary>
+    public bool IsDarkTheme => RootGrid.RequestedTheme == ElementTheme.Dark;
+
+    private void ApplyTheme(string? theme)
+    {
+        RootGrid.RequestedTheme = theme switch
+        {
+            "dark" => ElementTheme.Dark,
+            "light" => ElementTheme.Light,
+            _ => ElementTheme.Default,
+        };
     }
 
     /// <summary>Restore and foreground the window (deep-link / repeat-launch / tray activation).</summary>

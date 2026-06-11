@@ -140,6 +140,49 @@
       helpers live in the App VM (matching Rust's component placement) and aren't covered by Core.Tests (no App test
       project). Tray icon/toast attribution + behavior need a live desktop smoke test (build-verified only).
 
+- ✅ **Phase 3 — Accounts & settings** complete (2026-06-10, Windows). Solution builds clean (0 warnings),
+  289/289 tests pass (273 + 16 new: OAuth state lifecycle, JWT expiry). App smoke-tested (DI graph resolves,
+  session-restore runs and degrades gracefully against the unresolved TBD API host, window up, clean shutdown).
+  Live OAuth round-trip is a manual test (needs the real/staging backend + browser).
+  - ✅ **API surface:** `SeedingApiClient` gained PATCH/DELETE (`SendNoContentAsync`) + the account endpoints —
+    `UpdateDisplayName`/`RandomizeDisplayName`/`UpdateLeaderboardOptOut` (PATCH `/api/auth/me`),
+    `GetLinkedProviders`, `GetLinkRedirectUrl` (link-init), `UnlinkProvider`, `GetSteamIds`, `RemoveSteamId`,
+    `RotateApiKey`, `DeleteAccount`, `GetUserStats`. New model `RotateApiKeyResponse`; added `AuthMethod` enum.
+  - ✅ **Core auth helpers (testable):** `Core.Activation.OAuthStateStore` (single-use CSRF `state` set/validate +
+    `GenerateState` 128-bit hex; port of `state/auth.rs OAUTH_STATE`, now a DI singleton instead of a global) and
+    `Core.Api.JwtUtil.IsExpired` (base64url `exp` decode, fail-safe; port of `app.rs is_jwt_expired`). xUnit:
+    `OAuthStateStoreTests` (mirrors `test_oauth_state_lifecycle`) + `JwtUtilTests`.
+  - ✅ **`App.ViewModels.AccountViewModel`** (shared DI singleton, dispatcher captured at ctor): owns the auth
+    lifecycle — `RestoreSessionAsync` (port of `init_auth`: JWT-first w/ expiry short-circuit → API-key fallback →
+    full reset + re-arm onboarding on rejection), `Login(provider)` (OAuth state + open browser),
+    `RegisterGuestAsync` (idempotent — adopts the bootstrapper's silent guest if present), deep-link handlers
+    `HandleAuthCallbackAsync`/`HandleLinkCallbackAsync`, name update/randomize, leaderboard opt-out toggle, API-key
+    rotation, account deletion, provider link/unlink, Steam-ID remove, sign-out, onboarding step/complete. Per-action
+    cooldowns mirror `state::cooldown`. Observable state (`User`/`IsLoggedIn`/`IsGuest`/`OnboardingComplete`/…) +
+    derived (`ShowOnboarding`/`DisplayName`/`NameButtonText`/`CanRotateApiKey`/`ShowOnLeaderboard`/`HasDiscordProvider`).
+    `LinkedProviderRow` display type for the providers list.
+  - ✅ **Deep-link wiring:** `App.HandleActivation` now routes `auth/callback` → `HandleAuthCallbackAsync` and
+    `auth/link-callback` → `HandleLinkCallbackAsync` (Phase 0's log-only stubs replaced). `App.OnLaunched` kicks
+    `RestoreSessionAsync` in the background. Tokens never logged.
+  - ✅ **Leaderboard tab:** `App.ViewModels.LeaderboardViewModel` (period Day/Week/Month/All, rankings + signed-in
+    My Stats: totals, per-server breakdown, recent 5 sessions; 5s per-fetch cooldowns) + rebuilt `LeaderboardPage`
+    (period buttons, My Stats card, rankings table). Port of `components/leaderboard.rs`.
+  - ✅ **Full Settings tab:** account section (sign-in / display name / linked providers + unlink / link Steam+Discord /
+    linked Steam IDs + remove / rotate key / sign out / delete), leaderboard opt-out toggle, EU servers, Dark Mode
+    (applied via `MainWindow.SetTheme` → root `RequestedTheme`, persisted to `theme`), close-to-tray, switch
+    notification, Power Savings (efficiency, w/ confirm), splash-bypass duration. Deferred rows shown **disabled** with
+    a "later phase" note: Start-with-Windows (P4), Auto-Seed setup (P4), Check-Updates + Beta channel (P5).
+  - ✅ **Onboarding wizard:** `Views/OnboardingView` (4-step overlay sign-in → link → nickname → done, code-behind
+    step switching since `x:Bind` isn't available on a `Window` root) hosted in `MainWindow`, gated on
+    `AccountViewModel.ShowOnboarding`. Guest path completes immediately; OAuth advances to the link step. Port of
+    `components/onboarding.rs` (rebranded copy).
+  - **Deviations / deferred:** EU config key is `eu_enabled` (clean-break rename of Rust's `secondary_servers_enabled`).
+    A **"Skip for now"** link on onboarding step 0 (not in Rust) prevents a dead backend from trapping first-run, per
+    the silent-guest-fallback decision. The bootstrapper still auto-registers a guest silently; onboarding's guest
+    button is idempotent against that. Settings rows whose Core services land later (autoseed/startup/updater) are
+    visible-but-disabled stubs, not wired. App VM code isn't covered by Core.Tests (no App test project) — only the
+    new Core helpers are. Live OAuth/link callbacks + leaderboard data need a reachable backend to verify end-to-end.
+
 ## Context
 
 The app "Esprit Seeder" (Hell Let Loose server-seeding desktop tool, Rust + Dioxus 0.7, ~18.5K LOC, 65 files) is being:

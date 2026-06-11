@@ -2,11 +2,117 @@
 <Page
     x:Class="ChllSeeder.App.Views.SettingsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:ChllSeeder.App.ViewModels">
 
     <ScrollViewer Padding="24,16" VerticalScrollBarVisibility="Auto">
-        <StackPanel Spacing="16" MaxWidth="440" HorizontalAlignment="Stretch">
-            <TextBlock Text="Settings" Style="{StaticResource TitleTextBlockStyle}" />
+        <StackPanel Spacing="6" MaxWidth="460" HorizontalAlignment="Stretch">
+
+            <!-- ── Account ─────────────────────────────────────────────── -->
+            <TextBlock Text="Account" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" />
+
+            <ProgressRing
+                IsActive="True" Width="20" Height="20" HorizontalAlignment="Center" Margin="0,4"
+                Visibility="{x:Bind Account.AuthLoading, Mode=OneWay, Converter={StaticResource BoolToVis}}" />
+
+            <!-- Signed in -->
+            <StackPanel
+                Spacing="6"
+                Visibility="{x:Bind Account.IsLoggedIn, Mode=OneWay, Converter={StaticResource BoolToVis}}">
+                <Grid>
+                    <TextBlock Text="{x:Bind Account.DisplayName, Mode=OneWay}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                        <Button
+                            Content="Rotate API Key"
+                            Command="{x:Bind Account.RotateApiKeyCommand}"
+                            Visibility="{x:Bind Account.CanRotateApiKey, Mode=OneWay, Converter={StaticResource BoolToVis}}" />
+                        <Button Content="Sign Out" Command="{x:Bind Account.SignOutCommand}" />
+                        <Button Content="Delete Account" Click="DeleteAccount_Click" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Linked providers -->
+                <TextBlock
+                    Text="Linked Providers"
+                    FontSize="12" Opacity="0.6" Margin="0,4,0,0"
+                    Visibility="{x:Bind Account.HasLinkedProviders, Mode=OneWay, Converter={StaticResource BoolToVis}}" />
+                <ItemsControl ItemsSource="{x:Bind Account.LinkedProviders}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:LinkedProviderRow">
+                            <Grid Padding="6,2" Margin="0,1">
+                                <TextBlock Text="{x:Bind Label}" FontSize="12" VerticalAlignment="Center" />
+                                <Button
+                                    Content="Unlink"
+                                    HorizontalAlignment="Right"
+                                    Tag="{x:Bind Provider}"
+                                    Click="Unlink_Click"
+                                    Visibility="{x:Bind CanUnlink, Converter={StaticResource BoolToVis}}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Link buttons -->
+                <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center" Margin="0,2">
+                    <Button Content="Link Steam" Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="steam" />
+                    <Button
+                        Content="Link Discord"
+                        Command="{x:Bind Account.LinkProviderCommand}"
+                        CommandParameter="discord"
+                        Visibility="{x:Bind Account.HasDiscordProvider, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                </StackPanel>
+
+                <!-- Linked Steam IDs -->
+                <ItemsControl ItemsSource="{x:Bind Account.LinkedSteamIds}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <Grid Padding="6,2" Margin="0,1">
+                                <TextBlock Text="{x:Bind}" FontSize="12" FontFamily="Consolas" Opacity="0.8" VerticalAlignment="Center" />
+                                <Button Content="Remove" HorizontalAlignment="Right" Tag="{x:Bind}" Click="RemoveSteam_Click" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <!-- Signed out: sign-in options -->
+            <StackPanel
+                Orientation="Horizontal"
+                Spacing="8"
+                Visibility="{x:Bind Account.IsLoggedIn, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}">
+                <Button Content="Sign in with Steam" Style="{StaticResource AccentButtonStyle}" Command="{x:Bind Account.LoginCommand}" CommandParameter="steam" />
+                <Button Content="Sign in with Discord" Command="{x:Bind Account.LoginCommand}" CommandParameter="discord" />
+            </StackPanel>
+
+            <!-- ── Player ──────────────────────────────────────────────── -->
+            <TextBlock Text="Player" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
+
+            <Button
+                Content="{x:Bind Account.NameButtonText, Mode=OneWay}"
+                HorizontalAlignment="Left"
+                IsEnabled="{x:Bind Account.IsLoggedIn, Mode=OneWay}"
+                Click="ChangeName_Click" />
+
+            <Grid Visibility="{x:Bind Account.IsLoggedIn, Mode=OneWay, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <TextBlock Text="Show on Leaderboard" />
+                    <TextBlock Text="Appear in public rankings" FontSize="12" Opacity="0.5" />
+                </StackPanel>
+                <ToggleSwitch x:Name="LeaderboardToggle" HorizontalAlignment="Right" Toggled="LeaderboardToggle_Toggled" />
+            </Grid>
+
+            <!-- ── Settings ────────────────────────────────────────────── -->
+            <TextBlock Text="Settings" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
+
+            <ToggleSwitch
+                x:Name="EuServersToggle"
+                Header="Enable EU Servers"
+                Toggled="EuServersToggle_Toggled" />
+
+            <ToggleSwitch
+                x:Name="DarkModeToggle"
+                Header="Dark Mode"
+                Toggled="DarkModeToggle_Toggled" />
 
             <ToggleSwitch
                 x:Name="CloseToTrayToggle"
@@ -22,12 +128,48 @@
                 OnContent="Show a 30s countdown + desktop notification before switching"
                 Toggled="SwitchNotificationToggle_Toggled" />
 
-            <TextBlock
-                Text="Accounts, theming, and the full settings page arrive in Phase 3."
-                Style="{StaticResource CaptionTextBlockStyle}"
-                Opacity="0.7"
-                TextWrapping="Wrap"
-                Margin="0,8,0,0" />
+            <ToggleSwitch
+                x:Name="EfficiencyToggle"
+                Header="Seeding Power Savings"
+                OffContent="Run the game at your normal settings"
+                OnContent="Apply low-resource game settings while seeding (auto-restored after)"
+                Toggled="EfficiencyToggle_Toggled" />
+
+            <Grid Margin="0,4,0,0">
+                <StackPanel>
+                    <TextBlock Text="Splash Bypass Duration" />
+                    <TextBlock Text="How long to send keypresses to skip the intro video" FontSize="12" Opacity="0.5" />
+                </StackPanel>
+                <ComboBox x:Name="SplashDurationCombo" HorizontalAlignment="Right" Width="110" SelectionChanged="SplashDurationCombo_SelectionChanged">
+                    <ComboBoxItem Content="10 sec" Tag="10" />
+                    <ComboBoxItem Content="20 sec" Tag="20" />
+                    <ComboBoxItem Content="40 sec" Tag="40" />
+                    <ComboBoxItem Content="60 sec" Tag="60" />
+                </ComboBox>
+            </Grid>
+
+            <!-- ── Coming in a later phase (disabled stubs) ────────────── -->
+            <TextBlock Text="Automation &amp; Updates" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
+            <TextBlock Text="These arrive in a later phase." FontSize="12" Opacity="0.5" />
+
+            <ToggleSwitch Header="Start with Windows" IsEnabled="False" />
+
+            <Grid>
+                <StackPanel>
+                    <TextBlock Text="Auto-Seed (NA / EU)" />
+                    <TextBlock Text="Scheduled daily seeding via Task Scheduler" FontSize="12" Opacity="0.5" />
+                </StackPanel>
+                <Button Content="Set up" HorizontalAlignment="Right" IsEnabled="False" />
+            </Grid>
+
+            <Grid>
+                <StackPanel>
+                    <TextBlock Text="Updates" />
+                    <TextBlock Text="Check for updates / beta channel" FontSize="12" Opacity="0.5" />
+                </StackPanel>
+                <Button Content="Check for Updates" HorizontalAlignment="Right" IsEnabled="False" />
+            </Grid>
+            <ToggleSwitch Header="Beta Updates" IsEnabled="False" />
         </StackPanel>
     </ScrollViewer>
 </Page>
