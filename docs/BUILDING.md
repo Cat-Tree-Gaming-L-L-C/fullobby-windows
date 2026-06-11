@@ -45,6 +45,22 @@ Options:
 - `-ApiUrl <url>` — backend base URL; falls back to `$env:CHLL_SEEDER_API_URL`,
   then `http://localhost:3000`
 
+## Mock backend (no real server needed)
+
+`scripts/run-mock.ps1` runs a standalone, scriptable mock of the seeding API
+(full REST + SSE contract, controllable state) for testing the client without the
+real backend or the game — force a server switch, demo Seed All rotation, inject
+auth/rate-limit errors, simulate offline/passworded servers.
+
+```powershell
+./scripts/run-mock.ps1                                   # http://localhost:3000
+# then, in another shell:
+./scripts/run-local.ps1 -ApiUrl http://localhost:3000
+```
+
+See `tools/ChllSeeder.MockApi/README.md` for the `/__mock/...` control plane and
+scenario presets.
+
 ## Tests
 
 ```powershell
