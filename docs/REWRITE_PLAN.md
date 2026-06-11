@@ -84,9 +84,9 @@
     rotation across servers/games is Phase 2 (the single-server monitor + in-place switch countdown work
     now). Switch toast/sound stay Phase 2. The switch-overlay countdown is visual only (the engine drives
     the real timing server-side).
-- 🚧 **Phase 2 — Live data (part 1: SSE + session/heartbeat)** done (2026-06-09, Windows): solution builds
-  clean (0 warnings), 273/273 tests pass (227 prior + 46 new). Live LAN test against the WSL backend still
-  pending (manual).
+- ✅ **Phase 2 — Live data, rotation, tray** complete. Part 1 (SSE + session/heartbeat) done 2026-06-09;
+  **part 2 (Seed-All rotation, tray, toasts) done 2026-06-10**, Windows. Solution builds clean (0 warnings),
+  273/273 tests pass. Live LAN/desktop smoke test (tray hide/restore, toast, rotation) still pending (manual).
   - ✅ **SSE stream:** `Core.Api.SseFrameParser` (pure SSE frame parser replacing the Rust
     `reqwest_eventsource` dep — `event:`/`data:`/multiline/comment/blank-line dispatch) + `Core.Api.SseStreamClient`
     (`IHostedService`, port of `api/sse.rs`): own infinite-timeout named `"sse"` HttpClient (no delegating
@@ -109,7 +109,34 @@
     `efficiency_mode`/`eu_enabled`). Wired in `SeedingViewModel.RunSeedAsync` (start session+heartbeat after a
     successful launch, auth-gated/non-fatal; stop reasons `monitor_complete`/`user_stopped`/
     `user_stopped_keep_game`) and `App.xaml.cs` window-close (`app_exit`, fire-and-forget).
-  - Deferred to Phase 2 part 2: Seed-All rotation, tray + close-to-tray, desktop toasts + switch sound, in-app toasts.
+  - ✅ **Phase 2 part 2 (2026-06-10):** UI-platform integration, all in the **App** project (Core stays
+    UI-free/testable — deviation from the subsystem table, which had put `ToastService` in Core; `AppNotificationManager`
+    and `H.NotifyIcon.WinUI` need WindowsAppSDK).
+    - **Tray + close-to-tray:** `H.NotifyIcon.WinUI` 2.3.0 `TaskbarIcon` declared in `MainWindow.xaml` (Show /
+      Restart / Quit menu, tooltip, `icon.ico`, left-click → restore; `ForceCreate()` + dispose-on-close to avoid
+      ghost icons). `MainWindow` now DI-resolves `ConfigService`+`InAppToastService`; `AppWindow.Closing` hides to
+      tray when `close_to_tray` (default **true**) and the user didn't pick Quit/Restart (`_forceQuit` flag). Restart
+      ports `platform::restart` (delayed `cmd /c timeout 2 && exe` re-launch, then close → full App shutdown path).
+    - **Desktop toasts + switch sound:** `App.Services.ToastService` over WAS `AppNotificationManager`
+      (Register on startup / Unregister on exit; `NotificationInvoked` → bring window forward). Port of
+      `platform::notification` — `MessageBeep(MB_ICONEXCLAMATION)` (DllImport) + "Switching servers in Ns…" toast.
+      Fired from the VM's existing `ServerSwitchPending` handler (engine already gates that event behind
+      `switch_notification`, so no extra gating).
+    - **In-app toasts:** `App.Services.InAppToast`/`InAppToastService` (ObservableCollection of InfoBars,
+      auto-dismiss timer + manual close) hosted bottom-of-shell in `MainWindow.xaml`. Port of `state::toast`.
+      Used for "Switching to the next server…" and "Seed All complete".
+    - **Seed All rotation:** `SeedingViewModel.SeedAllCommand` + `_isSeedAll` flag + "Seed All" button on `SeedPage`.
+      Client-driven rotation (matches Rust `do_seed_next_server` + the `IS_SEED_ALL` branch of `do_monitor_seed`):
+      `RunSeedAsync` refactored to extract `LaunchAndMonitorAsync`; the rotation loop awaits a monitor, then
+      `GetSeedingStatusAsync` → `PickNextHop` (current game/region-preferred → EU when `eu_enabled` → other enabled
+      games, killing + 20s + switching `CurrentGame`) and re-enters; ends with an in-app success toast when exhausted.
+      Cross-game hop is dormant (`GameCatalog.Released` = [hll] only). Stop commands clear `_isSeedAll`.
+    - **Settings toggles:** minimal `SettingsPage` `ToggleSwitch`es for `close_to_tray` + `switch_notification`
+      (read/write via `ConfigService`); the full Settings tab stays Phase 3.
+    - **Deviations / deferred:** the Rust 30s Seed-All cooldown (anti-spam after "all full"/error) is NOT ported —
+      the `IsBusy` guard already blocks re-entry while seeding; cooldown only gates rapid retry. The Seed-All cascade
+      helpers live in the App VM (matching Rust's component placement) and aren't covered by Core.Tests (no App test
+      project). Tray icon/toast attribution + behavior need a live desktop smoke test (build-verified only).
 
 ## Context
 

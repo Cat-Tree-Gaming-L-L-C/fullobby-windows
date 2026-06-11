@@ -54,10 +54,17 @@ public partial class App : Application
         // Activations redirected from secondary instances (chllseeder:// deep links)
         AppInstance.GetCurrent().Activated += OnRedirectedActivation;
 
+        // Desktop toasts: register the unpackaged handler and bring the window
+        // forward when the user clicks one of our notifications.
+        var toasts = AppHost.Services.GetRequiredService<Services.ToastService>();
+        toasts.Register();
+        toasts.Activated += () => _window?.DispatcherQueue.TryEnqueue(() => _window.BringToFront());
+
         _window = AppHost.Services.GetRequiredService<MainWindow>();
         _window.Closed += (_, _) =>
         {
-            // Close-to-tray arrives in Phase 2; for now closing the window exits.
+            // Reached only on a real quit — MainWindow's close handler cancels the
+            // close and hides to tray when close_to_tray is enabled (the default).
             Log.Information("Main window closed, shutting down");
 
             // End any open seeding session (analytics, fire-and-forget so it doesn't block exit).
@@ -80,6 +87,15 @@ public partial class App : Application
             catch (Exception ex)
             {
                 Log.Warning(ex, "Efficiency-mode cleanup on exit failed");
+            }
+
+            try
+            {
+                AppHost.Services.GetRequiredService<Services.ToastService>().Unregister();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Toast unregister on exit failed");
             }
 
             AppHost.StopAsync().GetAwaiter().GetResult();
@@ -176,6 +192,8 @@ public partial class App : Application
                 // Core: config, API, native/tools, seeding engine, startup worker.
                 services.AddChllSeederCore();
 
+                services.AddSingleton<Services.InAppToastService>();
+                services.AddSingleton<Services.ToastService>();
                 services.AddSingleton<MainWindow>();
                 services.AddSingleton<ViewModels.SeedingViewModel>();
             })

@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
+using ChllSeeder.App.Services;
 using ChllSeeder.Core.Api;
 using ChllSeeder.Core.Bootstrap;
 using ChllSeeder.Core.Config;
+using ChllSeeder.Core.Games;
 using ChllSeeder.Core.Seeding;
 using ChllSeeder.Core.Servers;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -29,12 +31,19 @@ public sealed partial class SeedingViewModel : ObservableObject
     private readonly LiveStats _live;
     private readonly AuthSession _auth;
     private readonly HeartbeatService _heartbeat;
+    private readonly ToastService _toast;
+    private readonly InAppToastService _inAppToast;
     private readonly DispatcherQueue _dispatcher;
     private readonly DispatcherTimer _timer;
 
     /// <summary>The active seeding session id (from start-session), heartbeat-ed until stop. Null
     /// when no session is open. Analytics only — non-fatal if session creation failed.</summary>
     private string? _sessionId;
+
+    /// <summary>True while a "Seed All" rotation is running: after each server finishes seeding the VM
+    /// fetches the next best candidate and re-launches. Cleared by a stop or when all are exhausted.
+    /// Port of the Rust IS_SEED_ALL signal.</summary>
+    private bool _isSeedAll;
 
     /// <summary>Set by the hosting page (which has a XamlRoot) so the VM can ask the user to
     /// confirm closing a running game. Returns true when the user confirms.</summary>
@@ -49,7 +58,9 @@ public sealed partial class SeedingViewModel : ObservableObject
         AppBootstrapper bootstrap,
         LiveStats live,
         AuthSession auth,
-        HeartbeatService heartbeat)
+        HeartbeatService heartbeat,
+        ToastService toast,
+        InAppToastService inAppToast)
     {
         _log = log;
         _engine = engine;
@@ -60,6 +71,8 @@ public sealed partial class SeedingViewModel : ObservableObject
         _live = live;
         _auth = auth;
         _heartbeat = heartbeat;
+        _toast = toast;
+        _inAppToast = inAppToast;
 
         // Constructed on the UI thread (first page resolve), so this captures the UI queue.
         _dispatcher = DispatcherQueue.GetForCurrentThread();
@@ -81,6 +94,10 @@ public sealed partial class SeedingViewModel : ObservableObject
         {
             RebuildServers();
         }
+
+        // Compute the initial button/banner visibility (RefreshDerived otherwise only runs on a
+        // Status/IsSeeding/ServersReady change, so the seed buttons would keep their default).
+        RefreshDerived();
     }
 
     // ── Observable state ───────────────────────────────────────────────────────
@@ -131,8 +148,9 @@ public sealed partial class SeedingViewModel : ObservableObject
     [ObservableProperty]
     private bool showLaunchError;
 
+    // Hidden until a successful server-list response (RefreshDerived gates on ServersReady).
     [ObservableProperty]
-    private bool showSeedButtons = true;
+    private bool showSeedButtons;
 
     [ObservableProperty]
     private bool showActiveSeeding;
@@ -178,6 +196,8 @@ public sealed partial class SeedingViewModel : ObservableObject
     partial void OnStatusChanged(SeedingStatus value) => RefreshDerived();
 
     partial void OnIsSeedingChanged(bool value) => RefreshDerived();
+
+    partial void OnServersReadyChanged(bool value) => RefreshDerived();
 
     /// <summary>Which of the two banner-bearing pages is currently shown. Stop/update failures can
     /// be triggered from either (both carry the active-seeding stop controls), so they surface on
@@ -246,8 +266,12 @@ public sealed partial class SeedingViewModel : ObservableObject
     /// show_* derivations in seed.rs and the status_config map in seed_banner.rs.</summary>
     private void RefreshDerived()
     {
-        ShowSeedButtons = Status is SeedingStatus.Idle or SeedingStatus.Stopped
-            || (Status == SeedingStatus.Running && !IsSeeding);
+        // Gate the seed buttons on a definite, successful server-list response: while the list is
+        // still loading (indeterminate) or failed, the loading/retry block is shown instead, so a
+        // user can't kick off a seed against an unconfirmed server list.
+        ShowSeedButtons = ServersReady
+            && (Status is SeedingStatus.Idle or SeedingStatus.Stopped
+                || (Status == SeedingStatus.Running && !IsSeeding));
 
         ShowWaitingForUpdate = Status == SeedingStatus.WaitingForUpdate;
 
@@ -330,9 +354,29 @@ public sealed partial class SeedingViewModel : ObservableObject
         await RunSeedAsync(candidate.Index, region).ConfigureAwait(true);
     }
 
-    /// <summary>Launch + monitor a specific candidate index. Resolves the terminal status once
-    /// the monitor loop returns (or hands off to the launch watcher on a "could not open").</summary>
+    /// <summary>Launch + monitor a specific candidate index, then resolve the terminal status.
+    /// Single-server path; Seed All uses <see cref="LaunchAndMonitorAsync"/> directly so it can rotate.</summary>
     private async Task RunSeedAsync(int index, string region)
+    {
+        if (!await LaunchAndMonitorAsync(index, region).ConfigureAwait(true))
+        {
+            // Handed off to the launch watcher (WaitingForUpdate) or failed — state already set.
+            return;
+        }
+
+        // Monitor returned: HLL closed, switched away, or a stop was requested.
+        if (Status != SeedingStatus.WaitingForUpdate)
+        {
+            SetStatus(Status == SeedingStatus.Stopping ? SeedingStatus.Stopped : SeedingStatus.Idle);
+        }
+        IsSeeding = false;
+    }
+
+    /// <summary>Launch a candidate, open its analytics session, and run the monitor loop to completion.
+    /// Returns <c>true</c> when the monitor returned normally (the caller may continue/rotate), or
+    /// <c>false</c> when the flow handed off to the launch watcher (WaitingForUpdate) or failed — in
+    /// which case the status/error has already been set. Port of start_seeding_inner + the monitor await.</summary>
+    private async Task<bool> LaunchAndMonitorAsync(int index, string region)
     {
         SetStatus(SeedingStatus.Initializing);
         try
@@ -347,27 +391,224 @@ public sealed partial class SeedingViewModel : ObservableObject
 
             // Monitor returned on its own (HLL closed / switched / stop) — end the session.
             await StopSessionAsync("monitor_complete").ConfigureAwait(true);
+            return true;
         }
         catch (SeedingException e) when (e.Message.Contains("could not open", StringComparison.OrdinalIgnoreCase))
         {
             // The engine restored settings and spawned the launch watcher; its events
             // (SeedingUpdate*) drive the rest of the flow from here.
             SetStatus(SeedingStatus.WaitingForUpdate);
-            return;
+            return false;
         }
         catch (Exception e)
         {
             _log.LogError(e, "Seeding failed");
             SetSeedError("Failed to launch the game. Please try again.");
+            return false;
+        }
+    }
+
+    // ── Seed All rotation (Seed tab) ────────────────────────────────────────────
+
+    /// <summary>One step of a Seed All rotation: which game/region/server to seed next.</summary>
+    private sealed record SeedAllHop(string GameId, string Region, int Index);
+
+    /// <summary>Rotate across every region (and enabled game) until all are seeded or stopped. After
+    /// each server finishes seeding, fetches the freshest status and hops to the next best candidate.
+    /// Port of do_seed_next_server + the IS_SEED_ALL branch of do_monitor_seed.</summary>
+    [RelayCommand]
+    private async Task SeedAllAsync()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+        if (ServerLoadError)
+        {
+            await _bootstrap.LoadServersAsync().ConfigureAwait(true);
             return;
         }
 
-        // Monitor returned: HLL closed, switched away, or a stop was requested.
+        ClearSeedError();
+        IsSeeding = true;
+        _isSeedAll = true;
+        SetStatus(SeedingStatus.Initializing);
+
+        var euEnabled = _config.GetBool("eu_enabled");
+
+        // First candidate across enabled games (NA preferred, then EU when enabled).
+        SeedAllHop? hop;
+        try
+        {
+            var status = await _api.GetSeedingStatusAsync().ConfigureAwait(true);
+            hop = PickInitialHop(status, euEnabled);
+        }
+        catch (Exception e)
+        {
+            _log.LogError(e, "Seed All: failed to fetch seeding status");
+            _isSeedAll = false;
+            SetSeedError("Couldn't reach the seeding service. Please try again.");
+            return;
+        }
+
+        if (hop is null)
+        {
+            _isSeedAll = false;
+            SetSeedError("All servers are full or offline — no seeding needed.");
+            return;
+        }
+
+        if (!await ConfirmCloseRunningGameAsync().ConfigureAwait(true))
+        {
+            _isSeedAll = false;
+            IsSeeding = false;
+            SetStatus(SeedingStatus.Idle);
+            return;
+        }
+
+        while (_isSeedAll && hop is not null)
+        {
+            // Cross-game hop: kill the current game, wait, then switch (only fires when more than
+            // one game is enabled — HLLV is scaffolded but not yet released).
+            if (hop.GameId != _engine.CurrentGame.Id)
+            {
+                _log.LogInformation("Seed All: switching game {From} -> {To}", _engine.CurrentGame.Id, hop.GameId);
+                try
+                {
+                    await _engine.KillGameAndWaitAsync().ConfigureAwait(true);
+                }
+                catch (Exception e)
+                {
+                    _log.LogWarning(e, "Seed All: kill before game switch failed");
+                }
+                if (GameCatalog.ById(hop.GameId) is { } game)
+                {
+                    _engine.CurrentGame = game;
+                }
+            }
+
+            if (!await LaunchAndMonitorAsync(hop.Index, hop.Region).ConfigureAwait(true))
+            {
+                // Launch watcher took over (WaitingForUpdate) or a launch failed (error shown).
+                _isSeedAll = false;
+                return; // status / IsSeeding already in the right state
+            }
+            if (!_isSeedAll)
+            {
+                break; // user stopped during this hop
+            }
+
+            try
+            {
+                var status = await _api.GetSeedingStatusAsync().ConfigureAwait(true);
+                hop = PickNextHop(status, _engine.CurrentGame.Id, hop.Region, euEnabled);
+            }
+            catch (Exception e)
+            {
+                _log.LogError(e, "Seed All: failed to fetch next status");
+                hop = null; // stop rotating; treat as exhausted
+            }
+        }
+
+        var stoppedByUser = !_isSeedAll && Status == SeedingStatus.Stopping;
+        _isSeedAll = false;
+
+        if (!stoppedByUser && hop is null && Status != SeedingStatus.WaitingForUpdate)
+        {
+            _inAppToast.Success("Seed All complete — every server is seeded.");
+        }
+
         if (Status != SeedingStatus.WaitingForUpdate)
         {
             SetStatus(Status == SeedingStatus.Stopping ? SeedingStatus.Stopped : SeedingStatus.Idle);
         }
         IsSeeding = false;
+    }
+
+    /// <summary>First Seed All candidate: walk enabled games, taking NA (or EU when enabled).</summary>
+    private SeedAllHop? PickInitialHop(SeedingStatusResponse status, bool euEnabled)
+    {
+        foreach (var gameId in GetEnabledGames())
+        {
+            if (GameStatus(status, gameId) is { } gs && PreferNaThenEu(gs, gameId, euEnabled) is { } hop)
+            {
+                return hop;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Next Seed All candidate: stay on the current game/region first (region-preferred), then
+    /// fall through to the other enabled games. Port of the do_monitor_seed rotation cascade.</summary>
+    private SeedAllHop? PickNextHop(SeedingStatusResponse status, string currentGameId, string currentRegion, bool euEnabled)
+    {
+        if (GameStatus(status, currentGameId) is { } cur)
+        {
+            var hop = currentRegion == "eu"
+                ? PreferEuThenNa(cur, currentGameId, euEnabled)
+                : PreferNaThenEu(cur, currentGameId, euEnabled);
+            if (hop is not null)
+            {
+                return hop;
+            }
+        }
+
+        foreach (var gameId in GetEnabledGames())
+        {
+            if (gameId == currentGameId)
+            {
+                continue;
+            }
+            if (GameStatus(status, gameId) is { } gs && PreferNaThenEu(gs, gameId, euEnabled) is { } hop)
+            {
+                return hop;
+            }
+        }
+        return null;
+    }
+
+    private static SeedAllHop? PreferNaThenEu(GameSeedingStatus gs, string gameId, bool euEnabled)
+    {
+        if (gs.Na is { } na)
+        {
+            return new SeedAllHop(gameId, "na", na.Index);
+        }
+        if (euEnabled && gs.Eu is { } eu)
+        {
+            return new SeedAllHop(gameId, "eu", eu.Index);
+        }
+        return null;
+    }
+
+    private static SeedAllHop? PreferEuThenNa(GameSeedingStatus gs, string gameId, bool euEnabled)
+    {
+        if (gs.Eu is { } eu)
+        {
+            return new SeedAllHop(gameId, "eu", eu.Index);
+        }
+        if (euEnabled && gs.Na is { } na)
+        {
+            return new SeedAllHop(gameId, "na", na.Index);
+        }
+        return null;
+    }
+
+    private static GameSeedingStatus? GameStatus(SeedingStatusResponse status, string gameId) => gameId switch
+    {
+        "hll" => status.Hll,
+        "hllv" => status.Hllv,
+        _ => null,
+    };
+
+    /// <summary>Enabled game IDs from config, filtered to released games (defaults to HLL only).
+    /// Port of get_enabled_games.</summary>
+    private IReadOnlyList<string> GetEnabledGames()
+    {
+        var released = GameCatalog.Released.Select(g => g.Id).ToHashSet();
+        var configured = _config.Get("enabled_games", new List<string> { GameCatalog.Hll.Id })
+            ?? new List<string> { GameCatalog.Hll.Id };
+        var filtered = configured.Where(released.Contains).ToList();
+        return filtered.Count > 0 ? filtered : new List<string> { GameCatalog.Hll.Id };
     }
 
     // ── Seeding session + heartbeat (analytics; non-fatal) ─────────────────────
@@ -479,6 +720,7 @@ public sealed partial class SeedingViewModel : ObservableObject
     [RelayCommand]
     private async Task StopGameAsync()
     {
+        _isSeedAll = false;
         SetStatus(SeedingStatus.Stopping);
         ResetSwitchOverlay();
         await StopSessionAsync("user_stopped").ConfigureAwait(true);
@@ -499,6 +741,7 @@ public sealed partial class SeedingViewModel : ObservableObject
     [RelayCommand]
     private async Task StopSeedingOnlyAsync()
     {
+        _isSeedAll = false;
         SetStatus(SeedingStatus.Stopping);
         ResetSwitchOverlay();
         await StopSessionAsync("user_stopped_keep_game").ConfigureAwait(true);
@@ -563,6 +806,9 @@ public sealed partial class SeedingViewModel : ObservableObject
 
             case SeedingEvent.ServerSwitchPending p:
                 ShowSwitchOverlay(p);
+                // Desktop toast + attention sound (the engine only emits this when
+                // switch_notification is enabled, so no extra gating needed here).
+                _toast.ShowServerSwitch(p.ServerName, p.CountdownSecs);
                 break;
             case SeedingEvent.ServerSwitchSnoozed sn:
                 ServerSwitchSnoozed = true;
@@ -572,6 +818,7 @@ public sealed partial class SeedingViewModel : ObservableObject
             case SeedingEvent.ServerSwitchExecuting:
                 ResetSwitchOverlay();
                 SetStatus(SeedingStatus.Switching);
+                _inAppToast.Info("Switching to the next server…");
                 break;
             case SeedingEvent.ServerSwitchCancelled:
                 ResetSwitchOverlay();

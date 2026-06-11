@@ -187,6 +187,14 @@
                         Style="{StaticResource AccentButtonStyle}"
                         Command="{x:Bind ViewModel.SeedNaCommand}"
                         Visibility="{x:Bind ViewModel.EuEnabled, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+
+                    <!-- Seed All: rotate across every server/region (and game) until all are seeded -->
+                    <Button
+                        Content="Seed All"
+                        Height="44"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Command="{x:Bind ViewModel.SeedAllCommand}" />
                 </StackPanel>
 
                 <!-- Waiting for update: cancel -->
