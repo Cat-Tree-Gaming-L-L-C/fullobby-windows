@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <Company>Comp HLL</Company>
-    <Product>CHLL Seeder</Product>
+    <Product>CHLL Seeding</Product>
     <Copyright>© Comp HLL</Copyright>
     <NeutralLanguage>en-US</NeutralLanguage>
   </PropertyGroup>

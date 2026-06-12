@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Build and run the CHLL Seeder mock API for client testing.
+    Build and run the CHLL Seeding mock API for client testing.
 .DESCRIPTION
     Serves the full client contract (REST + SSE) with controllable in-memory state.
     Point the app at it with:  ./scripts/run-local.ps1 -ApiUrl http://localhost:<port>
@@ -15,12 +15,12 @@
 param([int]$Port = 3000)
 
 $ErrorActionPreference = 'Stop'
-$proj = Join-Path $PSScriptRoot '..\tools\ChllSeeder.MockApi\ChllSeeder.MockApi.csproj'
+$proj = Join-Path $PSScriptRoot '..\tools\ChllSeeding.MockApi\ChllSeeding.MockApi.csproj'
 
 $env:ASPNETCORE_URLS = "http://localhost:$Port"
 Write-Host ""
 Write-Host "Mock API : http://localhost:$Port" -ForegroundColor Cyan
-Write-Host "Control  : POST http://localhost:$Port/__mock/scenario/<name>  (see tools/ChllSeeder.MockApi/README.md)"
+Write-Host "Control  : POST http://localhost:$Port/__mock/scenario/<name>  (see tools/ChllSeeding.MockApi/README.md)"
 Write-Host "Point app: ./scripts/run-local.ps1 -ApiUrl http://localhost:$Port" -ForegroundColor Green
 Write-Host "Ctrl+C to stop." -ForegroundColor DarkGray
 Write-Host ""

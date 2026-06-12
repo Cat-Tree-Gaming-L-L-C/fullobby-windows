@@ -13,20 +13,20 @@ Inno Setup step and is not needed to build or run locally.
 ## Build
 
 ```powershell
-dotnet build src/ChllSeeder.sln -c Release
+dotnet build src/ChllSeeding.sln -c Release
 ```
 
 The built exe lands at:
 
 ```
-src/ChllSeeder.App/bin/x64/Release/net9.0-windows10.0.22621.0/win-x64/CHLLSeeder.exe
+src/ChllSeeding.App/bin/x64/Release/net9.0-windows10.0.22621.0/win-x64/CHLLSeeding.exe
 ```
 
 (Swap `Release` → `Debug` in both the command and the path for a Debug build.)
 
 ## Build + run against a backend (easiest)
 
-`scripts/run-local.ps1` builds if needed, sets `CHLL_SEEDER_API_URL` for that
+`scripts/run-local.ps1` builds if needed, sets `CHLL_SEEDING_API_URL` for that
 process only (no global env changes), then launches the exe.
 
 ```powershell
@@ -42,7 +42,7 @@ Options:
 
 - `-Configuration Debug` — build/launch the Debug config (default: Release)
 - `-Build` — force a rebuild first (also auto-builds if the exe is missing)
-- `-ApiUrl <url>` — backend base URL; falls back to `$env:CHLL_SEEDER_API_URL`,
+- `-ApiUrl <url>` — backend base URL; falls back to `$env:CHLL_SEEDING_API_URL`,
   then `http://localhost:3000`
 
 ## Mock backend (no real server needed)
@@ -58,17 +58,17 @@ auth/rate-limit errors, simulate offline/passworded servers.
 ./scripts/run-local.ps1 -ApiUrl http://localhost:3000
 ```
 
-See `tools/ChllSeeder.MockApi/README.md` for the `/__mock/...` control plane and
+See `tools/ChllSeeding.MockApi/README.md` for the `/__mock/...` control plane and
 scenario presets.
 
 ## Tests
 
 ```powershell
-dotnet test src/ChllSeeder.Core.Tests
+dotnet test src/ChllSeeding.Core.Tests
 ```
 
 ## Where things go
 
-- **Logs:** `%LOCALAPPDATA%\CHLLSeeder\logs`
-- **Solution:** `src/ChllSeeder.sln` (App, Core, Core.Tests)
-- **Deep-link protocol:** `chllseeder://` (OAuth callbacks)
+- **Logs:** `%LOCALAPPDATA%\CHLLSeeding\logs`
+- **Solution:** `src/ChllSeeding.sln` (App, Core, Core.Tests)
+- **Deep-link protocol:** `chllseeding://` (OAuth callbacks)

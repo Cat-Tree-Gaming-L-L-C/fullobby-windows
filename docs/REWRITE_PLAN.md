@@ -1,12 +1,12 @@
-# CHLL Seeder — Rebrand + WinUI 3 Rewrite Plan
+# CHLL Seeding — Rebrand + WinUI 3 Rewrite Plan
 
 ## Status
 
 - ✅ **Step 0** (2026-06, WSL): plan committed, `rust-final` tag, Rust moved to `/src-rust`, branch `rewrite/winui3`.
 - ✅ **Phase 0 — Skeleton** (2026-06-07, Windows): solution + 3 projects build green
-  (`dotnet build src/ChllSeeder.sln -c Release`), 16/16 Core tests pass, app verified
+  (`dotnet build src/ChllSeeding.sln -c Release`), 16/16 Core tests pass, app verified
   running (frameless 5-tab shell, single-instance redirect, Serilog rolling logs,
-  `chllseeder://` deep links end-to-end), Inno installer compiles + smoke-tested
+  `chllseeding://` deep links end-to-end), Inno installer compiles + smoke-tested
   (per-user install, protocol keys), CI rewritten for dotnet.
   - Versions: .NET SDK 9.0.314, Windows App SDK **1.8.260508005**, CommunityToolkit.Mvvm 8.4.2,
     Microsoft.Extensions.Hosting 9.0.16, Serilog.Extensions.Hosting 9.0.0.
@@ -29,7 +29,7 @@
     `RetryPolicy` + `ResilienceHandler` (port of `retry.rs`), `AuthSession` + `AuthHandler`
     (JWT/x-api-key, dedup'd 401 refresh, DPAPI-persisted tokens), `SeedingStatusCache`
     (SSE cache from `backend/api_client.rs`), `Core.Servers.ServerStore` (port of `server.rs`),
-    `SeedingApiClient` (typed endpoints), `AddChllSeederCore` DI extension.
+    `SeedingApiClient` (typed endpoints), `AddChllSeedingCore` DI extension.
   - ✅ **Native + tools layer (via CsWin32 0.3.275):** `Core.Games.GameDefinition`+`GameCatalog`
     (port of `game.rs`), `Core.Native.ProcessMonitor` (`process.rs` — Toolhelp32 scan, 15s PID cache,
     verified kill-by-path), `Core.Native.SteamPaths` (registry cache, shared to break the steam↔process
@@ -39,7 +39,7 @@
     `Core.Native.SteamLauncher` (`steam.rs` launch half — cold-start + `-applaunch +connect`, IP
     validation), `Core.Native.PowerStatus` (`power.rs` — powercfg modern-standby/wake-timer warnings),
     `Core.Tools.HllConfigBackupService` (`backup_restore_hll_config.rs` — efficiency INI rewrite,
-    atomic backup/restore, write-ahead crash-recovery flag). All registered in `AddChllSeederCore`.
+    atomic backup/restore, write-ahead crash-recovery flag). All registered in `AddChllSeedingCore`.
   - ✅ **SeedingEngine + keep-awake (2026-06-07):** `Core.Seeding.SeedingEngine` (port of the
     1183-LOC `backend/seeding.rs` state machine — open/launch retries, 3-phase splash bypass,
     monitor loop w/ linear backoff + dynamic fill-based stagger + jitter, server-switch countdown
@@ -54,7 +54,7 @@
     DISPLAY) on a dedicated re-asserting thread; engine `Acquire`s on seed start, `Release`s on
     stop. Added `SetCursorPos` (enigo mouse-nudge replacement) + `SetThreadExecutionState` to
     `NativeMethods.txt`; `WindowFocus.HasHllWindow()` added to avoid leaking Win32 HWND to the engine.
-    All registered in `AddChllSeederCore`.
+    All registered in `AddChllSeedingCore`.
   - Deviations: OS switch-notification toast + switch sound (Rust `platform::notification`) are
     deferred to Phase 2 — the engine emits `ServerSwitchPending` (UI subscribes) and focuses the
     seeder window, but does not yet play sound / show a toast. Autoseed flags (`AUTOSEED_*`,
@@ -64,7 +64,7 @@
   - Native-layer deviations from the Rust monolith (deliberate): `game.rs` is a plain data record
     (no `IGameProfile` interface — Rust has no per-game behavior); `SteamLauncher.OpenGameAsync` does
     launch mechanics only — efficiency-apply / config-restore / the enigo mouse-nudge are left to the
-    SeedingEngine orchestration; backup dir rebranded `espritseeder-backup` → `chllseeder-backup`
+    SeedingEngine orchestration; backup dir rebranded `espritseeder-backup` → `chllseeding-backup`
     (`Branding.BackupDirName`).
   - ✅ **Seed + Launch tab UI (2026-06-07):** `App.ViewModels.SeedingViewModel` (shared DI singleton)
     drives the engine and mirrors `SeedingEngine.Event` into observable UI state — status banner,
@@ -76,7 +76,7 @@
     (`invert` param) for visibility. Added small engine UI surface (`IsGameRunning`,
     `KillGameAndWaitAsync`, post-monitor restore+keep-awake cleanup in `MonitorSeedImplAsync`).
     Added `Microsoft.Extensions.Hosting.Abstractions` to Core for `IHostedService`.
-  - ✅ **`AddChllSeederCore` wired:** `App.BuildHost` now calls it + registers `MainWindow` and
+  - ✅ **`AddChllSeedingCore` wired:** `App.BuildHost` now calls it + registers `MainWindow` and
     `SeedingViewModel`; window-close path runs `SeedingEngine.CleanupEfficiencyOnExitAsync` before
     `AppHost.StopAsync` (which flushes config via the bootstrapper's `StopAsync`).
   - Phase 1 deviations / deferred: **session + heartbeat** (`/api/seeding/start-session` + `heartbeat.rs`)
@@ -188,15 +188,15 @@
   window, auto-seed coordination state, manual-backup timestamp/unchanged helpers). App smoke-tested (fresh
   instance: DI graph + new hosted `MissedAutoseedMonitor` resolve, window up, degrades gracefully against the
   unresolved TBD API host, clean). Live task creation / a real missed-seed fire need a reachable backend + Steam/HLL.
-  - ✅ **Startup registry:** `Core.Platform.StartupRegistry` (HKCU `…\Run` value `CHLLSeeder`; Enable/Disable/
+  - ✅ **Startup registry:** `Core.Platform.StartupRegistry` (HKCU `…\Run` value `CHLLSeeding`; Enable/Disable/
     IsEnabled/UpdatePathIfNeeded — port of `startup.rs`). Wired to a working "Start with Windows" toggle in
     Settings; `UpdatePathIfNeeded()` runs once at launch (stale-path refresh after an installer move).
   - ✅ **Auto-seed scheduling (Core.Scheduling):** `AutoSeedTime` (UTC HH:MM parse/validate, `NormalizeHms`,
     UTC→local for the task + display — port of `validate_start_time` + `components/settings.rs` time helpers),
     `ScheduledTaskService` (**schtasks `/create /xml`** with a generated Task v1.2 XML so WakeToRun +
     StartWhenAvailable survive — replaces the Rust `planif` COM path; delete/query/next-run via schtasks; XML
-    builder + `ParseNextRunTime` are pure + tested), `AutoSeedSlot`/`AutoseedStatus` (NA→`CHLL-Seeder`/`--autoseed-na`/
-    `auto_seed_time`, EU→`CHLL-Seeder-EU`/`--autoseed-eu`/`auto_seed_time_secondary`; **clean break — no legacy
+    builder + `ParseNextRunTime` are pure + tested), `AutoSeedSlot`/`AutoseedStatus` (NA→`CHLL-Seeding`/`--autoseed-na`/
+    `auto_seed_time`, EU→`CHLL-Seeding-EU`/`--autoseed-eu`/`auto_seed_time_secondary`; **clean break — no legacy
     `Esprit-Seeder-2` fallbacks**), `AutoSeedService` (setup/uninstall/status; persists the UTC time, registers the
     task at the local-equivalent, appends `PowerStatus` warnings), `AutoSeedState` (DI-singleton replacing the Rust
     `AUTOSEED_IN_PROGRESS`/`AUTOSEED_CANCELLED`/`LAST_AUTOSEED_TRIGGER` atomics — exclusive begin/cancel + per-region
@@ -216,7 +216,7 @@
     `HllConfigBackupService.CheckAndRestoreOnStartup()` early and surfaces `TakeStartupRestoreNotice()` as an in-app
     toast once the window is up — a run killed mid-seed with degraded settings is restored on next launch.
   - ✅ **Manual backup + Tools tab:** `Core.Tools.ManualBackupService` (port of `backend/backup.rs` —
-    timestamped incremental backups under `chllseeder-backup\HLL\manual\`, `CreateHardLinkW` P/Invoke dedup of
+    timestamped incremental backups under `chllseeding-backup\HLL\manual\`, `CreateHardLinkW` P/Invoke dedup of
     unchanged files with copy fallback, restore with symlink-skip + containment guards, `RestoreFromAutoBackup`,
     `OpenLogs`; pure `IsTimestampFolder` + `IsFileUnchanged` tested). `ToolsPage` rebuilt (handler-driven, matching
     the Rust component): Backup Settings / Restore Manual / Restore Auto / View Logs / Links & Resources, with a
@@ -232,12 +232,12 @@
 
 The app "Esprit Seeder" (Hell Let Loose server-seeding desktop tool, Rust + Dioxus 0.7, ~18.5K LOC, 65 files) is being:
 
-1. **Rebranded** to **CHLL Seeder** (Comp HLL Seeder) — new identifiers, new git remote `git@github.com:catalloc/chll-seeder-windows.git`, owned domain `comp-hll.org`.
+1. **Rebranded** to **CHLL Seeding** (Comp HLL Seeder) — new identifiers, new git remote `git@github.com:catalloc/chll-seeding-windows.git`, owned domain `comp-hll.org`.
 2. **Rewritten** as a native **C# + WinUI 3** (Windows App SDK) app, replacing the Rust UI entirely, with **full feature parity delivered in shippable phases**.
 
 Decisions locked in with the user:
 - Rewrite **in this repo** (keep history), on branch `rewrite/winui3`.
-- Deep-link scheme `espritseeder://` → **`chllseeder://`** (⚠ requires a matching change in the seeding-api backend OAuth redirects — outside this repo).
+- Deep-link scheme `espritseeder://` → **`chllseeding://`** (⚠ requires a matching change in the seeding-api backend OAuth redirects — outside this repo).
 - All app IDs/task names/registry keys/mutex → CHLL-branded. **Clean break, NO migration** from old Esprit config paths (drop the old-dir migration logic in `config.rs`).
 - API base URL → `https://seeding-api.comp-hll.org` (configurable; exact host TBD).
 - Development continues in a **Windows PowerShell session** (dotnet CLI builds). This WSL session only produces this plan + repo prep.
@@ -247,7 +247,7 @@ Decisions locked in with the user:
 The next work session is on Windows; this WSL plan file won't be reachable. So:
 1. Copy this plan into the repo as `docs/REWRITE_PLAN.md`.
 2. Tag the final Rust commit: `git tag rust-final`.
-3. Update remote: `git remote set-url origin git@github.com:catalloc/chll-seeder-windows.git` (keep old URL noted in plan; user creates the GitHub repo if not present).
+3. Update remote: `git remote set-url origin git@github.com:catalloc/chll-seeding-windows.git` (keep old URL noted in plan; user creates the GitHub repo if not present).
 4. Create branch `rewrite/winui3`, commit the plan, push branch + tag.
 5. Tell the user: clone/open the repo on the Windows side and resume from `docs/REWRITE_PLAN.md`.
 
@@ -261,13 +261,13 @@ The next work session is on Windows; this WSL plan file won't be reachable. So:
 
 ## Architecture (verified against mid-2026 ecosystem)
 
-**Solution `ChllSeeder.sln`:**
+**Solution `ChllSeeding.sln`:**
 ```
-/src/ChllSeeder.App         WinUI 3 app — net9.0-windows10.0.22621.0, min 10.0.19041.0.
+/src/ChllSeeding.App         WinUI 3 app — net9.0-windows10.0.22621.0, min 10.0.19041.0.
                             Views, ViewModels, App.xaml, custom Main (DISABLE_XAML_GENERATED_MAIN).
-/src/ChllSeeder.Core        Class library — all non-UI logic (API, SSE, seeding engine, config,
+/src/ChllSeeding.Core        Class library — all non-UI logic (API, SSE, seeding engine, config,
                             DPAPI, process/Win32, autoseed, updater). No XAML deps; testable.
-/src/ChllSeeder.Core.Tests  xUnit — port existing Rust #[test] coverage (crypto, deep-link parsing,
+/src/ChllSeeding.Core.Tests  xUnit — port existing Rust #[test] coverage (crypto, deep-link parsing,
                             autoseed time parsing, config atomic writes).
 /installer                  Inno Setup script (.iss).
 ```
@@ -276,12 +276,12 @@ The next work session is on Windows; this WSL plan file won't be reachable. So:
 - **.NET 9** + **Windows App SDK 1.8.6** (stable line; .NET 10 bump later is trivial).
 - **CommunityToolkit.Mvvm** (source-gen MVVM; maps 1:1 onto Dioxus GlobalSignals).
 - **Microsoft.Extensions.Hosting + DI**; background workers (SSE loop, heartbeat, missed-task poller) as `IHostedService`.
-- **Deployment: UNPACKAGED, self-contained, Inno Setup `setup.exe`** — not MSIX. Reasons: preserves the existing self-update flow (download installer → SHA-256 verify → run), users expect a setup.exe, installer writes `chllseeder://` protocol registry keys directly, toasts/tray confirmed working unpackaged.
+- **Deployment: UNPACKAGED, self-contained, Inno Setup `setup.exe`** — not MSIX. Reasons: preserves the existing self-update flow (download installer → SHA-256 verify → run), users expect a setup.exe, installer writes `chllseeding://` protocol registry keys directly, toasts/tray confirmed working unpackaged.
 - NuGet: `H.NotifyIcon.WinUI` (tray), WAS `AppNotificationManager` (desktop toasts), `System.Security.Cryptography.ProtectedData` (DPAPI, keep `dpapi:<base64>` format), `Microsoft.Extensions.Http.Resilience`/Polly (30s timeout + exponential backoff), **hand-rolled SSE** over HttpClient streaming (reconnect + 60s polling fallback, like `api/sse.rs`), `System.Text.Json` source-gen, **Serilog** rolling daily file logs w/ 7-file retention, **keep `schtasks.exe`** shell-out for Task Scheduler (port `task_scheduler.rs` verbatim), `Microsoft.Windows.CsWin32` for P/Invoke (PostMessageW/SendInput/window enum).
 
 **WinUI 3 gotchas to handle:**
 - Frameless window: `AppWindowTitleBar.ExtendsContentIntoTitleBar` + `SetTitleBar` + explicit drag regions (`InputNonClientPointerSource`); `OverlappedPresenter` for non-resizable.
-- Single instance: `AppInstance.FindOrRegisterForKey("chll-seeder-main")` + `RedirectActivationToAsync`; main instance handles redirected `chllseeder://` activations via `Activated` event (replaces named mutex/pipe).
+- Single instance: `AppInstance.FindOrRegisterForKey("chll-seeding-main")` + `RedirectActivationToAsync`; main instance handles redirected `chllseeding://` activations via `Activated` event (replaces named mutex/pipe).
 - Close-to-tray: cancel `AppWindow.Closing` and `Hide()`; real quit sets a flag and **disposes the tray icon** (ghost-icon pitfall).
 - Hidden desktop windows don't suspend — background services keep running; marshal UI updates via `DispatcherQueue.TryEnqueue`.
 - Seeding engine runs entirely off the UI thread; Win11 SendInput fallback needs foreground focus handling first.
@@ -304,7 +304,7 @@ The next work session is on Windows; this WSL plan file won't be reachable. So:
 | `platform/deep_link.rs`, `single_instance.rs` | `Core.Activation.DeepLinkParser` + AppInstance redirection |
 | `platform/notification.rs` | `Core.Notifications.ToastService` (AppNotificationManager + system sound) |
 | `platform/updater.rs` | `Core.Update.UpdaterService` (HTTPS + trusted-domain + ext + ≤500MB + SHA-256 validation; launches Inno setup.exe) |
-| `platform/startup.rs` | `Core.Platform.StartupRegistry` (HKCU Run `CHLLSeeder`) |
+| `platform/startup.rs` | `Core.Platform.StartupRegistry` (HKCU Run `CHLLSeeding`) |
 | `components/*` + `state/*` | `App.Views.*Page` + `App.ViewModels.*` (NavigationView shell, 5 pages); `IMessenger` for events |
 | `backend/game.rs` | `Core.Games.IGameProfile` + `HllGameProfile` (HLLV placeholder) |
 
@@ -312,29 +312,29 @@ The next work session is on Windows; this WSL plan file won't be reachable. So:
 
 | Item | Old | New |
 |---|---|---|
-| Protocol | `espritseeder://` | `chllseeder://` ("URL:CHLL Seeder Protocol") |
-| Single-instance key | `Global\EspritSeeder` mutex | `AppInstance` key `chll-seeder-main` |
-| HKCU Run value | `EspritSeeder` | `CHLLSeeder` |
-| Config dir | `%APPDATA%\org.espritdecorpsgaming.hllseeder` | `%APPDATA%\org.comphll.chllseeder` |
-| Logs dir | Esprit dir in `%LOCALAPPDATA%` | `%LOCALAPPDATA%\CHLLSeeder\logs` |
-| Scheduled tasks | `Esprit-Seeder`, `Esprit-Seeder-Secondary` | `CHLL-Seeder`, `CHLL-Seeder-EU` |
-| Exe / product | `esprit-seeder.exe` / "Esprit Seeder" | `CHLLSeeder.exe` / "CHLL Seeder" |
+| Protocol | `espritseeder://` | `chllseeding://` ("URL:CHLL Seeding Protocol") |
+| Single-instance key | `Global\EspritSeeder` mutex | `AppInstance` key `chll-seeding-main` |
+| HKCU Run value | `EspritSeeder` | `CHLLSeeding` |
+| Config dir | `%APPDATA%\org.espritdecorpsgaming.hllseeder` | `%APPDATA%\org.comphll.chllseeding` |
+| Logs dir | Esprit dir in `%LOCALAPPDATA%` | `%LOCALAPPDATA%\CHLLSeeding\logs` |
+| Scheduled tasks | `Esprit-Seeder`, `Esprit-Seeder-Secondary` | `CHLL-Seeding`, `CHLL-Seeding-EU` |
+| Exe / product | `esprit-seeder.exe` / "Esprit Seeder" | `CHLLSeeding.exe` / "CHLL Seeding" |
 | Publisher | Esprit De Corps Gaming | Comp HLL |
-| Installer | NSIS `EspritSeeder_x.y.z_x64-setup.exe` | Inno `CHLL-Seeder-Setup-<ver>.exe` |
+| Installer | NSIS `EspritSeeder_x.y.z_x64-setup.exe` | Inno `CHLL-Seeding-Setup-<ver>.exe` |
 | API base | `seeding-api.espritdecorpsgaming.org` | `https://seeding-api.comp-hll.org` (configurable, TBD) |
-| Git remote | `Esprit-De-Corps-Gaming/esprit-seeder-windows` | `catalloc/chll-seeder-windows` |
-| Window title / README / PRIVACY / CLAUDE.md | Esprit Seeder | CHLL Seeder |
+| Git remote | `Esprit-De-Corps-Gaming/esprit-seeder-windows` | `catalloc/chll-seeding-windows` |
+| Window title / README / PRIVACY / CLAUDE.md | Esprit Seeder | CHLL Seeding |
 
-⚠ **Backend coordination needed (outside this repo):** OAuth redirect to `chllseeder://`, new API domain, `releases/latest` pointing at new installer names.
+⚠ **Backend coordination needed (outside this repo):** OAuth redirect to `chllseeding://`, new API domain, `releases/latest` pointing at new installer names.
 
 ## Phases (each shippable)
 
 - **Phase 0 — Skeleton:** solution + 3 projects, custom Main with single-instancing, DI/host, Serilog, frameless 5-tab MainWindow, rebranded metadata/icons, Inno script producing a working setup.exe, GitHub Actions CI (`windows-latest`: setup-dotnet 9.x → build → test → artifact; drop Rust/clippy/dx steps).
 - **Phase 1 — Core seeding (first real ship):** ConfigService (+DPAPI/atomic/ACL), API client + guest auth + JWT refresh, **SeedingEngine end-to-end** (Steam launch → 60s window wait → splash bypass Esc/F13 → 5s monitor → 30s heartbeat → kill/20s cooldown → 5h max), Seed tab w/ polled server list + one-click seed + status banner, Launch tab, keep-awake.
 - **Phase 2 — Live data, rotation, tray:** SSE + polling fallback, Seed All rotation (next-server API, jitter, countdown, snooze), tray icon + close-to-tray, desktop toasts + switch sound, in-app toasts.
-- **Phase 3 — Accounts & settings:** `chllseeder://` OAuth deep links, provider linking, display name, API key rotation, account deletion, Leaderboard tab, full Settings tab, onboarding.
+- **Phase 3 — Accounts & settings:** `chllseeding://` OAuth deep links, provider linking, display name, API key rotation, account deletion, Leaderboard tab, full Settings tab, onboarding.
 - **Phase 4 — Automation & tools:** auto-seed schtasks setup + CLI args + missed-task detection (startup + 60s, UTC↔local), efficiency mode INI swap + crash recovery, Tools tab (backup/restore, open logs).
-- **Phase 5 — Updater & parity sign-off:** self-updater wired to Inno setup.exe, stable/beta channels, theming polish, parity audit vs `/src-rust`, **delete `/src-rust`**, release workflow on tags (build, sign, attach `CHLL-Seeder-Setup-<ver>.exe` + SHA-256).
+- **Phase 5 — Updater & parity sign-off:** self-updater wired to Inno setup.exe, stable/beta channels, theming polish, parity audit vs `/src-rust`, **delete `/src-rust`**, release workflow on tags (build, sign, attach `CHLL-Seeding-Setup-<ver>.exe` + SHA-256).
 
 ## Key reference files for porting (in `/src-rust` after move)
 
@@ -347,4 +347,4 @@ The next work session is on Windows; this WSL plan file won't be reachable. So:
 ## Verification
 
 - **WSL (this session):** `git remote -v` shows new origin; branch `rewrite/winui3` pushed with `docs/REWRITE_PLAN.md`; `rust-final` tag pushed; repo builds nothing yet (no code moved unless Step 0 includes the `/src-rust` move — it does, verify `cargo` files are under `/src-rust/`).
-- **Windows (later phases):** `dotnet build -c Release` + `dotnet test` green per phase; Phase 1 manual test = click Seed on a live server → HLL launches, joins, splash bypassed, heartbeat visible in logs, Stop kills process; installer smoke test via Inno output; protocol test via `start chllseeder://auth/callback?...`.
+- **Windows (later phases):** `dotnet build -c Release` + `dotnet test` green per phase; Phase 1 manual test = click Seed on a live server → HLL launches, joins, splash bypassed, heartbeat visible in logs, Stop kills process; installer smoke test via Inno output; protocol test via `start chllseeding://auth/callback?...`.

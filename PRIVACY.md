@@ -1,10 +1,10 @@
-# Privacy Policy — CHLL Seeder
+# Privacy Policy — CHLL Seeding
 
 Last updated: 2026-06-07
 
 ## Overview
 
-CHLL Seeder collects minimal, non-personally-identifiable analytics to improve the seeding experience. All data collection is transparent and documented here. Users may opt out of the leaderboard at any time.
+CHLL Seeding collects minimal, non-personally-identifiable analytics to improve the seeding experience. All data collection is transparent and documented here. Users may opt out of the leaderboard at any time.
 
 ## What We Collect
 

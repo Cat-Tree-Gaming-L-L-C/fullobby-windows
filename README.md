@@ -1,12 +1,12 @@
-# CHLL Seeder
+# CHLL Seeding
 
 Windows desktop app for [Hell Let Loose](https://store.steampowered.com/app/686810/Hell_Let_Loose/) server seeding. One click to launch, seed, and keep your community servers populated.
 
-Built by [Comp HLL](https://github.com/catalloc/chll-seeder-windows). Formerly "Esprit Seeder"; currently being rewritten in C# + WinUI 3 — see [docs/REWRITE_PLAN.md](docs/REWRITE_PLAN.md) for status.
+Built by [Comp HLL](https://github.com/catalloc/chll-seeding-windows). Formerly "Esprit Seeder"; currently being rewritten in C# + WinUI 3 — see [docs/REWRITE_PLAN.md](docs/REWRITE_PLAN.md) for status.
 
 ## Download
 
-Grab the latest installer (`CHLL-Seeder-Setup-<ver>.exe`) from [GitHub Releases](https://github.com/catalloc/chll-seeder-windows/releases).
+Grab the latest installer (`CHLL-Seeding-Setup-<ver>.exe`) from [GitHub Releases](https://github.com/catalloc/chll-seeding-windows/releases).
 
 **Requirements:** Windows 10 (19041) / Windows 11, Steam with Hell Let Loose installed.
 
@@ -68,7 +68,7 @@ Server seeding is a well-established practice in the HLL community. Multiple ope
 
 ### Desktop client
 
-**Credential storage.** Auth tokens and API keys are encrypted at rest using [Windows DPAPI](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/), scoped to the current Windows user account. No other user on the machine can decrypt them. Credentials are stored in `%APPDATA%\org.comphll.chllseeder\config.json`.
+**Credential storage.** Auth tokens and API keys are encrypted at rest using [Windows DPAPI](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/), scoped to the current Windows user account. No other user on the machine can decrypt them. Credentials are stored in `%APPDATA%\org.comphll.chllseeding\config.json`.
 
 **Config directory ACLs.** On every startup, the app restricts the config directory's permissions — inherited ACEs are removed and only the current user is granted access.
 
@@ -112,30 +112,30 @@ The original Rust/Dioxus implementation lives in [`src-rust/`](src-rust/) as a r
 
 ```powershell
 # Clone
-git clone git@github.com:catalloc/chll-seeder-windows.git
-cd chll-seeder-windows
+git clone git@github.com:catalloc/chll-seeding-windows.git
+cd chll-seeding-windows
 
 # Build
-dotnet build src/ChllSeeder.sln -c Release
+dotnet build src/ChllSeeding.sln -c Release
 
 # Run tests
-dotnet test src/ChllSeeder.Core.Tests
+dotnet test src/ChllSeeding.Core.Tests
 
 # Run the app
-src\ChllSeeder.App\bin\x64\Release\net9.0-windows10.0.22621.0\win-x64\CHLLSeeder.exe
+src\ChllSeeding.App\bin\x64\Release\net9.0-windows10.0.22621.0\win-x64\CHLLSeeding.exe
 
 # Build the installer
-dotnet publish src/ChllSeeder.App -c Release -r win-x64 --self-contained true -p:Platform=x64 -o artifacts/publish
-iscc installer\ChllSeeder.iss
+dotnet publish src/ChllSeeding.App -c Release -r win-x64 --self-contained true -p:Platform=x64 -o artifacts/publish
+iscc installer\ChllSeeding.iss
 ```
 
 ### Project Structure
 
 ```
 src/
-  ChllSeeder.App/         WinUI 3 app (views, view models, custom Main, tray)
-  ChllSeeder.Core/        Non-UI logic (API, seeding engine, config, deep links)
-  ChllSeeder.Core.Tests/  xUnit tests
+  ChllSeeding.App/         WinUI 3 app (views, view models, custom Main, tray)
+  ChllSeeding.Core/        Non-UI logic (API, seeding engine, config, deep links)
+  ChllSeeding.Core.Tests/  xUnit tests
 src-rust/                 Original Rust/Dioxus app (read-only porting reference)
 installer/                Inno Setup script
 docs/REWRITE_PLAN.md      Rewrite architecture, phases, and status
@@ -147,12 +147,12 @@ Contributions are welcome! Please open an issue to discuss your idea before subm
 
 1. Fork the repo and create a feature branch
 2. Make your changes
-3. Run `dotnet build src/ChllSeeder.sln` and `dotnet test src/ChllSeeder.Core.Tests`
+3. Run `dotnet build src/ChllSeeding.sln` and `dotnet test src/ChllSeeding.Core.Tests`
 4. Submit a pull request
 
 ## Contact
 
-For questions, feedback, or support: [GitHub Issues](https://github.com/catalloc/chll-seeder-windows/issues)
+For questions, feedback, or support: [GitHub Issues](https://github.com/catalloc/chll-seeding-windows/issues)
 
 ## License
 
