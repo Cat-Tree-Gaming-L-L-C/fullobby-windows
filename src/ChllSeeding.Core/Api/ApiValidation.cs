@@ -9,7 +9,7 @@ namespace ChllSeeding.Core.Api;
 /// </summary>
 public static class ApiValidation
 {
-    public static readonly string[] ValidProviders = ["steam", "discord"];
+    public static readonly string[] ValidProviders = ["steam", "discord", "epic", "xbox"];
 
     /// <summary>Profanity blocklist mirroring the server's name_validation.rs.</summary>
     private static readonly string[] BlockedWords =

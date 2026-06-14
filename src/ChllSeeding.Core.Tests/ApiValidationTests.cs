@@ -168,7 +168,18 @@ public class ApiValidationTests
     [Theory]
     [InlineData("steam")]
     [InlineData("discord")]
+    [InlineData("epic")]
+    [InlineData("xbox")]
     public void Provider_Valid(string p) => Assert.True(ApiValidation.IsValidProvider(p));
+
+    [Theory]
+    [InlineData("epic")]
+    [InlineData("xbox")]
+    public void OAuthUrl_EpicXbox(string provider)
+    {
+        var url = ApiValidation.GetOAuthUrl(provider, "state")!;
+        Assert.Equal($"{ApiConfig.BaseUrl}/api/auth/{provider}?state=state", url);
+    }
 
     [Theory]
     [InlineData("twitch")]

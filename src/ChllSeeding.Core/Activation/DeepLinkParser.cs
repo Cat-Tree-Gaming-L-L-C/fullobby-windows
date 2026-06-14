@@ -7,8 +7,8 @@ namespace ChllSeeding.Core.Activation;
 /// </summary>
 public static class DeepLinkParser
 {
-    /// <summary>Valid provider names for link callbacks.</summary>
-    private static readonly string[] ValidProviders = ["steam", "discord"];
+    /// <summary>Valid provider names for link callbacks (matches the API's supported OAuth providers).</summary>
+    private static readonly string[] ValidProviders = ["steam", "discord", "epic", "xbox"];
 
     /// <summary>Maximum length for any single deep-link parameter key or value.</summary>
     private const int MaxParamLength = 4096;

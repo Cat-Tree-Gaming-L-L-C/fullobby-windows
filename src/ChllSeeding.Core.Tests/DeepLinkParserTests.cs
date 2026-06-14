@@ -71,6 +71,19 @@ public class DeepLinkParserTests
         Assert.Equal("99999", link.ProviderId);
     }
 
+    [Theory]
+    [InlineData("epic", "0123abcd")]
+    [InlineData("xbox", "2533274800000000")]
+    public void ParseValidLinkCallbackEpicXbox(string provider, string providerId)
+    {
+        var action = DeepLinkParser.Parse(
+            $"chllseeding://auth/link-callback?provider={provider}&provider_id={providerId}&linked=true");
+
+        var link = Assert.IsType<DeepLinkAction.LinkCallback>(action);
+        Assert.Equal(provider, link.Provider);
+        Assert.Equal(providerId, link.ProviderId);
+    }
+
     [Fact]
     public void ParseLinkCallbackInvalidProvider()
     {

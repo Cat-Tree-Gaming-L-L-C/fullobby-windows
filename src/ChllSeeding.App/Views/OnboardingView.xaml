@@ -35,6 +35,12 @@
                     <Button Content="Sign in with Discord"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             Command="{x:Bind Account.LoginCommand}" CommandParameter="discord" />
+                    <Button Content="Sign in with Epic Games"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Command="{x:Bind Account.LoginCommand}" CommandParameter="epic" />
+                    <Button Content="Sign in with Xbox"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Command="{x:Bind Account.LoginCommand}" CommandParameter="xbox" />
 
                     <TextBlock Text="or" HorizontalAlignment="Center" Opacity="0.5" FontSize="12" />
 
@@ -49,7 +55,7 @@
                 <StackPanel x:Name="StepLink" Spacing="10" Visibility="Collapsed">
                     <TextBlock Text="Link Accounts" Style="{StaticResource SubtitleTextBlockStyle}" HorizontalAlignment="Center" />
                     <TextBlock
-                        Text="Link your Steam and Discord accounts to track your seeding sessions. You can also do this later from Settings."
+                        Text="Link your Steam, Discord, Epic Games, and Xbox accounts to track your seeding sessions. You can also do this later from Settings."
                         Opacity="0.7" TextWrapping="Wrap" TextAlignment="Center" />
 
                     <Button Content="Link Steam Account"
@@ -58,6 +64,12 @@
                     <Button Content="Link Discord Account"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="discord" />
+                    <Button Content="Link Epic Games Account"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="epic" />
+                    <Button Content="Link Xbox Account"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="xbox" />
 
                     <Button Content="Continue" Style="{StaticResource AccentButtonStyle}"
                             HorizontalAlignment="Center" Margin="0,6,0,0" Click="ToNickname_Click" />

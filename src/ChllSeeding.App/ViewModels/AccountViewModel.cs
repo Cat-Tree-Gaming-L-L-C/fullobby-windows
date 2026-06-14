@@ -562,8 +562,7 @@ public sealed partial class AccountViewModel : ObservableObject
                 {
                     LinkedProviders.Add(new LinkedProviderRow(p, canUnlink));
                 }
-                OnPropertyChanged(nameof(HasLinkedProviders));
-                OnPropertyChanged(nameof(HasDiscordProvider));
+                RaiseProviderFlags();
             });
         }
         catch (Exception e)
@@ -572,11 +571,25 @@ public sealed partial class AccountViewModel : ObservableObject
         }
     }
 
+    private void RaiseProviderFlags()
+    {
+        OnPropertyChanged(nameof(HasLinkedProviders));
+        OnPropertyChanged(nameof(HasDiscordProvider));
+        OnPropertyChanged(nameof(HasEpicProvider));
+        OnPropertyChanged(nameof(HasXboxProvider));
+    }
+
     /// <summary>True when at least one linked provider is shown (gates the section header).</summary>
     public bool HasLinkedProviders => LinkedProviders.Count > 0;
 
     /// <summary>True when Discord is already linked (hides the "Link Discord" button).</summary>
     public bool HasDiscordProvider => LinkedProviders.Any(p => p.Provider == "discord");
+
+    /// <summary>True when Epic Games is already linked (hides the "Link Epic" button).</summary>
+    public bool HasEpicProvider => LinkedProviders.Any(p => p.Provider == "epic");
+
+    /// <summary>True when Xbox is already linked (hides the "Link Xbox" button).</summary>
+    public bool HasXboxProvider => LinkedProviders.Any(p => p.Provider == "xbox");
 
     /// <summary>Clear every scrap of auth state (memory + persisted config) and reset signals.</summary>
     private void ResetAllAuth(bool rearmOnboarding)
@@ -590,8 +603,7 @@ public sealed partial class AccountViewModel : ObservableObject
             IsGuest = false;
             LinkedProviders.Clear();
             LinkedSteamIds.Clear();
-            OnPropertyChanged(nameof(HasLinkedProviders));
-            OnPropertyChanged(nameof(HasDiscordProvider));
+            RaiseProviderFlags();
             if (rearmOnboarding)
             {
                 OnboardingComplete = false;
@@ -659,6 +671,8 @@ public sealed class LinkedProviderRow
         {
             AuthProvider.Steam => "Steam",
             AuthProvider.Discord => "Discord",
+            AuthProvider.Epic => "Epic Games",
+            AuthProvider.Xbox => "Xbox",
             AuthProvider.Guest => "Guest",
             _ => "Steam",
         };

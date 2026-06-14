@@ -45,7 +45,19 @@ public class ApiModelsTests
     {
         Assert.Equal("steam", AuthProvider.Steam.ToWireString());
         Assert.Equal("discord", AuthProvider.Discord.ToWireString());
+        Assert.Equal("epic", AuthProvider.Epic.ToWireString());
+        Assert.Equal("xbox", AuthProvider.Xbox.ToWireString());
         Assert.Equal("guest", AuthProvider.Guest.ToWireString());
+    }
+
+    [Theory]
+    [InlineData("\"epic\"", AuthProvider.Epic)]
+    [InlineData("\"xbox\"", AuthProvider.Xbox)]
+    [InlineData("\"discord\"", AuthProvider.Discord)]
+    public void AuthProvider_DeserializesNewProviders(string json, AuthProvider expected)
+    {
+        var u = Parse<UserInfo>($$"""{"user_id":"1","username":"u","auth_provider":{{json}}}""");
+        Assert.Equal(expected, u.AuthProvider);
     }
 
     [Fact]

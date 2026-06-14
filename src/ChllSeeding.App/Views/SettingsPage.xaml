@@ -60,6 +60,16 @@
                         Command="{x:Bind Account.LinkProviderCommand}"
                         CommandParameter="discord"
                         Visibility="{x:Bind Account.HasDiscordProvider, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                    <Button
+                        Content="Link Epic"
+                        Command="{x:Bind Account.LinkProviderCommand}"
+                        CommandParameter="epic"
+                        Visibility="{x:Bind Account.HasEpicProvider, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                    <Button
+                        Content="Link Xbox"
+                        Command="{x:Bind Account.LinkProviderCommand}"
+                        CommandParameter="xbox"
+                        Visibility="{x:Bind Account.HasXboxProvider, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
                 </StackPanel>
 
                 <!-- Linked Steam IDs -->
@@ -82,6 +92,8 @@
                 Visibility="{x:Bind Account.IsLoggedIn, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}">
                 <Button Content="Sign in with Steam" Style="{StaticResource AccentButtonStyle}" Command="{x:Bind Account.LoginCommand}" CommandParameter="steam" />
                 <Button Content="Sign in with Discord" Command="{x:Bind Account.LoginCommand}" CommandParameter="discord" />
+                <Button Content="Sign in with Epic" Command="{x:Bind Account.LoginCommand}" CommandParameter="epic" />
+                <Button Content="Sign in with Xbox" Command="{x:Bind Account.LoginCommand}" CommandParameter="xbox" />
             </StackPanel>
 
             <!-- ── Player ──────────────────────────────────────────────── -->

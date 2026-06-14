@@ -182,6 +182,16 @@
     button is idempotent against that. Settings rows whose Core services land later (autoseed/startup/updater) are
     visible-but-disabled stubs, not wired. App VM code isn't covered by Core.Tests (no App test project) — only the
     new Core helpers are. Live OAuth/link callbacks + leaderboard data need a reachable backend to verify end-to-end.
+  - ✅ **Epic Games + Xbox account providers (2026-06-14):** the API supports `steam`/`discord`/`epic`/`xbox`/`guest`
+    (Epic/Xbox fully implemented server-side, 404 unless their creds are configured), but the client only exposed
+    steam+discord. Added `AuthProvider.Epic`/`Xbox` (+ `ToWireString`; `JsonStringEnumConverter` handles the wire form),
+    widened `ApiValidation.ValidProviders` + `DeepLinkParser.ValidProviders` to all four OAuth providers, gave
+    `LinkedProviderRow` Epic/Xbox labels, and added `HasEpicProvider`/`HasXboxProvider` hide-if-linked gates
+    (alongside the existing Discord one). Sign-in + link buttons for Epic/Xbox added to **both** the onboarding wizard
+    (steps 0 + 1) and the Settings account section — **always shown** (unconfigured providers surface a 404/error toast).
+    Tests: +10 (wire strings, new-provider deserialize, epic/xbox link-callback parse, epic/xbox OAuth URL + IsValidProvider).
+    358/358 pass, build clean. **Account-provider linking is distinct from the seeding `platform` field** (the client still
+    always launches via Steam and reports `platform=steam`). Live Epic/Xbox round-trip needs the backend creds set + a browser.
 
 - ✅ **Phase 4 — Automation & tools** complete (2026-06-10, Windows). Solution builds clean (0 warnings),
   348/348 tests pass (289 + 59 new: auto-seed time parse/normalize, task XML + next-run parse, missed-seed
@@ -224,7 +234,7 @@
   - **Deviations / deferred:** task creation uses generated schtasks XML rather than COM (the plan's
     "port task_scheduler.rs verbatim" via schtasks — XML is the only schtasks path that sets WakeToRun). The WinUI
     `FolderPicker` can't pre-seed a start directory (no rfd `set_directory` equivalent) — picker opens at "This PC".
-    Web-resource URLs rebranded to `comp-hll.org/{faq,termsandconditions,privacypolicy}` (exact paths TBD). App
+    Web-resource URLs rebranded to `comp-hll.org/{faq,terms,privacy}` (finalized 2026-06-14; `/faq` 404s for now). App
     VM/page code isn't covered by Core.Tests (no App test project) — only the new Core helpers are. Updater +
     beta-channel rows in Settings stay disabled stubs (Phase 5).
 

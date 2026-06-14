@@ -59,6 +59,8 @@ public enum AuthProvider
 {
     Steam,
     Discord,
+    Epic,
+    Xbox,
     Guest,
 }
 
@@ -101,6 +103,8 @@ public static class AuthProviderExtensions
     {
         AuthProvider.Steam => "steam",
         AuthProvider.Discord => "discord",
+        AuthProvider.Epic => "epic",
+        AuthProvider.Xbox => "xbox",
         AuthProvider.Guest => "guest",
         _ => "steam",
     };

@@ -79,9 +79,9 @@
                     HorizontalContentAlignment="Left" Click="OpenLink_Click" />
             <Button Content="❓  FAQ" Tag="https://comp-hll.org/faq" HorizontalAlignment="Stretch"
                     HorizontalContentAlignment="Left" Click="OpenLink_Click" />
-            <Button Content="📜  Terms and Conditions" Tag="https://comp-hll.org/termsandconditions"
+            <Button Content="📜  Terms and Conditions" Tag="https://comp-hll.org/terms"
                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Click="OpenLink_Click" />
-            <Button Content="🔒  Privacy Policy" Tag="https://comp-hll.org/privacypolicy"
+            <Button Content="🔒  Privacy Policy" Tag="https://comp-hll.org/privacy"
                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Click="OpenLink_Click" />
         </StackPanel>
     </Grid>
