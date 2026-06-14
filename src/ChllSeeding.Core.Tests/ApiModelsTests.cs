@@ -49,6 +49,16 @@ public class ApiModelsTests
     }
 
     [Fact]
+    public void Platform_WireString()
+    {
+        // The API has no default platform — the client must declare it, lowercase.
+        // Fully qualified: the enclosing ChllSeeding.Core.Platform namespace shadows the enum here.
+        Assert.Equal("steam", Api.Platform.Steam.ToWireString());
+        Assert.Equal("epic", Api.Platform.Epic.ToWireString());
+        Assert.Equal("xbox", Api.Platform.Xbox.ToWireString());
+    }
+
+    [Fact]
     public void UserInfo_MinimalDeserialize_Defaults()
     {
         var u = Parse<UserInfo>("""{"user_id":"99","username":"minimal"}""");

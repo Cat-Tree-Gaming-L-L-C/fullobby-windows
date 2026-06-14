@@ -30,7 +30,7 @@ public sealed class SeedingApiClient(HttpClient http)
     /// <summary>Get the next seeding candidate (auth required).</summary>
     public Task<NextServerResponse> GetNextServerAsync(
         string game, string currentRegion, int currentIndex, bool euEnabled, string reason,
-        string? steamId = null, CancellationToken ct = default)
+        Platform platform, string? steamId = null, CancellationToken ct = default)
     {
         var body = new Dictionary<string, object?>
         {
@@ -39,6 +39,7 @@ public sealed class SeedingApiClient(HttpClient http)
             ["current_index"] = currentIndex,
             ["eu_enabled"] = euEnabled,
             ["reason"] = reason,
+            ["platform"] = platform.ToWireString(),
         };
         if (steamId is not null)
         {
@@ -49,7 +50,7 @@ public sealed class SeedingApiClient(HttpClient http)
 
     /// <summary>Create a seeding session after a successful game launch (auth required).</summary>
     public Task<StartSessionResponse> StartSessionAsync(
-        string game, string region, int index,
+        string game, string region, int index, Platform platform,
         string? steamId = null, SessionStartAnalytics? analytics = null, CancellationToken ct = default)
     {
         var body = new Dictionary<string, object?>
@@ -57,6 +58,7 @@ public sealed class SeedingApiClient(HttpClient http)
             ["game"] = game,
             ["region"] = region,
             ["index"] = index,
+            ["platform"] = platform.ToWireString(),
         };
         if (steamId is not null)
         {

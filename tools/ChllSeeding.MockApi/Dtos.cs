@@ -21,12 +21,13 @@ public record RegisterResponse(string UserId, string ApiKey, string Username, st
 public record AuthRefreshResponse(string Token, string RefreshToken);
 
 public record NextServerRequest(
-    string Game, string CurrentRegion, int CurrentIndex, bool EuEnabled, string Reason, string? SteamId);
+    string Game, string CurrentRegion, int CurrentIndex, bool EuEnabled, string Reason, string? SteamId,
+    string? Platform);
 public record NextServerResponse(
     string Game, string Region, int Index, ServerInfo Server, bool AllExhausted, string? SessionId);
 
 public record StartSessionRequest(
-    string Game, string Region, int Index, string? SteamId,
+    string Game, string Region, int Index, string? SteamId, string? Platform,
     string? OsVersion, string? OsArch, bool? EfficiencyMode, bool? EuEnabled, bool? AutoSeed);
 public record StartSessionResponse(string SessionId);
 

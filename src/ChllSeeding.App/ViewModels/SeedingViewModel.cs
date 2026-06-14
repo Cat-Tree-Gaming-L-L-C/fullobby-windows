@@ -747,8 +747,10 @@ public sealed partial class SeedingViewModel : ObservableObject
         try
         {
             var analytics = Analytics.Gather(_config, autoSeed);
+            // This desktop app only ever launches Hell Let Loose through the Steam client,
+            // so every session it creates is a Steam-storefront session.
             var resp = await _api.StartSessionAsync(
-                _engine.CurrentGame.Id, region, index, steamId: null, analytics).ConfigureAwait(true);
+                _engine.CurrentGame.Id, region, index, Platform.Steam, steamId: null, analytics).ConfigureAwait(true);
             _sessionId = resp.SessionId;
             await _heartbeat.StartAsync(resp.SessionId).ConfigureAwait(true);
         }

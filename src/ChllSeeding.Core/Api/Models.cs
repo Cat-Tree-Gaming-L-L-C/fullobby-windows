@@ -70,6 +70,30 @@ public enum AuthMethod
     Jwt,
 }
 
+/// <summary>PC crossplay storefront a seeding session belongs to. Serializes lowercase
+/// ("steam"/"epic"/"xbox") to match the API's serde format. The API intentionally has no
+/// default — the client must declare which storefront it is on. This desktop app launches
+/// Hell Let Loose exclusively through the Steam client, so it always reports
+/// <see cref="Steam"/>.</summary>
+public enum Platform
+{
+    Steam,
+    Epic,
+    Xbox,
+}
+
+public static class PlatformExtensions
+{
+    /// <summary>Lowercase wire string matching the API's serde representation.</summary>
+    public static string ToWireString(this Platform platform) => platform switch
+    {
+        Platform.Steam => "steam",
+        Platform.Epic => "epic",
+        Platform.Xbox => "xbox",
+        _ => "steam",
+    };
+}
+
 public static class AuthProviderExtensions
 {
     /// <summary>Lowercase wire/display name, matching the Rust Display impl.</summary>
