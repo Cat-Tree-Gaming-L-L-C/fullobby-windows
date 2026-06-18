@@ -182,6 +182,7 @@
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
                     <Button x:Name="AutoseedNaSetup" Content="Set up" Click="AutoseedNaSetup_Click" />
+                    <Button x:Name="AutoseedNaView" Content="View" Visibility="Collapsed" Click="AutoseedNaView_Click" />
                     <Button x:Name="AutoseedNaRemove" Content="Remove" Visibility="Collapsed" Click="AutoseedNaRemove_Click" />
                 </StackPanel>
             </Grid>
@@ -194,6 +195,7 @@
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
                     <Button x:Name="AutoseedEuSetup" Content="Set up" Click="AutoseedEuSetup_Click" />
+                    <Button x:Name="AutoseedEuView" Content="View" Visibility="Collapsed" Click="AutoseedEuView_Click" />
                     <Button x:Name="AutoseedEuRemove" Content="Remove" Visibility="Collapsed" Click="AutoseedEuRemove_Click" />
                 </StackPanel>
             </Grid>

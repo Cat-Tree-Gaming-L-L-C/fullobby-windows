@@ -197,6 +197,16 @@ public sealed partial class SeedingViewModel : ObservableObject
     private long _switchCountdown;
     private long _switchSnoozeRemaining;
 
+    /// <summary>Ticks since the last game-running poll (the timer fires every 1s; the poll runs every
+    /// 5s, matching the Rust check_game_running loop).</summary>
+    private int _gameCheckTicks;
+
+    /// <summary>Index/region of the server currently being seeded, used to give the status banner
+    /// server-name context ("Seeding {server} (EU)"). Port of the Rust SEEDING_INDEX/SEEDING_REGION
+    /// signals read by seed_banner.rs. Null index ⇒ no active seed (bare launch or idle).</summary>
+    private int? _seedingIndex;
+    private string _seedingRegion = "na";
+
     // Auto-seed countdown overlay (a scheduled or missed auto-seed shows a 60s cancellable countdown
     // before launching). Port of the AutoseedCountdown* AppEvents in setup.rs run_autoseed.
     [ObservableProperty]
@@ -313,19 +323,40 @@ public sealed partial class SeedingViewModel : ObservableObject
             or SeedingStatus.Stopping or SeedingStatus.Switching
             || (Status == SeedingStatus.Running && IsSeeding);
 
+        // Give the active-seed banners server-name + region context when we have an index (port of
+        // the match arms in seed_banner.rs). EU adds " (EU)" / " EU"; NA adds nothing.
+        var name = SeedingServerName();
+        var hasContext = _seedingIndex is not null && name.Length > 0;
+        var suffix = _seedingRegion == "eu" ? " (EU)" : "";
+        var suffixShort = _seedingRegion == "eu" ? " EU" : "";
+
         var banner = Status switch
         {
-            SeedingStatus.Initializing => "Initializing",
+            SeedingStatus.Initializing => hasContext ? $"Initializing {name}{suffix}" : "Initializing",
             SeedingStatus.Running => "Game Running",
-            SeedingStatus.Seeding => "Seeding",
+            SeedingStatus.Seeding => hasContext ? $"Seeding {name}{suffix}" : "Seeding",
             SeedingStatus.Stopping => "Stopping…",
             SeedingStatus.Switching => "Switching…",
             SeedingStatus.Stopped => "Stopped",
-            SeedingStatus.WaitingForUpdate => "Waiting for game update…",
+            SeedingStatus.WaitingForUpdate => hasContext
+                ? $"Waiting for game update ({name}{suffixShort})"
+                : "Waiting for game update…",
             _ => "",
         };
         StatusBanner = banner;
         ShowStatusBanner = banner.Length > 0;
+    }
+
+    /// <summary>Resolve the display name of the server currently being seeded from the row lists, by
+    /// the tracked index + region. Empty when no seed is active or the index is out of range.</summary>
+    private string SeedingServerName()
+    {
+        if (_seedingIndex is not { } idx)
+        {
+            return "";
+        }
+        var rows = _seedingRegion == "eu" ? EuServers : NaServers;
+        return idx >= 0 && idx < rows.Count ? rows[idx].Name : "";
     }
 
     private bool IsBusy => Status is SeedingStatus.Initializing or SeedingStatus.Seeding
@@ -412,10 +443,13 @@ public sealed partial class SeedingViewModel : ObservableObject
     /// which case the status/error has already been set. Port of start_seeding_inner + the monitor await.</summary>
     private async Task<bool> LaunchAndMonitorAsync(int index, string region, bool autoSeed = false)
     {
+        _seedingRegion = region;
+        _seedingIndex = index;
         SetStatus(SeedingStatus.Initializing);
         try
         {
             var actual = await _engine.StartSeedingAsync(index, region).ConfigureAwait(true);
+            _seedingIndex = actual;
             SetStatus(SeedingStatus.Seeding);
 
             // Create the analytics session + heartbeat after a successful launch (non-fatal).
@@ -671,7 +705,9 @@ public sealed partial class SeedingViewModel : ObservableObject
                 return;
             }
 
-            // 60s countdown the user can cancel.
+            // 60s countdown the user can cancel. A desktop toast surfaces it even when the window is
+            // hidden in the tray (the in-window overlay alone would be invisible then).
+            _toast.ShowAutoseedStarting();
             AutoseedCountdownActive = true;
             for (var i = 60; i > 0; i--)
             {
@@ -817,6 +853,7 @@ public sealed partial class SeedingViewModel : ObservableObject
 
         ClearLaunchError();
         IsSeeding = false;
+        _seedingIndex = null; // bare launch has no seeding context (Rust SEEDING_INDEX = None)
         SetStatus(SeedingStatus.Initializing);
 
         if (!await ConfirmCloseRunningGameAsync().ConfigureAwait(true))
@@ -947,6 +984,7 @@ public sealed partial class SeedingViewModel : ObservableObject
             case SeedingEvent.HllClosed:
                 ResetSwitchOverlay();
                 SplashBypassActive = false;
+                _seedingIndex = null;
                 SetStatus(SeedingStatus.Stopped);
                 IsSeeding = false;
                 break;
@@ -960,6 +998,7 @@ public sealed partial class SeedingViewModel : ObservableObject
             case SeedingEvent.ServerSwitchSnoozed sn:
                 ServerSwitchSnoozed = true;
                 _switchSnoozeRemaining = sn.SnoozeSecs;
+                UpdateSwitchTitle();
                 UpdateSwitchText();
                 break;
             case SeedingEvent.ServerSwitchExecuting:
@@ -984,20 +1023,31 @@ public sealed partial class SeedingViewModel : ObservableObject
         }
     }
 
+    /// <summary>Title shown while the switch countdown is active (not snoozed). Port of switch_title
+    /// in seed.rs. The engine only emits candidate_changed/time_limit today; server_full is mapped
+    /// defensively to match the Rust UI.</summary>
+    private string _switchReasonTitle = "Server Switching";
+
     private void ShowSwitchOverlay(SeedingEvent.ServerSwitchPending p)
     {
         ServerSwitchServerName = p.ServerName;
-        ServerSwitchTitle = p.Reason switch
+        _switchReasonTitle = p.Reason switch
         {
             "candidate_changed" => "Server Switching",
-            "time_limit" => "Time Limit Reached",
-            _ => "Server Switching",
+            "server_full" => "Server is Full",
+            _ => "Time Limit Reached",
         };
         _switchCountdown = p.CountdownSecs;
         ServerSwitchSnoozed = false;
         ServerSwitchActive = true;
+        UpdateSwitchTitle();
         UpdateSwitchText();
     }
+
+    /// <summary>Title reflects the snoozed state: "Server Switch Snoozed" while snoozed, otherwise the
+    /// reason-based title (port of the snoozed/active branches of the switch modal in seed.rs).</summary>
+    private void UpdateSwitchTitle() =>
+        ServerSwitchTitle = ServerSwitchSnoozed ? "Server Switch Snoozed" : _switchReasonTitle;
 
     private void ResetSwitchOverlay()
     {
@@ -1090,6 +1140,41 @@ public sealed partial class SeedingViewModel : ObservableObject
         }
 
         UpdateConnectionIndicator();
+
+        if (++_gameCheckTicks >= 5)
+        {
+            _gameCheckTicks = 0;
+            CheckGameRunning();
+        }
+    }
+
+    /// <summary>Poll whether the current game is running and flip the status banner so a game
+    /// launched or closed <b>outside</b> the app is reflected (e.g. the user starts HLL by hand, or
+    /// it crashes mid-seed). Port of app.rs check_game_running.
+    /// <para>Deviation: Rust only skips Initializing/Stopping. We also skip Switching and
+    /// WaitingForUpdate — both are engine-owned transitions in which the game exe is legitimately
+    /// absent (killed mid-relaunch / updating), so the Rust check would clobber them to Stopped. The
+    /// Rust 5s loop has the same latent flaw but it's masked there; our 1s timer makes it reachable.</para></summary>
+    private void CheckGameRunning()
+    {
+        if (Status is SeedingStatus.Initializing or SeedingStatus.Stopping
+            or SeedingStatus.Switching or SeedingStatus.WaitingForUpdate)
+        {
+            return;
+        }
+
+        var running = _engine.IsGameRunning;
+        if (running)
+        {
+            if (Status != SeedingStatus.Seeding)
+            {
+                SetStatus(SeedingStatus.Running);
+            }
+        }
+        else if (Status != SeedingStatus.Idle)
+        {
+            SetStatus(SeedingStatus.Stopped);
+        }
     }
 
     /// <summary>Refresh the live-data connection indicator from <see cref="SseConnectionState"/> and

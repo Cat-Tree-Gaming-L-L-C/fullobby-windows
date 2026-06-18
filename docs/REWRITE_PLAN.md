@@ -270,23 +270,29 @@
     tokens; mirrors Rust `maybe_encrypt`); (2) `AccountViewModel.HandleLinkCallbackAsync` now re-derives `IsGuest`/`guest_mode`
     from `/me` so a guest→permanent link upgrade applies without a restart (+ "your account is now permanent!" toast; port of
     `state/events.rs` LinkCallback). 393/393 tests pass, build clean.
-    - **Verified-remaining gaps (deferred — user chose to stop, 2026-06-18):**
-      - *Behavioral:* **game-running status watcher absent** — Rust `app.rs:874 check_game_running` polls every 5s to flip
-        status Running/Stopped when HLL is launched/closed **outside** the app; C# `SeedingViewModel.OnTimerTick` doesn't,
-        so a hand-launched game shows no "Game Running" banner and seed buttons don't auto-hide.
-      - *UX:* seeding banners lack server-name/region context (Rust shows "Seeding {server} (EU)" etc.); auto-seed "starting
-        in 60s" desktop toast missing (in-window overlay only); switch-overlay `server_full`→"Server is Full" + snoozed
-        "Server Switch Snoozed" titles collapse to generic; in-app toast dedup missing + durations differ (C# 6s/12s vs Rust
-        3s/10s); auto-seed has no uninstall-confirm dialog and no "View schedule" button.
-      - *Robustness:* backup/restore dropped Rust's `validate_user_path` (symlink canonicalization + traversal guard — low
-        attack surface since folders are user-picked); `MissedAutoseed` 4h window uses `<=` vs Rust strict `<`; `schtasks`
-        stdout forced to UTF-8 can mangle next-run time on non-English Windows (display-only).
+    - ✅ **Parity gaps closed (2026-06-18, part 2 — 398/398 tests, +5 new, build clean):**
+      - *Behavioral:* **game-running status watcher added** — `SeedingViewModel` polls `_engine.IsGameRunning` every 5s off
+        the 1s timer (port of `app.rs check_game_running`), flipping status Running/Stopped when HLL is launched/closed
+        **outside** the app so the "Game Running" banner appears. Deviation: also skips Switching/WaitingForUpdate (engine-owned
+        states where the exe is legitimately absent) — the Rust loop would clobber those to Stopped, a latent flaw masked by
+        its 5s cadence.
+      - *UX:* seeding banners now carry server-name/region context ("Seeding {server} (EU)" etc. via tracked `_seedingIndex`/
+        `_seedingRegion`); auto-seed countdown fires a desktop toast (`ToastService.ShowAutoseedStarting`; shown for both
+        regions — Rust only raised it for NA, an apparent oversight); switch-overlay maps `server_full`→"Server is Full" + the
+        default→"Time Limit Reached" and shows "Server Switch Snoozed" while snoozed; in-app toasts dedup by message+severity
+        and use Rust durations (3s default / 10s error); auto-seed gained an uninstall-confirm dialog and a "View schedule"
+        button (`AutoSeedService.ViewScheduleAsync` → `ScheduledTaskService.QueryVerboseAsync`).
+      - *Robustness:* `ManualBackupService.ValidateUserPath` ports `session.rs validate_user_path` (length / null-byte /
+        existence / GetFullPath+leaf-symlink canonicalization + residual-`..` guard), called at both backup/restore entry
+        points; `MissedAutoseed` window is now strict `<` (window `[0, 4h)`, matching Rust `num_hours() >= 4`); `schtasks`
+        stdout is decoded with the OEM code page (`GetOEMCP` + `CodePagesEncodingProvider`) instead of forced UTF-8, so the
+        next-run time survives non-English Windows.
     - **Dismissed false-positives:** switch sound *is* played (`ToastService.ShowServerSwitch` → `MessageBeep`); the Seed-All
       30s cooldown is an intentional documented drop; `os_version` is fine (.NET 5+ `Environment.OSVersion` uses
       `RtlGetVersion`); token-string zeroization isn't reliably achievable on .NET.
   - **Remaining for Phase 5:** stable/beta release-channel **server** support is backend-side; theming polish, deleting
-    `/src-rust`, the tag-driven release workflow (build + sign + attach `CHLL-Seeding-Setup-<ver>.exe` + SHA-256), and the
-    deferred parity gaps listed above are still open.
+    `/src-rust`, and the tag-driven release workflow (build + sign + attach `CHLL-Seeding-Setup-<ver>.exe` + SHA-256) are
+    still open. (The deferred parity gaps are now closed — see "Parity gaps closed" above.)
 
 ## Planned enhancements (beyond Rust parity)
 

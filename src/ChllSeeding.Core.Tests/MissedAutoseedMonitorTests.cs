@@ -13,9 +13,17 @@ public class MissedAutoseedMonitorTests
     }
 
     [Fact]
-    public void WithinWindow_ExactlyAtWindowEdge_Fires()
+    public void WithinWindow_JustInsideWindowEdge_Fires()
     {
-        Assert.True(MissedAutoseedMonitor.IsWithinMissedWindow(Utc(13, 0), new TimeOnly(9, 0), 4));
+        // 3h59m past is inside [0, 4h).
+        Assert.True(MissedAutoseedMonitor.IsWithinMissedWindow(Utc(12, 59), new TimeOnly(9, 0), 4));
+    }
+
+    [Fact]
+    public void WithinWindow_ExactlyAtWindowEdge_DoesNotFire()
+    {
+        // Exactly 4h past is the exclusive upper bound (Rust: num_hours() >= 4 excludes it).
+        Assert.False(MissedAutoseedMonitor.IsWithinMissedWindow(Utc(13, 0), new TimeOnly(9, 0), 4));
     }
 
     [Fact]

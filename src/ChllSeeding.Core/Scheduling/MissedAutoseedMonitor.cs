@@ -137,14 +137,16 @@ public sealed class MissedAutoseedMonitor : IHostedService, IDisposable
     }
 
     /// <summary>
-    /// True when <paramref name="nowUtc"/> is at or after today's <paramref name="scheduledUtc"/> and no
-    /// more than <paramref name="windowHours"/> past it. Pure; unit-tested.
+    /// True when <paramref name="nowUtc"/> is at or after today's <paramref name="scheduledUtc"/> and
+    /// strictly less than <paramref name="windowHours"/> past it — i.e. the window is [0, windowHours).
+    /// Matches the Rust check (<c>diff.num_hours() &gt;= MISSED_AUTOSEED_WINDOW_HOURS</c> excludes the
+    /// boundary). Pure; unit-tested.
     /// </summary>
     public static bool IsWithinMissedWindow(DateTime nowUtc, TimeOnly scheduledUtc, int windowHours)
     {
         var scheduled = new DateTime(DateOnly.FromDateTime(nowUtc), scheduledUtc, DateTimeKind.Utc);
         var delta = nowUtc - scheduled;
-        return delta >= TimeSpan.Zero && delta <= TimeSpan.FromHours(windowHours);
+        return delta >= TimeSpan.Zero && delta < TimeSpan.FromHours(windowHours);
     }
 
     public void Dispose() => _cts?.Dispose();

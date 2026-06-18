@@ -92,4 +92,47 @@ public class ManualBackupServiceTests
         var cache = new Dictionary<string, ManualBackupService.FileCompareInfo> { ["file.ini"] = Info(1024, null) };
         Assert.False(ManualBackupService.IsFileUnchanged(source, cache, "file.ini"));
     }
+
+    // ── ValidateUserPath (port of session.rs validate_user_path tests) ──────────
+
+    [Fact]
+    public void ValidateUserPath_TooLong_Throws()
+    {
+        var longPath = new string('a', 261);
+        Assert.Throws<ArgumentException>(() => ManualBackupService.ValidateUserPath(longPath));
+    }
+
+    [Fact]
+    public void ValidateUserPath_NullByte_Throws()
+    {
+        Assert.Throws<ArgumentException>(() => ManualBackupService.ValidateUserPath("C:\\temp\0evil"));
+    }
+
+    [Fact]
+    public void ValidateUserPath_NonExistent_Throws()
+    {
+        var missing = Path.Combine(Path.GetTempPath(), "chll-does-not-exist-" + Guid.NewGuid().ToString("N"));
+        Assert.Throws<DirectoryNotFoundException>(() => ManualBackupService.ValidateUserPath(missing));
+    }
+
+    [Fact]
+    public void ValidateUserPath_ExistingDir_ReturnsCanonicalWithoutTraversal()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "chll-validate-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            // Feed a path containing a ".." segment; the canonical result must resolve it away.
+            var withDotDot = Path.Combine(dir, "sub", "..");
+            Directory.CreateDirectory(Path.Combine(dir, "sub"));
+            var result = ManualBackupService.ValidateUserPath(withDotDot);
+            Assert.DoesNotContain("..", result.Split(Path.DirectorySeparatorChar));
+            Assert.Equal(Path.GetFullPath(dir).TrimEnd(Path.DirectorySeparatorChar),
+                result.TrimEnd(Path.DirectorySeparatorChar), ignoreCase: true);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
 }

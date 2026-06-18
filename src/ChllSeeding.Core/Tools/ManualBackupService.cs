@@ -75,6 +75,8 @@ public sealed class ManualBackupService
     /// </summary>
     public async Task<int> BackupUserSettingsAsync(string sourceDir, CancellationToken ct = default)
     {
+        // Front-door validation (length / null-byte / existence / canonicalization) before any I/O.
+        sourceDir = ValidateUserPath(sourceDir);
         if (!Directory.Exists(sourceDir))
         {
             throw new DirectoryNotFoundException("Source path is not a directory");
@@ -150,10 +152,12 @@ public sealed class ManualBackupService
     /// </summary>
     public async Task<int> RestoreUserSettingsAsync(string backupDir, string destDir, CancellationToken ct = default)
     {
+        destDir = ValidateUserPath(destDir);
         if (!Directory.Exists(destDir))
         {
             throw new DirectoryNotFoundException("Destination path is not a directory");
         }
+        backupDir = ValidateUserPath(backupDir);
         if (!Directory.Exists(backupDir))
         {
             throw new DirectoryNotFoundException("Backup path is not a directory");
@@ -197,6 +201,56 @@ public sealed class ManualBackupService
 
         _log.LogInformation("Restored {Count} config files from backup", restored);
         return restored;
+    }
+
+    /// <summary>
+    /// Validate a user-picked path before any backup/restore I/O: rejects over-long paths, null-byte
+    /// injection, and non-existent paths, then canonicalizes (resolving a leaf symlink and any
+    /// <c>..</c> segments) and re-checks for residual traversal. Returns the canonical absolute path.
+    /// Port of <c>session.rs validate_user_path</c>. Throws <see cref="ArgumentException"/> for an
+    /// invalid path and <see cref="DirectoryNotFoundException"/> when it doesn't exist.
+    /// </summary>
+    public static string ValidateUserPath(string pathStr)
+    {
+        const int maxPathLength = 260; // Windows MAX_PATH, matching the Rust limit.
+        if (pathStr.Length > maxPathLength)
+        {
+            throw new ArgumentException("Path too long", nameof(pathStr));
+        }
+        if (pathStr.Contains('\0'))
+        {
+            throw new ArgumentException("Path contains invalid characters", nameof(pathStr));
+        }
+        if (!Directory.Exists(pathStr) && !File.Exists(pathStr))
+        {
+            throw new DirectoryNotFoundException("Path does not exist");
+        }
+
+        // GetFullPath resolves "." / ".." segments; ResolveLinkTarget(true) resolves a leaf symlink
+        // (the canonicalize equivalent). Intermediate-component symlinks aren't fully walked — low
+        // attack surface here since the folder is user-picked — but residual ".." is still rejected.
+        var full = Path.GetFullPath(pathStr);
+        try
+        {
+            FileSystemInfo info = Directory.Exists(full) ? new DirectoryInfo(full) : new FileInfo(full);
+            if (info.ResolveLinkTarget(returnFinalTarget: true) is { } target)
+            {
+                full = target.FullName;
+            }
+        }
+        catch (IOException)
+        {
+            // Not a reparse point / can't resolve — keep the GetFullPath result.
+        }
+
+        foreach (var segment in full.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+        {
+            if (segment == "..")
+            {
+                throw new ArgumentException("Path contains traversal after canonicalization", nameof(pathStr));
+            }
+        }
+        return full;
     }
 
     // ── Pure helpers (public/static for unit coverage) ─────────────────────────

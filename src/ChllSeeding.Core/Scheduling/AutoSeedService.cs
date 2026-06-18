@@ -78,6 +78,17 @@ public sealed class AutoSeedService
         return deleted;
     }
 
+    /// <summary>The verbose schedule listing for a region's task, or a "not found" message when it
+    /// isn't installed. Port of <c>view_autoseed_schedule</c>.</summary>
+    public async Task<string> ViewScheduleAsync(string region, CancellationToken ct = default)
+    {
+        var slot = AutoSeedSlot.ByRegion(region)
+            ?? throw new ArgumentException($"Unknown region '{region}'", nameof(region));
+
+        var listing = await _tasks.QueryVerboseAsync(slot.TaskName, ct).ConfigureAwait(false);
+        return listing ?? $"No {region.ToUpperInvariant()} auto-seed scheduled task found.";
+    }
+
     /// <summary>Whether the EU auto-seed task is installed (gates the EU "Set up/Remove" UI).</summary>
     public Task<bool> IsEuInstalledAsync(CancellationToken ct = default) =>
         _tasks.IsInstalledAsync(AutoSeedSlot.Eu.TaskName, ct);

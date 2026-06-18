@@ -104,8 +104,8 @@ public sealed partial class SettingsPage : Page
         try
         {
             var s = await _autoseed.GetStatusAsync();
-            UpdateAutoseedRow(s.NaInstalled, s.NaUtcTime, s.NaNextRun, AutoseedNaStatus, AutoseedNaSetup, AutoseedNaRemove);
-            UpdateAutoseedRow(s.EuInstalled, s.EuUtcTime, s.EuNextRun, AutoseedEuStatus, AutoseedEuSetup, AutoseedEuRemove);
+            UpdateAutoseedRow(s.NaInstalled, s.NaUtcTime, s.NaNextRun, AutoseedNaStatus, AutoseedNaSetup, AutoseedNaView, AutoseedNaRemove);
+            UpdateAutoseedRow(s.EuInstalled, s.EuUtcTime, s.EuNextRun, AutoseedEuStatus, AutoseedEuSetup, AutoseedEuView, AutoseedEuRemove);
         }
         catch (Exception)
         {
@@ -115,7 +115,7 @@ public sealed partial class SettingsPage : Page
     }
 
     private static void UpdateAutoseedRow(
-        bool installed, string? utc, string? nextRun, TextBlock status, Button setup, Button remove)
+        bool installed, string? utc, string? nextRun, TextBlock status, Button setup, Button view, Button remove)
     {
         if (installed)
         {
@@ -126,12 +126,14 @@ public sealed partial class SettingsPage : Page
             }
             status.Text = text;
             setup.Content = "Change";
+            view.Visibility = Visibility.Visible;
             remove.Visibility = Visibility.Visible;
         }
         else
         {
             status.Text = "Not scheduled";
             setup.Content = "Set up";
+            view.Visibility = Visibility.Collapsed;
             remove.Visibility = Visibility.Collapsed;
         }
     }
@@ -139,6 +141,10 @@ public sealed partial class SettingsPage : Page
     private void AutoseedNaSetup_Click(object sender, RoutedEventArgs e) => _ = SetupAutoseedAsync("na", "12:00");
 
     private void AutoseedEuSetup_Click(object sender, RoutedEventArgs e) => _ = SetupAutoseedAsync("eu", "06:00");
+
+    private void AutoseedNaView_Click(object sender, RoutedEventArgs e) => _ = ViewAutoseedAsync("na");
+
+    private void AutoseedEuView_Click(object sender, RoutedEventArgs e) => _ = ViewAutoseedAsync("eu");
 
     private void AutoseedNaRemove_Click(object sender, RoutedEventArgs e) => _ = RemoveAutoseedAsync("na");
 
@@ -195,17 +201,75 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    private async Task RemoveAutoseedAsync(string region)
+    /// <summary>Show the verbose schtasks listing for a region's task. Port of the View button in
+    /// render_autoseed_section (view_autoseed_schedule → show_alert).</summary>
+    private async Task ViewAutoseedAsync(string region)
     {
+        string listing;
         try
         {
-            await _autoseed.UninstallAsync(region);
+            listing = await _autoseed.ViewScheduleAsync(region);
         }
         catch (Exception)
         {
-            // Removal failures are non-fatal; reflect whatever the current status is.
+            await AlertAsync("Error", "Failed to read the auto-seed schedule. Check the logs for details.");
+            return;
         }
-        await LoadAutoseedStatusAsync();
+
+        // The listing is monospace-ish schtasks output; show it scrollable so long output stays usable.
+        var dialog = new ContentDialog
+        {
+            Title = $"{region.ToUpperInvariant()} Auto-Seed Schedule",
+            Content = new ScrollViewer
+            {
+                MaxHeight = 360,
+                Content = new TextBlock
+                {
+                    Text = listing,
+                    TextWrapping = TextWrapping.Wrap,
+                    FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
+                    FontSize = 12,
+                    IsTextSelectionEnabled = true,
+                },
+            },
+            CloseButtonText = "OK",
+            XamlRoot = XamlRoot,
+        };
+        await dialog.ShowAsync();
+    }
+
+    private async Task RemoveAutoseedAsync(string region)
+    {
+        var label = region == "eu" ? "EU servers" : "auto-seed";
+        var confirm = new ContentDialog
+        {
+            Title = "Uninstall",
+            Content = $"Are you sure you want to uninstall the {label} scheduled task?",
+            PrimaryButtonText = "Uninstall",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = XamlRoot,
+        };
+        if (await confirm.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        try
+        {
+            var deleted = await _autoseed.UninstallAsync(region);
+            await LoadAutoseedStatusAsync();
+            await AlertAsync(
+                deleted ? "Success" : "Info",
+                deleted
+                    ? $"Uninstalled the {label} scheduled task."
+                    : $"No {(region == "eu" ? "EU " : "")}scheduled task found to uninstall.");
+        }
+        catch (Exception)
+        {
+            await LoadAutoseedStatusAsync();
+            await AlertAsync("Error", $"Failed to uninstall the {label} task. Check the logs for details.");
+        }
     }
 
     // ── Updates ─────────────────────────────────────────────────────────────

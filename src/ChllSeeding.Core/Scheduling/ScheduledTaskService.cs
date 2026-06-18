@@ -17,6 +17,33 @@ public sealed class ScheduledTaskService
 {
     private readonly ILogger<ScheduledTaskService> _log;
 
+    /// <summary>The console OEM code page schtasks writes its (localized) output in. Decoding stdout
+    /// as UTF-8 mangles non-ASCII text on non-English Windows (e.g. the "Next Run Time" value), so we
+    /// decode with the actual OEM code page. Resolved once; falls back to UTF-8 if unavailable.</summary>
+    private static readonly Encoding SchtasksOutputEncoding = ResolveOemEncoding();
+
+    static ScheduledTaskService()
+    {
+        // OEM code pages (437, 850, 932, …) aren't built into .NET — register the provider so
+        // Encoding.GetEncoding can resolve them.
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+    }
+
+    private static Encoding ResolveOemEncoding()
+    {
+        try
+        {
+            return Encoding.GetEncoding((int)GetOEMCP());
+        }
+        catch (Exception)
+        {
+            return Encoding.UTF8;
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern uint GetOEMCP();
+
     public ScheduledTaskService(ILogger<ScheduledTaskService> log) => _log = log;
 
     /// <summary>
@@ -80,6 +107,19 @@ public sealed class ScheduledTaskService
         var (exit, stdout, _) = await RunSchtasksAsync(
             ["/query", "/tn", taskName, "/fo", "LIST", "/v"], ct).ConfigureAwait(false);
         return exit == 0 ? ParseNextRunTime(stdout) : null;
+    }
+
+    /// <summary>The full verbose schtasks listing for a task (for the "View schedule" dialog), capped
+    /// at 2000 chars to match the Rust view_autoseed_schedule. Null when the task is absent.</summary>
+    public async Task<string?> QueryVerboseAsync(string taskName, CancellationToken ct = default)
+    {
+        var (exit, stdout, _) = await RunSchtasksAsync(
+            ["/query", "/tn", taskName, "/fo", "LIST", "/v"], ct).ConfigureAwait(false);
+        if (exit != 0)
+        {
+            return null;
+        }
+        return stdout.Length > 2000 ? stdout[..2000] : stdout;
     }
 
     // ── Pure helpers (public + static for unit coverage) ───────────────────────
@@ -174,8 +214,8 @@ public sealed class ScheduledTaskService
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8,
+                StandardOutputEncoding = SchtasksOutputEncoding,
+                StandardErrorEncoding = SchtasksOutputEncoding,
             };
             foreach (var a in args)
             {
