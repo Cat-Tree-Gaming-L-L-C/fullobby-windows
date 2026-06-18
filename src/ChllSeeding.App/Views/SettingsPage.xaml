@@ -198,18 +198,17 @@
                 </StackPanel>
             </Grid>
 
-            <!-- ── Coming in a later phase (disabled stubs) ────────────── -->
+            <!-- ── Updates ──────────────────────────────────────────────── -->
             <TextBlock Text="Updates" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
-            <TextBlock Text="Self-update arrives in a later phase." FontSize="12" Opacity="0.5" />
 
             <Grid>
                 <StackPanel>
-                    <TextBlock Text="Updates" />
-                    <TextBlock Text="Check for updates / beta channel" FontSize="12" Opacity="0.5" />
+                    <TextBlock Text="Check for updates" />
+                    <TextBlock x:Name="VersionText" Text="" FontSize="12" Opacity="0.5" />
                 </StackPanel>
-                <Button Content="Check for Updates" HorizontalAlignment="Right" IsEnabled="False" />
+                <Button x:Name="CheckUpdatesButton" Content="Check for Updates" HorizontalAlignment="Right" Click="CheckUpdates_Click" />
             </Grid>
-            <ToggleSwitch Header="Beta Updates" IsEnabled="False" />
+            <ToggleSwitch x:Name="BetaUpdatesToggle" Header="Beta Updates" Toggled="BetaUpdatesToggle_Toggled" />
         </StackPanel>
     </ScrollViewer>
 </Page>

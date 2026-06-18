@@ -2,6 +2,7 @@ using ChllSeeding.App.ViewModels;
 using ChllSeeding.Core.Config;
 using ChllSeeding.Core.Platform;
 using ChllSeeding.Core.Scheduling;
+using ChllSeeding.Core.Update;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -15,6 +16,7 @@ public sealed partial class SettingsPage : Page
     private readonly MainWindow _window;
     private readonly StartupRegistry _startup;
     private readonly AutoSeedService _autoseed;
+    private readonly UpdaterService _updater;
 
     public AccountViewModel Account { get; }
 
@@ -27,6 +29,7 @@ public sealed partial class SettingsPage : Page
         _window = App.AppHost.Services.GetRequiredService<MainWindow>();
         _startup = App.AppHost.Services.GetRequiredService<StartupRegistry>();
         _autoseed = App.AppHost.Services.GetRequiredService<AutoSeedService>();
+        _updater = App.AppHost.Services.GetRequiredService<UpdaterService>();
         Account = App.AppHost.Services.GetRequiredService<AccountViewModel>();
         InitializeComponent();
     }
@@ -58,6 +61,8 @@ public sealed partial class SettingsPage : Page
         };
 
         StartupToggle.IsOn = _startup.IsEnabled();
+        BetaUpdatesToggle.IsOn = _config.GetString("update_channel") == "beta";
+        VersionText.Text = $"Current version: v{UpdaterService.CurrentVersion}";
         _loading = false;
 
         // Auto-seed task status comes from schtasks — load it off the UI thread.
@@ -201,6 +206,72 @@ public sealed partial class SettingsPage : Page
             // Removal failures are non-fatal; reflect whatever the current status is.
         }
         await LoadAutoseedStatusAsync();
+    }
+
+    // ── Updates ─────────────────────────────────────────────────────────────
+
+    private void BetaUpdatesToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading)
+        {
+            return;
+        }
+        _config.SetString("update_channel", BetaUpdatesToggle.IsOn ? "beta" : "stable");
+    }
+
+    private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        CheckUpdatesButton.IsEnabled = false;
+        try
+        {
+            var update = await _updater.CheckForUpdatesAsync();
+            if (update is null)
+            {
+                await AlertAsync("No Updates", "You are running the latest version.");
+                return;
+            }
+
+            // Port of the Rust "Update Available" alert, extended (per the Phase 5 plan) to wire the
+            // installer download — the Rust UI only showed the URL; download_and_install was unused.
+            var notes = string.IsNullOrWhiteSpace(update.Notes) ? "" : $"\n\n{update.Notes}";
+            var dialog = new ContentDialog
+            {
+                Title = "Update Available",
+                Content = $"A new version (v{update.Version}) is available.{notes}",
+                PrimaryButtonText = "Download & Install",
+                CloseButtonText = "Later",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = XamlRoot,
+            };
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            {
+                return;
+            }
+
+            await DownloadAndInstallAsync(update);
+        }
+        catch (Exception)
+        {
+            await AlertAsync("Error", "Failed to check for updates.");
+        }
+        finally
+        {
+            CheckUpdatesButton.IsEnabled = true;
+        }
+    }
+
+    private async Task DownloadAndInstallAsync(UpdateInfo update)
+    {
+        try
+        {
+            await _updater.DownloadAndInstallAsync(update);
+            // Installer launched — shut down through the normal path so it can replace the exe.
+            _window.ForceQuit();
+        }
+        catch (Exception)
+        {
+            await AlertAsync("Update Failed", "The update could not be downloaded or verified. Please try again later.");
+        }
     }
 
     private Task AlertAsync(string title, string content) =>

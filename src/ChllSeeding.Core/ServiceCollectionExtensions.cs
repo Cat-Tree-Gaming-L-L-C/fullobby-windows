@@ -7,6 +7,7 @@ using ChllSeeding.Core.Scheduling;
 using ChllSeeding.Core.Seeding;
 using ChllSeeding.Core.Servers;
 using ChllSeeding.Core.Tools;
+using ChllSeeding.Core.Update;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -49,6 +50,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SeedingEngine>();
         services.AddSingleton<HeartbeatService>();
 
+        // Self-updater (Phase 5): check + download/verify/launch the Inno setup.exe.
+        services.AddSingleton<UpdaterService>();
+
         // Startup worker: guest auth + server-list load + stats polling fallback.
         services.AddSingleton<AppBootstrapper>();
         services.AddHostedService(sp => sp.GetRequiredService<AppBootstrapper>());
@@ -77,6 +81,16 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient(AuthRefresher.ClientName, client =>
             {
                 client.Timeout = TimeSpan.FromSeconds(30);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
+                client.DefaultRequestHeaders.Add("x-client-version", version);
+            })
+            .AddHttpMessageHandler<ResilienceHandler>();
+
+        // Updater client: long timeout (installer downloads can be large), resilience but NO auth
+        // (release endpoints are public). Port of the Rust 300s download timeout.
+        services.AddHttpClient(UpdaterService.ClientName, client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(300);
                 client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
                 client.DefaultRequestHeaders.Add("x-client-version", version);
             })

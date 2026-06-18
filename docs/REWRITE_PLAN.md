@@ -238,6 +238,75 @@
     VM/page code isn't covered by Core.Tests (no App test project) — only the new Core helpers are. Updater +
     beta-channel rows in Settings stay disabled stubs (Phase 5).
 
+- 🟡 **Phase 5 — Updater & parity sign-off** in progress (2026-06-18, Windows). Solution builds clean (0 warnings),
+  393/393 tests pass (348 + 45: 35 updater-validation + the existing suite). App smoke-tested (DI graph resolves
+  with the new injections, window up, live API host now reachable — `/api/servers` + SSE return 200, session-restore
+  401-resets cleanly). Live update round-trip needs a populated `/api/releases/latest` + a real installer.
+  - ✅ **Self-updater (`Core.Update`):** `UpdaterService` (port of `platform/updater.rs`) — `CheckForUpdatesAsync`
+    (reads the `update_channel` config key for stable/beta, GETs `/api/releases/latest`, parses version/url/notes/
+    sha256/signature, string-inequality version compare) + `DownloadAndInstallAsync` (HTTPS + trusted-host + SHA-256
+    + ≤500 MB + exe/msi-extension validation, temp-dir write, launch). Pure helpers split into `UpdateValidation`
+    (validate-url / extension / sanitize-filename / verify-sha256 / size / is-update-available) so the Rust
+    `#[cfg(test)]` block carries over 1:1 (`UpdateValidationTests`, +35). Trusted domains derive from the configured
+    API host (`ApiConfig.BaseUrl`) + GitHub CDNs, so the env override is honored; default installer name rebranded
+    `esprit-seeder-update.exe` → `chll-seeding-update.exe`. New named HttpClient `"updater"` (300s timeout, resilience,
+    **no** auth handler — release endpoints are public). `CurrentVersion` reads the entry-assembly version (`0.1.0`
+    from `src/Directory.Build.props`).
+  - ✅ **Settings wiring:** the disabled Updates stubs are now live — "Check for Updates" → `CheckForUpdatesAsync`
+    → "no updates" / "update available" dialog; **Download & Install** (an enhancement over Rust, whose UI only
+    showed the URL — `download_and_install` was never wired) downloads + verifies + launches the installer, then
+    `MainWindow.ForceQuit()` exits through the normal shutdown path so the installer can replace the exe. "Beta
+    Updates" toggle persists `update_channel` (stable/beta). Current-version line shown under the button.
+  - ✅ **Live-data connection indicator (`reconnect_button.rs` gap):** `LiveStats.LastUpdateUtc` (port of
+    `LAST_STATS_UPDATE`) + `SeedingViewModel` connection props (`ConnectionIndicatorVisible`/`ConnectionPolling`/
+    `ConnectionStatusText`/`ConnectionAgeText`) refreshed off the existing 1s tick from `SseConnectionState`
+    (`Connected`/`FailureCount`, threshold 3 → "Polling" vs "Disconnected") + a `ReconnectCommand`
+    (`RequestReconnect`). Shown on `SeedPage` only while SSE is disconnected (dot + status + "Updated Ns ago" +
+    Reconnect link). Port of the stale-timer (`stale_timer.rs`) display + the reconnect button component.
+  - ✅ **Parity audit vs `/src-rust` (2026-06-18):** 6-way subagent sweep over all 65 Rust files, every High finding
+    verified against the actual code. **API layer, seeding-engine timing constants, scheduling math, and config/crypto
+    core all confirmed faithful — no functional gaps.** Two verified correctness bugs **fixed**: (1) `DpapiProtector.MaybeEncrypt`
+    now falls back to plaintext on a DPAPI failure instead of throwing out of `ConfigService.Set` (was silently dropping
+    tokens; mirrors Rust `maybe_encrypt`); (2) `AccountViewModel.HandleLinkCallbackAsync` now re-derives `IsGuest`/`guest_mode`
+    from `/me` so a guest→permanent link upgrade applies without a restart (+ "your account is now permanent!" toast; port of
+    `state/events.rs` LinkCallback). 393/393 tests pass, build clean.
+    - **Verified-remaining gaps (deferred — user chose to stop, 2026-06-18):**
+      - *Behavioral:* **game-running status watcher absent** — Rust `app.rs:874 check_game_running` polls every 5s to flip
+        status Running/Stopped when HLL is launched/closed **outside** the app; C# `SeedingViewModel.OnTimerTick` doesn't,
+        so a hand-launched game shows no "Game Running" banner and seed buttons don't auto-hide.
+      - *UX:* seeding banners lack server-name/region context (Rust shows "Seeding {server} (EU)" etc.); auto-seed "starting
+        in 60s" desktop toast missing (in-window overlay only); switch-overlay `server_full`→"Server is Full" + snoozed
+        "Server Switch Snoozed" titles collapse to generic; in-app toast dedup missing + durations differ (C# 6s/12s vs Rust
+        3s/10s); auto-seed has no uninstall-confirm dialog and no "View schedule" button.
+      - *Robustness:* backup/restore dropped Rust's `validate_user_path` (symlink canonicalization + traversal guard — low
+        attack surface since folders are user-picked); `MissedAutoseed` 4h window uses `<=` vs Rust strict `<`; `schtasks`
+        stdout forced to UTF-8 can mangle next-run time on non-English Windows (display-only).
+    - **Dismissed false-positives:** switch sound *is* played (`ToastService.ShowServerSwitch` → `MessageBeep`); the Seed-All
+      30s cooldown is an intentional documented drop; `os_version` is fine (.NET 5+ `Environment.OSVersion` uses
+      `RtlGetVersion`); token-string zeroization isn't reliably achievable on .NET.
+  - **Remaining for Phase 5:** stable/beta release-channel **server** support is backend-side; theming polish, deleting
+    `/src-rust`, the tag-driven release workflow (build + sign + attach `CHLL-Seeding-Setup-<ver>.exe` + SHA-256), and the
+    deferred parity gaps listed above are still open.
+
+## Planned enhancements (beyond Rust parity)
+
+- 📝 **Notification-sound volume control (requested 2026-06-18, not yet implemented).** The switch-notification chime is
+  currently `MessageBeep(MB_ICONEXCLAMATION)` in `App.Services.ToastService.PlayAttentionSound` — a 1:1 port of the Rust
+  `play_notification_sound`, which plays at the **system** sound volume with no app-side control (the Rust app had no
+  volume control either, so this is a net-new feature). `MessageBeep` takes no volume parameter, so adding a volume slider
+  requires switching the playback mechanism. **Planned approach:**
+  - Replace `MessageBeep` with `Windows.Media.Playback.MediaPlayer` (has a `Volume` property 0.0–1.0; works in unpackaged
+    WinUI 3). Bundle a short attention chime as an app asset (e.g. `Assets/switch-alert.wav` — none exists today; either ship
+    a WAV or point the `MediaPlayer` at a `ms-winsoundevent`/system-sound source). Cache one `MediaPlayer` instance in
+    `ToastService` and re-`Play()` it per alert.
+  - New config key `notification_volume` (0–100, default 100). `PlayAttentionSound` reads it; **0 = mute** (skip playback),
+    otherwise `player.Volume = value / 100.0`. Persist via `ConfigService.SetString` like the other Settings toggles.
+  - Add a `Slider` (0–100) to `SettingsPage.xaml` next to the existing "Switch Notification" toggle, seeded in `SeedControls`
+    and written in a `ValueChanged` handler (guard with the `_loading` flag like the other controls). Optionally a small
+    "Test" button that calls `PlayAttentionSound` so the user can preview the level.
+  - Tradeoff to note: moving off `MessageBeep` drops integration with the user's Windows *sound scheme* (the chime becomes a
+    fixed bundled asset) in exchange for app-controlled volume. Acceptable for a volume slider; revisit if scheme respect matters.
+
 ## Context
 
 The app "Esprit Seeder" (Hell Let Loose server-seeding desktop tool, Rust + Dioxus 0.7, ~18.5K LOC, 65 files) is being:

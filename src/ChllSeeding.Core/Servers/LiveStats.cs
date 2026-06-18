@@ -16,6 +16,11 @@ public sealed class LiveStats(ServerStore servers)
     /// <summary>Raised after each stats batch is applied, carrying the freshest batch.</summary>
     public event Action<IReadOnlyList<BatchStatsResult>>? StatsUpdated;
 
+    /// <summary>UTC time of the most recent applied stats batch, or <c>null</c> before the first
+    /// update. Drives the "Updated Ns ago" / stale indicator (port of the Rust
+    /// <c>LAST_STATS_UPDATE</c> signal).</summary>
+    public DateTime? LastUpdateUtc { get; private set; }
+
     /// <summary>Apply a stats batch to the store and notify subscribers.</summary>
     public void Apply(IReadOnlyList<BatchStatsResult> stats)
     {
@@ -40,6 +45,7 @@ public sealed class LiveStats(ServerStore servers)
             }
         }
 
+        LastUpdateUtc = DateTime.UtcNow;
         StatsUpdated?.Invoke(stats);
     }
 }

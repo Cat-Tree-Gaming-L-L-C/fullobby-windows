@@ -50,14 +50,23 @@ public static class DpapiProtector
     /// <summary>True if <paramref name="value"/> is already a DPAPI ciphertext.</summary>
     public static bool IsEncrypted(string value) => value.StartsWith(EncryptedPrefix, StringComparison.Ordinal);
 
-    /// <summary>Encrypt when the key is sensitive and the value is non-empty; otherwise pass through.</summary>
+    /// <summary>Encrypt when the key is sensitive and the value is non-empty; otherwise pass through.
+    /// On a DPAPI failure, falls back to storing plaintext rather than throwing — mirrors the Rust
+    /// <c>maybe_encrypt</c> behaviour so a transient crypto error never blocks saving a token.</summary>
     public static string MaybeEncrypt(string key, string value)
     {
         if (!IsSensitive(key) || value.Length == 0)
         {
             return value;
         }
-        return Encrypt(value);
+        try
+        {
+            return Encrypt(value);
+        }
+        catch (CryptographicException)
+        {
+            return value; // store plaintext rather than lose the value
+        }
     }
 
     /// <summary>

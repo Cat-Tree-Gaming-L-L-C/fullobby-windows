@@ -35,8 +35,13 @@ public sealed partial class SeedingViewModel : ObservableObject
     private readonly ToastService _toast;
     private readonly InAppToastService _inAppToast;
     private readonly AutoSeedState _autoSeedState;
+    private readonly SseConnectionState _sse;
     private readonly DispatcherQueue _dispatcher;
     private readonly DispatcherTimer _timer;
+
+    /// <summary>Consecutive SSE failures before the indicator reads "Polling" (the fallback is
+    /// reliably delivering data) instead of "Disconnected". Port of <c>POLLING_FALLBACK_THRESHOLD</c>.</summary>
+    private const int PollingFallbackThreshold = 3;
 
     /// <summary>The active seeding session id (from start-session), heartbeat-ed until stop. Null
     /// when no session is open. Analytics only — non-fatal if session creation failed.</summary>
@@ -63,7 +68,8 @@ public sealed partial class SeedingViewModel : ObservableObject
         HeartbeatService heartbeat,
         ToastService toast,
         InAppToastService inAppToast,
-        AutoSeedState autoSeedState)
+        AutoSeedState autoSeedState,
+        SseConnectionState sse)
     {
         _log = log;
         _engine = engine;
@@ -77,6 +83,7 @@ public sealed partial class SeedingViewModel : ObservableObject
         _toast = toast;
         _inAppToast = inAppToast;
         _autoSeedState = autoSeedState;
+        _sse = sse;
 
         // Constructed on the UI thread (first page resolve), so this captures the UI queue.
         _dispatcher = DispatcherQueue.GetForCurrentThread();
@@ -197,6 +204,21 @@ public sealed partial class SeedingViewModel : ObservableObject
 
     [ObservableProperty]
     private string autoseedCountdownText = "";
+
+    // Live-data connection indicator (port of components/reconnect_button.rs). Shown only while SSE
+    // is disconnected: "Disconnected" (warning) for the first few failures, then a neutral "Polling"
+    // once the HTTP fallback is reliably delivering data.
+    [ObservableProperty]
+    private bool connectionIndicatorVisible;
+
+    [ObservableProperty]
+    private bool connectionPolling;
+
+    [ObservableProperty]
+    private string connectionStatusText = "Disconnected";
+
+    [ObservableProperty]
+    private string connectionAgeText = "";
 
     public ObservableCollection<ServerRow> NaServers { get; } = [];
     public ObservableCollection<ServerRow> EuServers { get; } = [];
@@ -1066,7 +1088,33 @@ public sealed partial class SeedingViewModel : ObservableObject
             }
             UpdateSwitchText();
         }
+
+        UpdateConnectionIndicator();
     }
+
+    /// <summary>Refresh the live-data connection indicator from <see cref="SseConnectionState"/> and
+    /// the last stats timestamp. Port of the render logic in components/reconnect_button.rs.</summary>
+    private void UpdateConnectionIndicator()
+    {
+        if (_sse.Connected)
+        {
+            ConnectionIndicatorVisible = false;
+            return;
+        }
+
+        ConnectionIndicatorVisible = true;
+        ConnectionPolling = _sse.FailureCount >= PollingFallbackThreshold;
+        ConnectionStatusText = ConnectionPolling ? "Polling" : "Disconnected";
+
+        var secondsAgo = _live.LastUpdateUtc is { } last
+            ? Math.Max(0, (long)(DateTime.UtcNow - last).TotalSeconds)
+            : 0;
+        ConnectionAgeText = $"Updated {secondsAgo}s ago";
+    }
+
+    /// <summary>Ask the SSE loop to drop and reconnect immediately (manual refresh button).</summary>
+    [RelayCommand]
+    private void Reconnect() => _sse.RequestReconnect();
 
     private void UpdateSplashText() =>
         SplashBypassText = $"Skipping intro ({_splashRemaining / 60}:{_splashRemaining % 60:D2} remaining)";

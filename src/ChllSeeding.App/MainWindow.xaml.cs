@@ -139,6 +139,14 @@ public sealed partial class MainWindow : Window
         TrayIcon.Dispose();
     }
 
+    /// <summary>Quit the app through the normal shutdown path (no close-to-tray). Used by the
+    /// self-updater after launching the installer so it can replace the running exe.</summary>
+    public void ForceQuit()
+    {
+        _forceQuit = true;
+        Close();
+    }
+
     private void TrayShow_Click(object sender, RoutedEventArgs e) => BringToFront();
 
     private void TrayQuit_Click(object sender, RoutedEventArgs e)

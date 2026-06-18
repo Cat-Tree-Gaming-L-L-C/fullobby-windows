@@ -305,16 +305,30 @@ public sealed partial class AccountViewModel : ObservableObject
     public async Task HandleLinkCallbackAsync(string provider)
     {
         await RefreshLinkedDataAsync().ConfigureAwait(false);
+        var wasGuest = IsGuest;
+        var upgraded = false;
         try
         {
             var me = await _api.GetMeAsync().ConfigureAwait(false);
-            RunOnUi(() => User = me);
+            // Linking can upgrade a guest to a permanent account — re-derive guest status so the UI
+            // (API-key rotation, name button, onboarding) reflects it without a restart. Port of the
+            // guest→permanent transition in state/events.rs LinkCallback.
+            var guest = me.AuthProvider == AuthProvider.Guest;
+            upgraded = wasGuest && !guest;
+            RunOnUi(() =>
+            {
+                User = me;
+                IsGuest = guest;
+                _config.SetString("guest_mode", guest ? "true" : "false");
+            });
         }
         catch (Exception e)
         {
             _log.LogInformation(e, "get_me after link callback failed");
         }
-        _toast.Success($"{Capitalize(provider)} linked");
+        _toast.Success(upgraded
+            ? $"{Capitalize(provider)} linked — your account is now permanent!"
+            : $"{Capitalize(provider)} linked");
     }
 
     // ── Account actions (port of components/settings.rs AuthAccountSection) ──────
