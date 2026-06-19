@@ -34,13 +34,19 @@
         <Grid x:Name="AppTitleBar" Background="Transparent">
             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="12,0,0,0">
                 <Image Source="ms-appx:///Assets/logo_nbg.png" Width="18" Height="18" />
-                <TextBlock Text="CHLL Seeding" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
+                <TextBlock
+                    Text="CHLL Seeding"
+                    FontFamily="{StaticResource BrandDisplayFontFamily}"
+                    FontSize="17"
+                    CharacterSpacing="80"
+                    VerticalAlignment="Center" />
             </StackPanel>
         </Grid>
 
         <NavigationView
             x:Name="NavView"
             Grid.Row="1"
+            Background="Transparent"
             PaneDisplayMode="Top"
             IsBackButtonVisible="Collapsed"
             IsSettingsVisible="True"

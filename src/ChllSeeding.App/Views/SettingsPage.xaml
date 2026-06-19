@@ -53,13 +53,22 @@
                 </ItemsControl>
 
                 <!-- Link buttons -->
-                <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center" Margin="0,2">
-                    <Button Content="Link Steam" Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="steam" />
-                    <Button
-                        Content="Link Discord"
-                        Command="{x:Bind Account.LinkProviderCommand}"
-                        CommandParameter="discord"
-                        Visibility="{x:Bind Account.HasDiscordProvider, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                <StackPanel Spacing="4" Margin="0,2" HorizontalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                        <Button Content="Link Steam" Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="steam" />
+                        <Button
+                            Content="Link Discord"
+                            Command="{x:Bind Account.LinkProviderCommand}"
+                            CommandParameter="discord"
+                            Visibility="{x:Bind Account.HasDiscordProvider, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                    </StackPanel>
+                    <!-- Not live yet: exposed but disabled. To turn one on, drop its
+                         IsEnabled="False" and add the provider to ApiValidation.ValidProviders. -->
+                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                        <Button Content="Link Epic Games" IsEnabled="False" Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="epic" />
+                        <Button Content="Link Xbox" IsEnabled="False" Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="microsoft" />
+                    </StackPanel>
+                    <TextBlock Text="Epic Games and Xbox linking is coming soon." FontSize="11" Opacity="0.5" HorizontalAlignment="Center" />
                 </StackPanel>
 
                 <!-- Linked Steam IDs -->
@@ -77,11 +86,19 @@
 
             <!-- Signed out: sign-in options -->
             <StackPanel
-                Orientation="Horizontal"
-                Spacing="8"
+                Spacing="6"
                 Visibility="{x:Bind Account.IsLoggedIn, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}">
-                <Button Content="Sign in with Steam" Style="{StaticResource AccentButtonStyle}" Command="{x:Bind Account.LoginCommand}" CommandParameter="steam" />
-                <Button Content="Sign in with Discord" Command="{x:Bind Account.LoginCommand}" CommandParameter="discord" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="Sign in with Steam" Style="{StaticResource AccentButtonStyle}" Command="{x:Bind Account.LoginCommand}" CommandParameter="steam" />
+                    <Button Content="Sign in with Discord" Command="{x:Bind Account.LoginCommand}" CommandParameter="discord" />
+                </StackPanel>
+                <!-- Not live yet: exposed but disabled. To turn one on, drop its
+                     IsEnabled="False" and add the provider to ApiValidation.ValidProviders. -->
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="Sign in with Epic Games" IsEnabled="False" Command="{x:Bind Account.LoginCommand}" CommandParameter="epic" />
+                    <Button Content="Sign in with Xbox" IsEnabled="False" Command="{x:Bind Account.LoginCommand}" CommandParameter="microsoft" />
+                </StackPanel>
+                <TextBlock Text="Epic Games and Xbox sign-in are coming soon." FontSize="11" Opacity="0.5" />
             </StackPanel>
 
             <!-- ── Player ──────────────────────────────────────────────── -->

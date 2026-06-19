@@ -43,6 +43,9 @@
   <ItemGroup>
     <Content Include="..\..\icons\icon.ico" Link="Assets\icon.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\assets\logo_nbg.png" Link="Assets\logo_nbg.png" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Brand fonts (SIL OFL): Bebas Neue = display/wordmark, Inter = body/UI. -->
+    <Content Include="..\..\assets\fonts\BebasNeue-Regular.ttf" Link="Assets\fonts\BebasNeue-Regular.ttf" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\assets\fonts\Inter-VariableFont.ttf" Link="Assets\fonts\Inter-VariableFont.ttf" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -36,6 +36,19 @@
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             Command="{x:Bind Account.LoginCommand}" CommandParameter="discord" />
 
+                    <!-- Not live yet: exposed but disabled. To turn one on, drop its
+                         IsEnabled="False" here and add the provider key to
+                         ApiValidation.ValidProviders. -->
+                    <Button Content="Sign in with Epic Games" IsEnabled="False"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Command="{x:Bind Account.LoginCommand}" CommandParameter="epic" />
+                    <Button Content="Sign in with Xbox" IsEnabled="False"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Command="{x:Bind Account.LoginCommand}" CommandParameter="microsoft" />
+                    <TextBlock Text="Epic Games and Xbox sign-in are coming soon."
+                               FontSize="11" Opacity="0.5" TextWrapping="Wrap"
+                               TextAlignment="Center" HorizontalAlignment="Center" />
+
                     <TextBlock Text="or" HorizontalAlignment="Center" Opacity="0.5" FontSize="12" />
 
                     <Button Content="Continue as Guest"
@@ -58,6 +71,18 @@
                     <Button Content="Link Discord Account"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="discord" />
+
+                    <!-- Not live yet: exposed but disabled. To turn one on, drop its
+                         IsEnabled="False" and add the provider to ApiValidation.ValidProviders. -->
+                    <Button Content="Link Epic Games Account" IsEnabled="False"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="epic" />
+                    <Button Content="Link Xbox Account" IsEnabled="False"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="microsoft" />
+                    <TextBlock Text="Epic Games and Xbox linking is coming soon."
+                               FontSize="11" Opacity="0.5" TextWrapping="Wrap"
+                               TextAlignment="Center" HorizontalAlignment="Center" />
 
                     <Button Content="Continue" Style="{StaticResource AccentButtonStyle}"
                             HorizontalAlignment="Center" Margin="0,6,0,0" Click="ToNickname_Click" />
