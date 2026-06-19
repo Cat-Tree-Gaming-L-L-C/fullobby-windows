@@ -5,3 +5,12 @@ target/
 .env.local
 *.log
 .claude/
+
+# .NET / WinUI 3
+bin/
+obj/
+*.user
+.vs/
+artifacts/
+installer/Output/
+msbuild.binlog

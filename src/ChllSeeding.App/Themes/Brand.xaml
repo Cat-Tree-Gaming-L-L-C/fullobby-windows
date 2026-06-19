@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    CHLL Seeding brand theme.
+
+    Derived from the comp-hll web brand (../comp-hll/styles.ts):
+        bg-dark   rgb(10,12,15)   #0A0C0F   text-primary    rgb(232,233,235) #E8E9EB
+        bg-card   rgb(18,21,26)   #12151A   text-secondary  rgb(139,145,154) #8B919A
+        bg-hover  rgb(26,30,37)   #1A1E25   accent (gold)   rgb(201,162,39)  #C9A227
+        border    rgb(42,47,56)   #2A2F38   accent-hover    rgb(219,180,47)  #DBB42F
+        danger    rgb(139,38,53)  #8B2635   success         rgb(45,90,39)    #2D5A27
+
+    Dark is the shipped default (see MainWindow.ApplyTheme); Light is a derived option.
+
+    The gold accent ramp overrides the OS SystemAccentColor* keys, so every stock
+    accent-driven control (AccentButtonStyle, NavigationView selection indicator,
+    ToggleSwitch on-state, ProgressRing, HyperlinkButton, focus rings) picks up the
+    brand gold with no per-control restyling.
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ===== Brand fonts (SIL OFL, bundled under Assets/fonts) ==================== -->
+    <!-- Inter  = body/UI;  Bebas Neue = condensed display for the wordmark + headers. -->
+    <FontFamily x:Key="BrandBodyFontFamily">ms-appx:///Assets/fonts/Inter-VariableFont.ttf#Inter</FontFamily>
+    <FontFamily x:Key="BrandDisplayFontFamily">ms-appx:///Assets/fonts/BebasNeue-Regular.ttf#Bebas Neue</FontFamily>
+
+    <!-- Make Inter the app-wide default. ContentControlThemeFontFamily covers
+         templated controls (buttons, nav items, toggles); the implicit TextBlock
+         style below catches bare text the templates don't own. -->
+    <FontFamily x:Key="ContentControlThemeFontFamily">ms-appx:///Assets/fonts/Inter-VariableFont.ttf#Inter</FontFamily>
+
+    <Style TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource BrandBodyFontFamily}" />
+    </Style>
+
+    <!-- Re-skin the framework type ramp onto the brand fonts. The stock styles are
+         StaticResource-resolved at page load, so redefining the keys here (merged
+         after XamlControlsResources) makes every TitleTextBlockStyle / SubtitleTextBlockStyle
+         / etc. consumer pick up the brand fonts without touching the pages.
+         Body tiers → Inter; display tiers → Bebas Neue (condensed, all-caps, lightly tracked). -->
+
+    <Style x:Key="CaptionTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BaseTextBlockStyle}">
+        <Setter Property="FontFamily" Value="{StaticResource BrandBodyFontFamily}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="LineHeight" Value="16" />
+    </Style>
+
+    <Style x:Key="BodyTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BaseTextBlockStyle}">
+        <Setter Property="FontFamily" Value="{StaticResource BrandBodyFontFamily}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="LineHeight" Value="20" />
+    </Style>
+
+    <Style x:Key="BodyStrongTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BaseTextBlockStyle}">
+        <Setter Property="FontFamily" Value="{StaticResource BrandBodyFontFamily}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="LineHeight" Value="20" />
+    </Style>
+
+    <Style x:Key="SubtitleTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BaseTextBlockStyle}">
+        <Setter Property="FontFamily" Value="{StaticResource BrandDisplayFontFamily}" />
+        <Setter Property="FontSize" Value="22" />
+        <Setter Property="LineHeight" Value="26" />
+        <Setter Property="CharacterSpacing" Value="40" />
+    </Style>
+
+    <Style x:Key="TitleTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BaseTextBlockStyle}">
+        <Setter Property="FontFamily" Value="{StaticResource BrandDisplayFontFamily}" />
+        <Setter Property="FontSize" Value="30" />
+        <Setter Property="LineHeight" Value="34" />
+        <Setter Property="CharacterSpacing" Value="40" />
+    </Style>
+
+    <Style x:Key="TitleLargeTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BaseTextBlockStyle}">
+        <Setter Property="FontFamily" Value="{StaticResource BrandDisplayFontFamily}" />
+        <Setter Property="FontSize" Value="42" />
+        <Setter Property="LineHeight" Value="46" />
+        <Setter Property="CharacterSpacing" Value="50" />
+    </Style>
+
+    <!-- Brand gold accent ramp (theme-agnostic, mirrors the OS accent contract).
+         Base = #C9A227; Light* shift toward white, Dark* toward black. WinUI's
+         accent fill/text brushes reference these per theme, so one ramp covers both. -->
+    <Color x:Key="SystemAccentColor">#FFC9A227</Color>
+    <Color x:Key="SystemAccentColorLight1">#FFD2AD37</Color>
+    <Color x:Key="SystemAccentColorLight2">#FFDBB847</Color>
+    <Color x:Key="SystemAccentColorLight3">#FFE4C463</Color>
+    <Color x:Key="SystemAccentColorDark1">#FFB08E22</Color>
+    <Color x:Key="SystemAccentColorDark2">#FF96791D</Color>
+    <Color x:Key="SystemAccentColorDark3">#FF7A6217</Color>
+
+    <ResourceDictionary.ThemeDictionaries>
+
+        <!-- ===== DARK (default) ====================================================== -->
+        <ResourceDictionary x:Key="Default">
+
+            <!-- Neutral surface ladder, deepened to the brand near-black. These keys are
+                 the foundation the stock control templates build on, so overriding them
+                 recolours the whole window without touching individual pages. -->
+            <SolidColorBrush x:Key="SolidBackgroundFillColorBaseBrush" Color="#FF0A0C0F" />
+            <SolidColorBrush x:Key="SolidBackgroundFillColorBaseAltBrush" Color="#FF07090B" />
+            <SolidColorBrush x:Key="SolidBackgroundFillColorSecondaryBrush" Color="#FF0F1217" />
+            <SolidColorBrush x:Key="SolidBackgroundFillColorTertiaryBrush" Color="#FF14171D" />
+            <SolidColorBrush x:Key="SolidBackgroundFillColorQuarternaryBrush" Color="#FF1A1E25" />
+
+            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="#FF14171D" />
+            <SolidColorBrush x:Key="CardBackgroundFillColorSecondaryBrush" Color="#FF101319" />
+            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="#FF2A2F38" />
+
+            <SolidColorBrush x:Key="LayerFillColorDefaultBrush" Color="#CC12151A" />
+            <SolidColorBrush x:Key="LayerOnAcrylicFillColorDefaultBrush" Color="#40FFFFFF" />
+
+            <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush" Color="#FF2A2F38" />
+            <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="#FF323845" />
+
+            <!-- Brand-named brushes for explicit use in markup. -->
+            <SolidColorBrush x:Key="BrandSurfaceBrush" Color="#FF12151A" />
+            <SolidColorBrush x:Key="BrandSurfaceHoverBrush" Color="#FF1A1E25" />
+            <SolidColorBrush x:Key="BrandBorderBrush" Color="#FF2A2F38" />
+            <SolidColorBrush x:Key="BrandAccentBrush" Color="#FFC9A227" />
+            <SolidColorBrush x:Key="BrandAccentHoverBrush" Color="#FFDBB42F" />
+            <SolidColorBrush x:Key="BrandTextPrimaryBrush" Color="#FFE8E9EB" />
+            <SolidColorBrush x:Key="BrandTextSecondaryBrush" Color="#FF8B919A" />
+            <SolidColorBrush x:Key="BrandSuccessBrush" Color="#FF4F9E42" />
+            <SolidColorBrush x:Key="BrandDangerBrush" Color="#FFC0414F" />
+        </ResourceDictionary>
+
+        <!-- ===== LIGHT (derived option) ============================================= -->
+        <ResourceDictionary x:Key="Light">
+
+            <!-- Cool-neutral light surfaces; the gold accent carries the brand here. -->
+            <SolidColorBrush x:Key="SolidBackgroundFillColorBaseBrush" Color="#FFF4F5F7" />
+            <SolidColorBrush x:Key="SolidBackgroundFillColorBaseAltBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="SolidBackgroundFillColorSecondaryBrush" Color="#FFEFF0F3" />
+            <SolidColorBrush x:Key="SolidBackgroundFillColorTertiaryBrush" Color="#FFFFFFFF" />
+
+            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="CardBackgroundFillColorSecondaryBrush" Color="#FFF7F8FA" />
+            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="#FFD7DAE0" />
+
+            <!-- Brand-named brushes (light-mode tuned for contrast). -->
+            <SolidColorBrush x:Key="BrandSurfaceBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="BrandSurfaceHoverBrush" Color="#FFECEEF1" />
+            <SolidColorBrush x:Key="BrandBorderBrush" Color="#FFD7DAE0" />
+            <SolidColorBrush x:Key="BrandAccentBrush" Color="#FFB08E22" />
+            <SolidColorBrush x:Key="BrandAccentHoverBrush" Color="#FF96791D" />
+            <SolidColorBrush x:Key="BrandTextPrimaryBrush" Color="#FF1B1E24" />
+            <SolidColorBrush x:Key="BrandTextSecondaryBrush" Color="#FF5C636E" />
+            <SolidColorBrush x:Key="BrandSuccessBrush" Color="#FF2D5A27" />
+            <SolidColorBrush x:Key="BrandDangerBrush" Color="#FF8B2635" />
+        </ResourceDictionary>
+
+        <!-- ===== HIGH CONTRAST ====================================================== -->
+        <!-- Defer entirely to the system high-contrast palette (accessibility). -->
+        <ResourceDictionary x:Key="HighContrast" />
+
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

@@ -1,0 +1,46 @@
+// CsWin32 P/Invoke surface for the native layer (process/window/input/Steam launch).
+// Dependent structs and enums (PROCESSENTRY32W, INPUT, PROCESS_ACCESS_RIGHTS, etc.)
+// are pulled in automatically by the functions that reference them.
+
+// ── process.rs ──
+CreateToolhelp32Snapshot
+Process32FirstW
+Process32NextW
+OpenProcess
+TerminateProcess
+CloseHandle
+QueryFullProcessImageNameW
+CREATE_TOOLHELP_SNAPSHOT_FLAGS
+INVALID_HANDLE_VALUE
+
+// ── window_focus.rs ──
+EnumWindows
+GetWindowTextLengthW
+GetWindowTextW
+GetForegroundWindow
+GetWindowThreadProcessId
+IsWindow
+PostMessageW
+SetForegroundWindow
+SetWindowPos
+ShowWindow
+AttachThreadInput
+GetCurrentThreadId
+WM_KEYDOWN
+WM_KEYUP
+
+// ── win11_input.rs ──
+SendInput
+VIRTUAL_KEY
+CoCreateInstance
+CoInitializeEx
+CoUninitialize
+IUIAutomation
+IUIAutomationElement
+CUIAutomation
+
+// ── steam.rs mouse-nudge (enigo replacement) ──
+SetCursorPos
+
+// ── keep-awake (new feature; no Rust source) ──
+SetThreadExecutionState
