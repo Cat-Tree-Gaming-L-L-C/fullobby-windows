@@ -672,16 +672,22 @@ public sealed class SeedingEngine : IDisposable
     {
         ClearStopForNewSession();
         CancelLaunchWatcher();
-        _keepAwake.Acquire();
 
         if (_process.IsGameRunning(_currentGame))
         {
+            // The monitor will run against the already-running game, so keep the system awake.
+            _keepAwake.Acquire();
             _log.LogInformation("HLL is already running, exiting start_seeding ({Region})", region);
             return serverNumber;
         }
 
+        // Resolve the server BEFORE acquiring keep-awake: a no-server throw here would otherwise leak
+        // the SetThreadExecutionState hold (this method throws past MonitorSeed's release finally).
         var server = _servers.GetServerByRegion(region, serverNumber)
             ?? throw new SeedingException($"No server at {region}:{serverNumber}");
+
+        // Committed to launching — hold the system awake (released on monitor exit / stop / cleanup).
+        _keepAwake.Acquire();
 
         try
         {
@@ -726,9 +732,14 @@ public sealed class SeedingEngine : IDisposable
         }
         finally
         {
-            // Mirror the Rust do_monitor_seed cleanup: restore the user's real settings (this also
-            // resets the efficiency-applied flag so it can re-apply on the next seed) and drop the
-            // keep-awake hold. Both are idempotent, so any monitor-exit path lands clean.
+            // Always restore the user's real settings (this also resets the efficiency-applied flag
+            // so it can re-apply on the next seed) and drop the keep-awake hold. Both are idempotent.
+            // NOTE: this is a DELIBERATE divergence from Rust's monitor_seed_impl, which defers the
+            // restore to the stop/launch-watcher callers. Every monitor return here is a terminal
+            // path with the game already killed (switch-kill, HLL-closed, stop) or about to be, so
+            // restoring eagerly is strictly safer — it can never leave HLL on degraded graphics
+            // settings between a switch-kill and the next launch. A Seed-All rotation simply
+            // re-applies efficiency on the next hop.
             _backup.RestoreAfterSeeding();
             _keepAwake.Release();
         }

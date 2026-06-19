@@ -9,6 +9,28 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,12">
             <StackPanel Spacing="8">
 
+                <!-- Live-feed connectivity indicator + manual reconnect (stats still poll over HTTP
+                     while the SSE stream is down). Port of the seed_banner Live dot + reconnect_button. -->
+                <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                    <Ellipse
+                        Width="8" Height="8"
+                        VerticalAlignment="Center"
+                        Fill="{ThemeResource SystemFillColorSuccessBrush}"
+                        Visibility="{x:Bind ViewModel.SseConnected, Mode=OneWay, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock
+                        Text="{x:Bind ViewModel.ConnectionStatusText, Mode=OneWay}"
+                        FontSize="11"
+                        Opacity="0.7"
+                        VerticalAlignment="Center" />
+                    <HyperlinkButton
+                        Content="Reconnect"
+                        FontSize="11"
+                        Padding="4,0"
+                        VerticalAlignment="Center"
+                        Command="{x:Bind ViewModel.ReconnectCommand}"
+                        Visibility="{x:Bind ViewModel.ShowReconnect, Mode=OneWay, Converter={StaticResource BoolToVis}}" />
+                </StackPanel>
+
                 <!-- Status banner (shared seeding lifecycle) -->
                 <Border
                     Visibility="{x:Bind ViewModel.ShowStatusBanner, Mode=OneWay, Converter={StaticResource BoolToVis}}"
@@ -247,7 +269,7 @@
                 VerticalAlignment="Center">
                 <StackPanel Spacing="10" HorizontalAlignment="Center">
                     <TextBlock
-                        Text="{x:Bind ViewModel.ServerSwitchTitle, Mode=OneWay}"
+                        Text="{x:Bind ViewModel.ServerSwitchHeading, Mode=OneWay}"
                         FontWeight="SemiBold"
                         FontSize="16"
                         HorizontalAlignment="Center" />

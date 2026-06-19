@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using ChllSeeding.App.Services;
+using ChllSeeding.Core;
 using ChllSeeding.Core.Api;
 using ChllSeeding.Core.Bootstrap;
 using ChllSeeding.Core.Config;
@@ -35,6 +36,7 @@ public sealed partial class SeedingViewModel : ObservableObject
     private readonly ToastService _toast;
     private readonly InAppToastService _inAppToast;
     private readonly AutoSeedState _autoSeedState;
+    private readonly SseConnectionState _sseState;
     private readonly DispatcherQueue _dispatcher;
     private readonly DispatcherTimer _timer;
 
@@ -63,7 +65,8 @@ public sealed partial class SeedingViewModel : ObservableObject
         HeartbeatService heartbeat,
         ToastService toast,
         InAppToastService inAppToast,
-        AutoSeedState autoSeedState)
+        AutoSeedState autoSeedState,
+        SseConnectionState sseState)
     {
         _log = log;
         _engine = engine;
@@ -77,6 +80,7 @@ public sealed partial class SeedingViewModel : ObservableObject
         _toast = toast;
         _inAppToast = inAppToast;
         _autoSeedState = autoSeedState;
+        _sseState = sseState;
 
         // Constructed on the UI thread (first page resolve), so this captures the UI queue.
         _dispatcher = DispatcherQueue.GetForCurrentThread();
@@ -176,10 +180,17 @@ public sealed partial class SeedingViewModel : ObservableObject
     private bool serverSwitchActive;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ServerSwitchHeading))]
     private bool serverSwitchSnoozed;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ServerSwitchHeading))]
     private string serverSwitchTitle = "";
+
+    /// <summary>Overlay heading: the snoozed state gets its own title ("Server Switch Snoozed"),
+    /// otherwise the reason-derived <see cref="ServerSwitchTitle"/>. Mirrors the Rust seed.rs overlay,
+    /// which swaps to a distinct snoozed layout/heading.</summary>
+    public string ServerSwitchHeading => ServerSwitchSnoozed ? "Server Switch Snoozed" : ServerSwitchTitle;
 
     [ObservableProperty]
     private string serverSwitchServerName = "";
@@ -197,6 +208,29 @@ public sealed partial class SeedingViewModel : ObservableObject
 
     [ObservableProperty]
     private string autoseedCountdownText = "";
+
+    // Connectivity to the live SSE feed, polled from SseConnectionState on the 1s timer. The UI
+    // shows a "Live" indicator while connected and a Reconnect affordance when it's down (stats
+    // still update via the HTTP poll fallback meanwhile). Port of the seed_banner Live/Disconnected
+    // dot + reconnect_button.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowReconnect))]
+    [NotifyPropertyChangedFor(nameof(ConnectionStatusText))]
+    private bool sseConnected;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowReconnect))]
+    [NotifyPropertyChangedFor(nameof(ConnectionStatusText))]
+    private int connectionFailures;
+
+    /// <summary>Show the Reconnect button only when the stream is down after a real failure (avoids a
+    /// flash during the first connect, where failures is still 0).</summary>
+    public bool ShowReconnect => !SseConnected && ConnectionFailures > 0;
+
+    /// <summary>Live-feed indicator label.</summary>
+    public string ConnectionStatusText => SseConnected
+        ? "Live"
+        : (ConnectionFailures > 0 ? "Reconnecting…" : "Connecting…");
 
     public ObservableCollection<ServerRow> NaServers { get; } = [];
     public ObservableCollection<ServerRow> EuServers { get; } = [];
@@ -649,6 +683,14 @@ public sealed partial class SeedingViewModel : ObservableObject
                 return;
             }
 
+            // Desktop notification before the countdown so a user away from the keyboard gets a
+            // warning before the game launches. Port of run_autoseed's show_notification — Rust only
+            // shows it for NA (run_autoseed("na", true) vs ("eu", false)).
+            if (region != "eu")
+            {
+                _toast.Show(Branding.ProductName, "Auto-seed starting in 60 seconds. Click to cancel.");
+            }
+
             // 60s countdown the user can cancel.
             AutoseedCountdownActive = true;
             for (var i = 60; i > 0; i--)
@@ -884,6 +926,11 @@ public sealed partial class SeedingViewModel : ObservableObject
     [RelayCommand]
     private Task RetryServersAsync() => _bootstrap.LoadServersAsync();
 
+    /// <summary>Manually drop and re-establish the live SSE connection. Port of the reconnect button's
+    /// request_reconnect().</summary>
+    [RelayCommand]
+    private void Reconnect() => _sseState.RequestReconnect();
+
     // ── Server-switch overlay commands ─────────────────────────────────────────
 
     [RelayCommand]
@@ -963,11 +1010,15 @@ public sealed partial class SeedingViewModel : ObservableObject
     private void ShowSwitchOverlay(SeedingEvent.ServerSwitchPending p)
     {
         ServerSwitchServerName = p.ServerName;
+        // Title-by-reason mirrors the Rust seed.rs mapping exactly: candidate_changed → "Server
+        // Switching", server_full → "Server is Full", anything else (incl. time_limit) → "Time
+        // Limit Reached". (The engine currently emits only candidate_changed/time_limit, but the
+        // full mapping keeps parity if server_full is ever emitted.)
         ServerSwitchTitle = p.Reason switch
         {
             "candidate_changed" => "Server Switching",
-            "time_limit" => "Time Limit Reached",
-            _ => "Server Switching",
+            "server_full" => "Server is Full",
+            _ => "Time Limit Reached",
         };
         _switchCountdown = p.CountdownSecs;
         ServerSwitchSnoozed = false;
@@ -1043,6 +1094,10 @@ public sealed partial class SeedingViewModel : ObservableObject
 
     private void OnTimerTick(object? sender, object e)
     {
+        // Mirror the live SSE connection state into observable UI props (cheap, once a second).
+        SseConnected = _sseState.Connected;
+        ConnectionFailures = _sseState.FailureCount;
+
         if (SplashBypassActive && _splashRemaining > 0)
         {
             _splashRemaining--;

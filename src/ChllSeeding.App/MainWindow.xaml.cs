@@ -3,7 +3,9 @@ using ChllSeeding.App.Services;
 using ChllSeeding.App.ViewModels;
 using ChllSeeding.Core;
 using ChllSeeding.Core.Config;
+using ChllSeeding.Core.Seeding;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Windowing;
@@ -192,6 +194,19 @@ public sealed partial class MainWindow : Window
         try
         {
             _config.FlushPendingSaves();
+
+            // End any open seeding session BEFORE relaunch, like the Rust stop_heartbeat_sync — so
+            // the new instance doesn't briefly overlap an old, still-open session. The window-close
+            // path also stops it, but doing it here gives the stop the full 2s relaunch delay to land.
+            try
+            {
+                App.AppHost.Services.GetRequiredService<HeartbeatService>().StopFireAndForget("app_restart");
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Heartbeat stop on restart failed");
+            }
+
             var exe = Environment.ProcessPath;
             if (exe is not null)
             {
@@ -209,6 +224,17 @@ public sealed partial class MainWindow : Window
 
         _forceQuit = true;
         Close();
+
+        // Hard-exit safety net (port of restart_app's sleep(3) + process::exit(0)): if the normal
+        // close/host-shutdown path hangs, force the process down so the relaunched instance — which
+        // starts after the 2s timeout — doesn't redirect back into this dying one. No-op if we
+        // already exited cleanly (this task dies with the process).
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+            Log.Warning("Restart: clean shutdown didn't exit in time, forcing process exit");
+            Environment.Exit(0);
+        });
     }
 
     private void Toast_Closed(InfoBar sender, InfoBarClosedEventArgs args)

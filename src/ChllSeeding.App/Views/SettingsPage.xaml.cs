@@ -288,12 +288,25 @@ public sealed partial class SettingsPage : Page
 
     // ── Settings toggles ────────────────────────────────────────────────────
 
-    private void EuServersToggle_Toggled(object sender, RoutedEventArgs e)
+    private async void EuServersToggle_Toggled(object sender, RoutedEventArgs e)
     {
         if (_loading)
         {
             return;
         }
+
+        // Block disabling EU while an EU auto-seed task still exists — otherwise the CHLL-Seeding-EU
+        // scheduled task keeps firing for a region the app no longer seeds. Port of settings.rs:347-378.
+        if (!EuServersToggle.IsOn && await _autoseed.IsEuInstalledAsync())
+        {
+            await AlertAsync("EU Auto-Seed Active",
+                "Please remove the EU auto-seed scheduled task before disabling EU seeding.");
+            _loading = true;
+            EuServersToggle.IsOn = true; // revert
+            _loading = false;
+            return;
+        }
+
         _config.SetString("eu_enabled", EuServersToggle.IsOn ? "true" : "false");
     }
 

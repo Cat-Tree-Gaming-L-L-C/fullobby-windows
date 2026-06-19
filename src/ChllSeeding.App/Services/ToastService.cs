@@ -73,6 +73,24 @@ public sealed class ToastService
         }
     }
 
+    /// <summary>Show a plain title/body desktop toast (no sound). Port of the generic
+    /// <c>platform::notification::show_notification</c> used by, e.g., the auto-seed countdown.</summary>
+    public void Show(string title, string body)
+    {
+        try
+        {
+            var notification = new AppNotificationBuilder()
+                .AddText(title)
+                .AddText(body)
+                .BuildNotification();
+            AppNotificationManager.Default.Show(notification);
+        }
+        catch (Exception e)
+        {
+            _log.LogWarning(e, "Failed to show notification");
+        }
+    }
+
     /// <summary>Windows "exclamation" chime — exact parity with the Rust MessageBeep call.</summary>
     public void PlayAttentionSound()
     {
