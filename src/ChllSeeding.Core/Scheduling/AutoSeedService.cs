@@ -55,6 +55,14 @@ public sealed class AutoSeedService
             throw new InvalidOperationException($"Failed to create the {region.ToUpperInvariant()} scheduled task.");
         }
 
+        // Re-query to confirm the task actually registered — schtasks can report success on /create
+        // yet leave nothing queryable. Port of the post-create verification in autoseed.rs:40-54.
+        if (!await _tasks.IsInstalledAsync(slot.TaskName, ct).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException(
+                $"The {region.ToUpperInvariant()} scheduled task could not be verified after creation. Please try again.");
+        }
+
         var localDisplay = AutoSeedTime.UtcToLocalDisplay(h, m);
         var message = $"Daily {region.ToUpperInvariant()} auto-seed is set up for {normalizedUtc} UTC " +
                       $"({localDisplay} your time). Your computer will wake from sleep to seed.";

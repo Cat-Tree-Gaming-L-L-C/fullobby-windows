@@ -168,7 +168,7 @@ public sealed class ManualBackupService
             ct.ThrowIfCancellationRequested();
 
             // Containment + symlink guards (TOCTOU mitigation, mirrors the Rust restore).
-            if (!Path.GetFullPath(filePath).StartsWith(backupFull, StringComparison.OrdinalIgnoreCase))
+            if (!IsWithin(filePath, backupFull))
             {
                 continue;
             }
@@ -179,7 +179,7 @@ public sealed class ManualBackupService
 
             var fileName = Path.GetFileName(filePath);
             var targetPath = Path.Combine(destDir, fileName);
-            if (!Path.GetFullPath(targetPath).StartsWith(destFull, StringComparison.OrdinalIgnoreCase))
+            if (!IsWithin(targetPath, destFull))
             {
                 continue;
             }
@@ -197,6 +197,23 @@ public sealed class ManualBackupService
 
         _log.LogInformation("Restored {Count} config files from backup", restored);
         return restored;
+    }
+
+    /// <summary>True when <paramref name="path"/> is the directory itself or sits inside it. Uses a
+    /// separator-terminated prefix so a sibling sharing a name prefix (e.g. <c>…\HLLbackup</c> vs
+    /// <c>…\HLL</c>) can't pass the containment check. Lexical only — symlinked files are caught
+    /// separately by <see cref="IsSymlink"/>.</summary>
+    private static bool IsWithin(string path, string dirFull)
+    {
+        var full = Path.GetFullPath(path);
+        if (full.Equals(dirFull, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        var prefix = dirFull.EndsWith(Path.DirectorySeparatorChar)
+            ? dirFull
+            : dirFull + Path.DirectorySeparatorChar;
+        return full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
     }
 
     // ── Pure helpers (public/static for unit coverage) ─────────────────────────
