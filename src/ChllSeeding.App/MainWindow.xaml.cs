@@ -44,6 +44,13 @@ public sealed partial class MainWindow : Window
         Title = Branding.ProductName;
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "icon.ico"));
 
+        // Titlebar version string + debug-build badge (port of titlebar.rs version + the seed_banner
+        // DEV BUILD badge under debug_assertions).
+        VersionText.Text = $"v{typeof(App).Assembly.GetName().Version?.ToString(3)}";
+#if DEBUG
+        DevBadge.Visibility = Visibility.Visible;
+#endif
+
         // Frameless window: extend content into the titlebar, custom drag region
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);

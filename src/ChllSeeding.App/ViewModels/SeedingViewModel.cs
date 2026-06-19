@@ -49,6 +49,14 @@ public sealed partial class SeedingViewModel : ObservableObject
     /// Port of the Rust IS_SEED_ALL signal.</summary>
     private bool _isSeedAll;
 
+    // Anti-spam cooldowns (port of state::cooldown + SEED_ALL_COOLDOWN_SECS / SEED_REGION_COOLDOWN_SECS):
+    // Seed All gets a 30s cooldown after an "all full"/error no-op (where IsBusy is already back to
+    // Idle, so it wouldn't otherwise block a rapid re-click); region buttons get a 5s cooldown.
+    private const int SeedAllCooldownSecs = 30;
+    private const int SeedRegionCooldownSecs = 5;
+    private long _seedAllCooldownUntilMs;
+    private long _seedRegionCooldownUntilMs;
+
     /// <summary>Set by the hosting page (which has a XamlRoot) so the VM can ask the user to
     /// confirm closing a running game. Returns true when the user confirms.</summary>
     public Func<string, string, Task<bool>>? ConfirmAsync { get; set; }
@@ -232,6 +240,21 @@ public sealed partial class SeedingViewModel : ObservableObject
         ? "Live"
         : (ConnectionFailures > 0 ? "Reconnecting…" : "Connecting…");
 
+    // Seed All cooldown (reactive remaining seconds, ticked by the 1s timer). Mirrors the Rust
+    // SEED_ALL_COOLDOWN_REMAINING signal driving the "Retry in {n}s" button label.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSeedAll))]
+    [NotifyPropertyChangedFor(nameof(SeedAllButtonText))]
+    private int seedAllCooldownRemaining;
+
+    /// <summary>Seed All is clickable only when not in its post-no-op cooldown.</summary>
+    public bool CanSeedAll => SeedAllCooldownRemaining == 0;
+
+    /// <summary>Seed All button label: counts down during the cooldown, else "Seed All".</summary>
+    public string SeedAllButtonText => SeedAllCooldownRemaining > 0
+        ? $"Retry in {SeedAllCooldownRemaining}s"
+        : "Seed All";
+
     public ObservableCollection<ServerRow> NaServers { get; } = [];
     public ObservableCollection<ServerRow> EuServers { get; } = [];
 
@@ -364,6 +387,12 @@ public sealed partial class SeedingViewModel : ObservableObject
             await _bootstrap.LoadServersAsync().ConfigureAwait(true);
             return;
         }
+        // 5s anti-spam cooldown for repeated region clicks (port of seed_region cooldown).
+        if (Environment.TickCount64 < _seedRegionCooldownUntilMs)
+        {
+            return;
+        }
+        _seedRegionCooldownUntilMs = Environment.TickCount64 + SeedRegionCooldownSecs * 1000L;
 
         ClearSeedError();
         IsSeeding = true;
@@ -474,6 +503,11 @@ public sealed partial class SeedingViewModel : ObservableObject
             await _bootstrap.LoadServersAsync().ConfigureAwait(true);
             return;
         }
+        if (SeedAllCooldownRemaining > 0)
+        {
+            _inAppToast.Info($"Please wait {SeedAllCooldownRemaining}s before trying again.");
+            return;
+        }
 
         ClearSeedError();
         IsSeeding = true;
@@ -493,6 +527,7 @@ public sealed partial class SeedingViewModel : ObservableObject
         {
             _log.LogError(e, "Seed All: failed to fetch seeding status");
             _isSeedAll = false;
+            StartSeedAllCooldown(); // throttle rapid retries after an error (Rust seed.rs:521)
             SetSeedError("Couldn't reach the seeding service. Please try again.");
             return;
         }
@@ -500,6 +535,7 @@ public sealed partial class SeedingViewModel : ObservableObject
         if (hop is null)
         {
             _isSeedAll = false;
+            StartSeedAllCooldown(); // throttle rapid retries after "all full" (Rust seed.rs:473)
             SetSeedError("All servers are full or offline — no seeding needed.");
             return;
         }
@@ -766,6 +802,14 @@ public sealed partial class SeedingViewModel : ObservableObject
             AutoseedCountdownActive = false;
             _autoSeedState.End();
         }
+    }
+
+    /// <summary>Start the 30s Seed All cooldown (after an "all full"/error no-op). Port of
+    /// set_seed_all_cooldown.</summary>
+    private void StartSeedAllCooldown()
+    {
+        _seedAllCooldownUntilMs = Environment.TickCount64 + SeedAllCooldownSecs * 1000L;
+        SeedAllCooldownRemaining = SeedAllCooldownSecs;
     }
 
     /// <summary>Cancel an in-progress auto-seed countdown.</summary>
@@ -1100,6 +1144,13 @@ public sealed partial class SeedingViewModel : ObservableObject
         // Mirror the live SSE connection state into observable UI props (cheap, once a second).
         SseConnected = _sseState.Connected;
         ConnectionFailures = _sseState.FailureCount;
+
+        // Tick the Seed All cooldown down to 0 (drives the "Retry in {n}s" button label).
+        if (SeedAllCooldownRemaining > 0)
+        {
+            var remain = _seedAllCooldownUntilMs - Environment.TickCount64;
+            SeedAllCooldownRemaining = remain > 0 ? (int)Math.Ceiling(remain / 1000.0) : 0;
+        }
 
         if (SplashBypassActive && _splashRemaining > 0)
         {

@@ -210,12 +210,14 @@
                         Command="{x:Bind ViewModel.SeedNaCommand}"
                         Visibility="{x:Bind ViewModel.EuEnabled, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
 
-                    <!-- Seed All: rotate across every server/region (and game) until all are seeded -->
+                    <!-- Seed All: rotate across every server/region (and game) until all are seeded.
+                         Disabled with a "Retry in Ns" label during the post-no-op cooldown. -->
                     <Button
-                        Content="Seed All"
+                        Content="{x:Bind ViewModel.SeedAllButtonText, Mode=OneWay}"
                         Height="44"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
+                        IsEnabled="{x:Bind ViewModel.CanSeedAll, Mode=OneWay}"
                         Command="{x:Bind ViewModel.SeedAllCommand}" />
                 </StackPanel>
 
