@@ -24,10 +24,16 @@ public sealed class AuthHandler(AuthSession session, AuthRefresher refresher, IL
         // Auto-refresh on 401, only when we have a refresh token (i.e. JWT auth).
         if (response.StatusCode == HttpStatusCode.Unauthorized && session.RefreshToken is not null)
         {
-            response.Dispose();
             log.LogDebug("401 received, attempting token refresh and retry");
-            await refresher.RefreshAsync(token, cancellationToken).ConfigureAwait(false);
+            var refreshed = await refresher.RefreshAsync(token, cancellationToken).ConfigureAwait(false);
+            if (!refreshed)
+            {
+                // Refresh failed (tokens cleared) — surface the original 401 instead of firing a
+                // second, now-unauthenticated request. Mirrors client.rs, which only retries on Ok.
+                return response;
+            }
 
+            response.Dispose();
             var retry = await CloneAsync(request).ConfigureAwait(false);
             AuthHeaders.Apply(retry, session.Token, session.ApiKey);
             return await base.SendAsync(retry, cancellationToken).ConfigureAwait(false);

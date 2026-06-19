@@ -317,7 +317,11 @@ public sealed class ConfigService
                 _log.LogWarning("Failed to start icacls");
                 return false;
             }
+            // Drain BOTH redirected streams before waiting: icacls writes a "Successfully processed
+            // N files" line to stdout, and reading only stderr can deadlock if stdout fills its pipe.
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
             var stderr = proc.StandardError.ReadToEnd();
+            stdoutTask.GetAwaiter().GetResult();
             proc.WaitForExit();
             if (proc.ExitCode != 0)
             {

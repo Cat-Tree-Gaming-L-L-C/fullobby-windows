@@ -789,8 +789,11 @@ public sealed partial class SeedingViewModel : ObservableObject
         try
         {
             var analytics = Analytics.Gather(_config, autoSeed);
+            // Forward the first linked Steam ID (persisted by the account VM) like Rust's run_autoseed
+            // / start-session, which reads linked_steam_ids[0]. Null when no Steam account is linked.
+            var steamId = _config.Get<List<string>>("linked_steam_ids")?.FirstOrDefault();
             var resp = await _api.StartSessionAsync(
-                _engine.CurrentGame.Id, region, index, steamId: null, analytics).ConfigureAwait(true);
+                _engine.CurrentGame.Id, region, index, steamId, analytics).ConfigureAwait(true);
             _sessionId = resp.SessionId;
             await _heartbeat.StartAsync(resp.SessionId).ConfigureAwait(true);
         }
