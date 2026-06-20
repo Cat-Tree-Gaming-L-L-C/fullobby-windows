@@ -91,6 +91,21 @@
     <Color x:Key="SystemAccentColorDark2">#FF96791D</Color>
     <Color x:Key="SystemAccentColorDark3">#FF7A6217</Color>
 
+    <!-- Semantic accents for data-driven UI (leaderboard medals, session badges).
+         Theme-agnostic on purpose — these mirror the Rust daisyUI semantic colors,
+         which are constant across themes, and are tuned to read on both the near-black
+         dark surfaces and the light surfaces. Defined at the dictionary root (not in a
+         theme dictionary) so value converters can resolve them via Application.Resources.
+         Top-3 medal text: gold / silver / bronze. -->
+    <SolidColorBrush x:Key="BrandRank1Brush" Color="#FFC9A227" />
+    <SolidColorBrush x:Key="BrandRank2Brush" Color="#FF9AA1AB" />
+    <SolidColorBrush x:Key="BrandRank3Brush" Color="#FFB87333" />
+
+    <!-- Session-status badge fills (white text sits on these). -->
+    <SolidColorBrush x:Key="BrandBadgeSuccessBrush" Color="#FF3E8E3A" />
+    <SolidColorBrush x:Key="BrandBadgeInfoBrush" Color="#FF3B7FC4" />
+    <SolidColorBrush x:Key="BrandBadgeWarningBrush" Color="#FFB7861F" />
+
     <ResourceDictionary.ThemeDictionaries>
 
         <!-- ===== DARK (default) ====================================================== -->

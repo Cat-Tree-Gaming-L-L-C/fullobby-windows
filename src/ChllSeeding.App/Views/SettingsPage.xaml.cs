@@ -283,7 +283,22 @@ public sealed partial class SettingsPage : Page
         {
             return;
         }
-        await Account.SetShowOnLeaderboardAsync(LeaderboardToggle.IsOn);
+        LeaderboardSpinner.Visibility = Visibility.Visible;
+        LeaderboardToggle.IsEnabled = false;
+        try
+        {
+            await Account.SetShowOnLeaderboardAsync(LeaderboardToggle.IsOn);
+        }
+        finally
+        {
+            // Re-seed from VM state so a failed update reverts the toggle (the API call leaves
+            // User unchanged on error), mirroring the Rust toggle bound directly to USER.
+            _loading = true;
+            LeaderboardToggle.IsOn = Account.ShowOnLeaderboard;
+            _loading = false;
+            LeaderboardToggle.IsEnabled = true;
+            LeaderboardSpinner.Visibility = Visibility.Collapsed;
+        }
     }
 
     // ── Settings toggles ────────────────────────────────────────────────────
@@ -295,19 +310,29 @@ public sealed partial class SettingsPage : Page
             return;
         }
 
-        // Block disabling EU while an EU auto-seed task still exists — otherwise the CHLL-Seeding-EU
-        // scheduled task keeps firing for a region the app no longer seeds. Port of settings.rs:347-378.
-        if (!EuServersToggle.IsOn && await _autoseed.IsEuInstalledAsync())
+        EuSpinner.Visibility = Visibility.Visible;
+        EuServersToggle.IsEnabled = false;
+        try
         {
-            await AlertAsync("EU Auto-Seed Active",
-                "Please remove the EU auto-seed scheduled task before disabling EU seeding.");
-            _loading = true;
-            EuServersToggle.IsOn = true; // revert
-            _loading = false;
-            return;
-        }
+            // Block disabling EU while an EU auto-seed task still exists — otherwise the CHLL-Seeding-EU
+            // scheduled task keeps firing for a region the app no longer seeds. Port of settings.rs:347-378.
+            if (!EuServersToggle.IsOn && await _autoseed.IsEuInstalledAsync())
+            {
+                await AlertAsync("EU Auto-Seed Active",
+                    "Please remove the EU auto-seed scheduled task before disabling EU seeding.");
+                _loading = true;
+                EuServersToggle.IsOn = true; // revert
+                _loading = false;
+                return;
+            }
 
-        _config.SetString("eu_enabled", EuServersToggle.IsOn ? "true" : "false");
+            _config.SetString("eu_enabled", EuServersToggle.IsOn ? "true" : "false");
+        }
+        finally
+        {
+            EuServersToggle.IsEnabled = true;
+            EuSpinner.Visibility = Visibility.Collapsed;
+        }
     }
 
     private void DarkModeToggle_Toggled(object sender, RoutedEventArgs e)

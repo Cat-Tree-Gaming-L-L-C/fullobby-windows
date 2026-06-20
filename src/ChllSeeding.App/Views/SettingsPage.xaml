@@ -115,16 +115,23 @@
                     <TextBlock Text="Show on Leaderboard" />
                     <TextBlock Text="Appear in public rankings" FontSize="12" Opacity="0.5" />
                 </StackPanel>
-                <ToggleSwitch x:Name="LeaderboardToggle" HorizontalAlignment="Right" Toggled="LeaderboardToggle_Toggled" />
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <ProgressRing x:Name="LeaderboardSpinner" Width="16" Height="16" IsActive="True" Visibility="Collapsed" />
+                    <ToggleSwitch x:Name="LeaderboardToggle" Toggled="LeaderboardToggle_Toggled" />
+                </StackPanel>
             </Grid>
 
             <!-- ── Settings ────────────────────────────────────────────── -->
             <TextBlock Text="Settings" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
 
-            <ToggleSwitch
-                x:Name="EuServersToggle"
-                Header="Enable EU Servers"
-                Toggled="EuServersToggle_Toggled" />
+            <Grid>
+                <ToggleSwitch
+                    x:Name="EuServersToggle"
+                    Header="Enable EU Servers"
+                    Toggled="EuServersToggle_Toggled" />
+                <ProgressRing x:Name="EuSpinner" Width="16" Height="16" IsActive="True"
+                              Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Center" />
+            </Grid>
 
             <ToggleSwitch
                 x:Name="DarkModeToggle"
