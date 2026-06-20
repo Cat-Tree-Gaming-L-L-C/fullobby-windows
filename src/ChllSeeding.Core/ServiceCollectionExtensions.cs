@@ -7,6 +7,7 @@ using ChllSeeding.Core.Scheduling;
 using ChllSeeding.Core.Seeding;
 using ChllSeeding.Core.Servers;
 using ChllSeeding.Core.Tools;
+using ChllSeeding.Core.Update;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -35,6 +36,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<HllConfigBackupService>();
         services.AddSingleton<ManualBackupService>();
         services.AddSingleton<KeepAwake>();
+
+        // Self-updater (Phase 5): release check + installer download/verify/launch.
+        services.AddSingleton<UpdaterService>();
 
         // Automation & tools (Phase 4): startup registry + auto-seed scheduling.
         services.AddSingleton<StartupRegistry>();
@@ -87,6 +91,15 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient(SseStreamClient.ClientName, client =>
             {
                 client.Timeout = Timeout.InfiniteTimeSpan;
+                client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
+                client.DefaultRequestHeaders.Add("x-client-version", version);
+            });
+
+        // Updater client: unauthenticated (the release feed is public; downloads hit GitHub's CDN),
+        // with a long timeout to cover a large installer download. The size cap bounds the body.
+        services.AddHttpClient(UpdaterService.HttpClientName, client =>
+            {
+                client.Timeout = TimeSpan.FromMinutes(10);
                 client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
                 client.DefaultRequestHeaders.Add("x-client-version", version);
             });

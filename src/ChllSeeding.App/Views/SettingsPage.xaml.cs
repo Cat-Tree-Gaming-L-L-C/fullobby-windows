@@ -2,6 +2,7 @@ using ChllSeeding.App.ViewModels;
 using ChllSeeding.Core.Config;
 using ChllSeeding.Core.Platform;
 using ChllSeeding.Core.Scheduling;
+using ChllSeeding.Core.Update;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -15,6 +16,7 @@ public sealed partial class SettingsPage : Page
     private readonly MainWindow _window;
     private readonly StartupRegistry _startup;
     private readonly AutoSeedService _autoseed;
+    private readonly UpdaterService _updater;
 
     public AccountViewModel Account { get; }
 
@@ -27,6 +29,7 @@ public sealed partial class SettingsPage : Page
         _window = App.AppHost.Services.GetRequiredService<MainWindow>();
         _startup = App.AppHost.Services.GetRequiredService<StartupRegistry>();
         _autoseed = App.AppHost.Services.GetRequiredService<AutoSeedService>();
+        _updater = App.AppHost.Services.GetRequiredService<UpdaterService>();
         Account = App.AppHost.Services.GetRequiredService<AccountViewModel>();
         InitializeComponent();
     }
@@ -58,6 +61,7 @@ public sealed partial class SettingsPage : Page
         };
 
         StartupToggle.IsOn = _startup.IsEnabled();
+        BetaToggle.IsOn = _config.GetString("update_channel") == "beta";
         _loading = false;
 
         // Auto-seed task status comes from schtasks — load it off the UI thread.
@@ -405,5 +409,106 @@ public sealed partial class SettingsPage : Page
         {
             _config.SetString("splash_bypass_duration", tag);
         }
+    }
+
+    // ── Updates ─────────────────────────────────────────────────────────────
+
+    private void BetaToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading)
+        {
+            return;
+        }
+        _config.SetString("update_channel", BetaToggle.IsOn ? "beta" : "stable");
+    }
+
+    private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        var current = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+
+        UpdateSpinner.Visibility = Visibility.Visible;
+        CheckUpdatesButton.IsEnabled = false;
+        UpdateStatus.Text = "Checking for updates…";
+        try
+        {
+            UpdateInfo? info;
+            try
+            {
+                info = await _updater.CheckForUpdatesAsync(current, _config.GetString("update_channel"));
+            }
+            catch (Exception)
+            {
+                UpdateStatus.Text = "Update check failed";
+                await AlertAsync("Update Check Failed",
+                    "Couldn't reach the update server. Check your connection and try again.");
+                return;
+            }
+
+            if (info is null)
+            {
+                UpdateStatus.Text = $"You're up to date (v{current})";
+                await AlertAsync("Up to Date", $"You're running the latest version (v{current}).");
+                return;
+            }
+
+            UpdateStatus.Text = $"Update available: v{info.Version}";
+            if (!await ConfirmUpdateAsync(info))
+            {
+                return;
+            }
+
+            UpdateStatus.Text = "Downloading update…";
+            string installerPath;
+            try
+            {
+                installerPath = await _updater.DownloadAndVerifyAsync(info);
+                _updater.LaunchInstaller(installerPath);
+            }
+            catch (Exception)
+            {
+                UpdateStatus.Text = "Update failed";
+                await AlertAsync("Update Failed",
+                    "The update couldn't be downloaded or verified. Please try again later.");
+                return;
+            }
+
+            // Installer is running — shut down so it can replace the running exe.
+            _window.QuitForUpdate();
+        }
+        finally
+        {
+            UpdateSpinner.Visibility = Visibility.Collapsed;
+            CheckUpdatesButton.IsEnabled = true;
+        }
+    }
+
+    /// <summary>Show the "update available" prompt with release notes; true if the user accepts.</summary>
+    private async Task<bool> ConfirmUpdateAsync(UpdateInfo info)
+    {
+        var content = new StackPanel { Spacing = 8 };
+        content.Children.Add(new TextBlock
+        {
+            Text = "A new version is available. Download and install it now? The app will close to apply the update.",
+            TextWrapping = TextWrapping.Wrap,
+        });
+        if (info.Notes.Length > 0)
+        {
+            content.Children.Add(new ScrollViewer
+            {
+                MaxHeight = 200,
+                Content = new TextBlock { Text = info.Notes, TextWrapping = TextWrapping.Wrap, FontSize = 12, Opacity = 0.8 },
+            });
+        }
+
+        var dialog = new ContentDialog
+        {
+            Title = $"Update Available: v{info.Version}",
+            Content = content,
+            PrimaryButtonText = "Update Now",
+            CloseButtonText = "Later",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+        return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
 }

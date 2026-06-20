@@ -210,18 +210,25 @@
                 </StackPanel>
             </Grid>
 
-            <!-- ── Coming in a later phase (disabled stubs) ────────────── -->
+            <!-- ── Updates ─────────────────────────────────────────────── -->
             <TextBlock Text="Updates" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
-            <TextBlock Text="Self-update arrives in a later phase." FontSize="12" Opacity="0.5" />
 
             <Grid>
                 <StackPanel>
-                    <TextBlock Text="Updates" />
-                    <TextBlock Text="Check for updates / beta channel" FontSize="12" Opacity="0.5" />
+                    <TextBlock Text="App Updates" />
+                    <TextBlock x:Name="UpdateStatus" Text="Check for the latest version" FontSize="12" Opacity="0.5" />
                 </StackPanel>
-                <Button Content="Check for Updates" HorizontalAlignment="Right" IsEnabled="False" />
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <ProgressRing x:Name="UpdateSpinner" Width="16" Height="16" IsActive="True" Visibility="Collapsed" />
+                    <Button x:Name="CheckUpdatesButton" Content="Check for Updates" Click="CheckUpdates_Click" />
+                </StackPanel>
             </Grid>
-            <ToggleSwitch Header="Beta Updates" IsEnabled="False" />
+            <ToggleSwitch
+                x:Name="BetaToggle"
+                Header="Beta Updates"
+                OffContent="Stable releases only"
+                OnContent="Include beta (pre-release) updates"
+                Toggled="BetaToggle_Toggled" />
         </StackPanel>
     </ScrollViewer>
 </Page>
