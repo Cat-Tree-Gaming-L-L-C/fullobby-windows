@@ -1,0 +1,135 @@
+name: Release
+
+# Tag-driven release: push a semver tag (e.g. `v1.2.3`, or `v1.2.3-beta.1` for a
+# prerelease) and this builds + tests, publishes the self-contained app, builds the
+# Inno installer, optionally code-signs it, computes the SHA-256, and creates a
+# GitHub Release with the installer, its checksum, and an update manifest.
+#
+# The manifest (latest.json / latest-beta.json) matches the shape the in-app updater
+# reads from `/api/releases/latest` (UpdaterService): { version, download_url, notes,
+# sha256, signature }. The backend serves these — point the stable feed at latest.json
+# and `?channel=beta` at latest-beta.json. download_url is the GitHub release asset on
+# github.com, which is in the updater's trusted-domain allowlist.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build & publish release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need the tag object for the annotation message
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Resolve version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $ver = $tag -replace '^v',''            # 1.2.3  or  1.2.3-beta.1
+          $numeric = $ver.Split('-')[0]           # 1.2.3  (matches the runtime AssemblyVersion)
+          $pre = if ($ver.Contains('-')) { 'true' } else { 'false' }
+          $manifest = if ($pre -eq 'true') { 'latest-beta.json' } else { 'latest.json' }
+          "VERSION=$ver"                          >> $env:GITHUB_ENV
+          "APP_VERSION=$numeric"                  >> $env:GITHUB_ENV
+          "IS_PRERELEASE=$pre"                    >> $env:GITHUB_ENV
+          "MANIFEST_NAME=$manifest"               >> $env:GITHUB_ENV
+          "INSTALLER=CHLL-Seeding-Setup-$ver.exe" >> $env:GITHUB_ENV
+          Write-Host "Releasing $tag -> app version $numeric (prerelease: $pre)"
+
+      - name: Configure signing
+        shell: pwsh
+        env:
+          CERT: ${{ secrets.WINDOWS_CERT_BASE64 }}
+        run: |
+          # Code-signing is optional: it runs only when WINDOWS_CERT_BASE64 (+ password)
+          # secrets are configured, so the workflow still produces an (unsigned) release
+          # before a cert is set up.
+          if ($env:CERT) { "HAS_CERT=true" >> $env:GITHUB_ENV } else { "HAS_CERT=false" >> $env:GITHUB_ENV }
+
+      - name: Restore
+        run: dotnet restore src/ChllSeeding.sln
+
+      - name: Build (Release)
+        run: dotnet build src/ChllSeeding.sln -c Release --no-restore -p:Version=${{ env.VERSION }}
+
+      - name: Test
+        run: dotnet test src/ChllSeeding.Core.Tests -c Release --no-build
+
+      - name: Publish app (win-x64, self-contained)
+        run: >-
+          dotnet publish src/ChllSeeding.App -c Release -r win-x64 --self-contained true
+          -p:Platform=x64 -p:Version=${{ env.VERSION }} -o artifacts/publish
+
+      - name: Sign app executable
+        if: env.HAS_CERT == 'true'
+        shell: pwsh
+        env:
+          CERT: ${{ secrets.WINDOWS_CERT_BASE64 }}
+          CERT_PASS: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: ./scripts/sign.ps1 -File artifacts/publish/CHLLSeeding.exe
+
+      - name: Build installer (Inno Setup)
+        run: iscc /DAppVersion=${{ env.VERSION }} installer\ChllSeeding.iss
+
+      - name: Sign installer
+        if: env.HAS_CERT == 'true'
+        shell: pwsh
+        env:
+          CERT: ${{ secrets.WINDOWS_CERT_BASE64 }}
+          CERT_PASS: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: ./scripts/sign.ps1 -File "installer/Output/$env:INSTALLER"
+
+      - name: Checksum + update manifest
+        shell: pwsh
+        run: |
+          $file = "installer/Output/$env:INSTALLER"
+          if (-not (Test-Path $file)) { throw "Installer not found at $file" }
+
+          $hash = (Get-FileHash -Algorithm SHA256 $file).Hash.ToLower()
+          "$hash  $env:INSTALLER" | Out-File -Encoding ascii "${file}.sha256"
+
+          $download = "${{ github.server_url }}/${{ github.repository }}/releases/download/${{ github.ref_name }}/$env:INSTALLER"
+
+          # Release notes for the manifest come from the annotated tag message (if any).
+          $notes = (git tag -l --format='%(contents)' "${{ github.ref_name }}") -join "`n"
+          if (-not $notes) { $notes = "" }
+
+          $manifest = [ordered]@{
+            version      = $env:APP_VERSION
+            download_url = $download
+            notes        = $notes.Trim()
+            sha256       = $hash
+            signature    = $null
+          }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $manifest | ConvertTo-Json | Out-File -Encoding utf8 "dist/$env:MANIFEST_NAME"
+
+          Write-Host "SHA-256: $hash"
+          Get-Content "dist/$env:MANIFEST_NAME"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: CHLL Seeding ${{ env.VERSION }}
+          prerelease: ${{ env.IS_PRERELEASE }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            installer/Output/${{ env.INSTALLER }}
+            installer/Output/${{ env.INSTALLER }}.sha256
+            dist/${{ env.MANIFEST_NAME }}

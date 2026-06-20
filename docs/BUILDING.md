@@ -72,3 +72,52 @@ dotnet test src/ChllSeeding.Core.Tests
 - **Logs:** `%LOCALAPPDATA%\CHLLSeeding\logs`
 - **Solution:** `src/ChllSeeding.sln` (App, Core, Core.Tests)
 - **Deep-link protocol:** `chllseeding://` (OAuth callbacks)
+
+## Releasing
+
+Releases are tag-driven (`.github/workflows/release.yml`). Push a semver tag and the
+workflow builds + tests, publishes the self-contained app, builds the Inno installer,
+optionally code-signs it, computes the SHA-256, and creates a GitHub Release with the
+installer, its `.sha256`, and an update manifest.
+
+```powershell
+# stable
+git tag v1.2.3 -m "1.2.3 — <highlights>"
+git push origin v1.2.3
+
+# beta / prerelease (any tag with a -suffix → GitHub prerelease + latest-beta.json)
+git tag v1.2.3-beta.1 -m "1.2.3-beta.1"
+git push origin v1.2.3-beta.1
+```
+
+The tag version is injected into the build (`-p:Version`) so the app's runtime version
+matches the release. The numeric `X.Y.Z` (prerelease suffix stripped) is what
+`Assembly.GetName().Version.ToString(3)` reports and what the updater compares against —
+so the manifest's `version` field uses the numeric form.
+
+**Code signing** is optional and runs only when the repo secrets `WINDOWS_CERT_BASE64`
+(base64 of the `.pfx`) and `WINDOWS_CERT_PASSWORD` are set; `scripts/sign.ps1` signs the
+published exe and the installer via `signtool`. Until a cert is configured, releases are
+unsigned (SmartScreen will warn) and the manifest `signature` is `null`.
+
+### Update-feed contract (backend)
+
+The in-app updater (`Core.Update.UpdaterService`) reads `GET /api/releases/latest`
+(`?channel=beta` for the beta channel). The release workflow emits a manifest in exactly
+that shape as a release asset — `latest.json` (stable) / `latest-beta.json` (prerelease):
+
+```json
+{
+  "version": "1.2.3",
+  "download_url": "https://github.com/catalloc/chll-seeding-windows/releases/download/v1.2.3/CHLL-Seeding-Setup-1.2.3.exe",
+  "notes": "…annotated tag message…",
+  "sha256": "<lowercase hex>",
+  "signature": null
+}
+```
+
+The backend should serve the latest stable manifest at `/api/releases/latest` and the
+latest prerelease at `/api/releases/latest?channel=beta`. `download_url` points at the
+GitHub release asset (`github.com`), which is in the updater's trusted-domain allowlist
+(alongside `objects.githubusercontent.com` and the configured API host). A missing
+`sha256` makes the client **refuse** the download.
