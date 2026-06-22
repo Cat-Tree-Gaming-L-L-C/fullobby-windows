@@ -10,7 +10,7 @@ namespace ChllSeeding.Core.Tests;
 public class UpdateValidationTests
 {
     private static readonly string[] TrustedHosts =
-        { "seeding-api.comp-hll.org", "github.com", "objects.githubusercontent.com" };
+        { "seeding.comp-hll.org", "github.com", "objects.githubusercontent.com" };
 
     // ── ValidateInstallerExtension ──────────────────────────────────
 
@@ -120,7 +120,7 @@ public class UpdateValidationTests
     // ── ValidateDownloadUrl ─────────────────────────────────────────
 
     [Theory]
-    [InlineData("https://seeding-api.comp-hll.org/releases/v1.0.exe")]
+    [InlineData("https://seeding.comp-hll.org/releases/v1.0.exe")]
     [InlineData("https://github.com/org/repo/releases/download/v1/setup.exe")]
     [InlineData("https://objects.githubusercontent.com/path/to/file")]
     public void DownloadUrl_TrustedDomains(string url) =>
@@ -129,7 +129,7 @@ public class UpdateValidationTests
     [Fact]
     public void DownloadUrl_RejectsHttp()
     {
-        var error = UpdateValidation.ValidateDownloadUrl("http://seeding-api.comp-hll.org/file.exe", TrustedHosts);
+        var error = UpdateValidation.ValidateDownloadUrl("http://seeding.comp-hll.org/file.exe", TrustedHosts);
         Assert.NotNull(error);
         Assert.Contains("HTTPS", error);
     }
