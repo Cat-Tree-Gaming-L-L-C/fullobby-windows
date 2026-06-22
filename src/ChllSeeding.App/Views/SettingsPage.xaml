@@ -124,15 +124,6 @@
             <!-- ── Settings ────────────────────────────────────────────── -->
             <TextBlock Text="Settings" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
 
-            <Grid>
-                <ToggleSwitch
-                    x:Name="EuServersToggle"
-                    Header="Enable EU Servers"
-                    Toggled="EuServersToggle_Toggled" />
-                <ProgressRing x:Name="EuSpinner" Width="16" Height="16" IsActive="True"
-                              Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Center" />
-            </Grid>
-
             <ToggleSwitch
                 x:Name="DarkModeToggle"
                 Header="Dark Mode"
@@ -183,30 +174,18 @@
                 Toggled="StartupToggle_Toggled" />
 
             <TextBlock Text="Auto-Seed" Margin="0,4,0,0" />
-            <TextBlock Text="Schedule daily seeding via Task Scheduler. Times are entered in UTC; your PC wakes from sleep to seed."
+            <TextBlock Text="Seed automatically once a day. The wake time follows the server's seeding schedule (UTC); your PC wakes from sleep to seed."
                        FontSize="12" Opacity="0.5" TextWrapping="Wrap" />
 
-            <!-- NA auto-seed -->
+            <!-- Daily auto-seed (single task; the server decides what to seed) -->
             <Grid Margin="0,2,0,0">
                 <StackPanel>
-                    <TextBlock Text="NA daily seed" />
-                    <TextBlock x:Name="AutoseedNaStatus" Text="Not scheduled" FontSize="12" Opacity="0.5" />
+                    <TextBlock Text="Daily auto-seed" />
+                    <TextBlock x:Name="AutoseedStatus" Text="Not scheduled" FontSize="12" Opacity="0.5" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
-                    <Button x:Name="AutoseedNaSetup" Content="Set up" Click="AutoseedNaSetup_Click" />
-                    <Button x:Name="AutoseedNaRemove" Content="Remove" Visibility="Collapsed" Click="AutoseedNaRemove_Click" />
-                </StackPanel>
-            </Grid>
-
-            <!-- EU auto-seed -->
-            <Grid Margin="0,2,0,0">
-                <StackPanel>
-                    <TextBlock Text="EU daily seed" />
-                    <TextBlock x:Name="AutoseedEuStatus" Text="Not scheduled" FontSize="12" Opacity="0.5" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
-                    <Button x:Name="AutoseedEuSetup" Content="Set up" Click="AutoseedEuSetup_Click" />
-                    <Button x:Name="AutoseedEuRemove" Content="Remove" Visibility="Collapsed" Click="AutoseedEuRemove_Click" />
+                    <Button x:Name="AutoseedSetup" Content="Set up" Click="AutoseedSetup_Click" />
+                    <Button x:Name="AutoseedRemove" Content="Remove" Visibility="Collapsed" Click="AutoseedRemove_Click" />
                 </StackPanel>
             </Grid>
 

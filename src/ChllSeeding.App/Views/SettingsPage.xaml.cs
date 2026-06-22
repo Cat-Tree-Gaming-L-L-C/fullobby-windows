@@ -44,7 +44,6 @@ public sealed partial class SettingsPage : Page
     private void SeedControls()
     {
         _loading = true;
-        EuServersToggle.IsOn = _config.GetBool("eu_enabled");
         DarkModeToggle.IsOn = _window.IsDarkTheme;
         CloseToTrayToggle.IsOn = _config.GetBool("close_to_tray", true);
         SwitchNotificationToggle.IsOn = _config.GetBool("switch_notification", true);
@@ -103,102 +102,53 @@ public sealed partial class SettingsPage : Page
         try
         {
             var s = await _autoseed.GetStatusAsync();
-            UpdateAutoseedRow(s.NaInstalled, s.NaUtcTime, s.NaNextRun, AutoseedNaStatus, AutoseedNaSetup, AutoseedNaRemove);
-            UpdateAutoseedRow(s.EuInstalled, s.EuUtcTime, s.EuNextRun, AutoseedEuStatus, AutoseedEuSetup, AutoseedEuRemove);
+            if (s.Installed)
+            {
+                var text = s.UtcTime is not null ? $"Daily at {s.UtcTime} UTC" : "Scheduled";
+                if (!string.IsNullOrEmpty(s.NextRun))
+                {
+                    text += $" · next: {s.NextRun}";
+                }
+                AutoseedStatus.Text = text;
+                AutoseedSetup.Content = "Change";
+                AutoseedRemove.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                AutoseedStatus.Text = "Not scheduled";
+                AutoseedSetup.Content = "Set up";
+                AutoseedRemove.Visibility = Visibility.Collapsed;
+            }
         }
         catch (Exception)
         {
-            AutoseedNaStatus.Text = "Status unavailable";
-            AutoseedEuStatus.Text = "Status unavailable";
+            AutoseedStatus.Text = "Status unavailable";
         }
     }
 
-    private static void UpdateAutoseedRow(
-        bool installed, string? utc, string? nextRun, TextBlock status, Button setup, Button remove)
+    private void AutoseedSetup_Click(object sender, RoutedEventArgs e) => _ = SetupAutoseedAsync();
+
+    private void AutoseedRemove_Click(object sender, RoutedEventArgs e) => _ = RemoveAutoseedAsync();
+
+    private async Task SetupAutoseedAsync()
     {
-        if (installed)
-        {
-            var text = utc is not null ? $"Daily at {utc} UTC" : "Scheduled";
-            if (!string.IsNullOrEmpty(nextRun))
-            {
-                text += $" · next: {nextRun}";
-            }
-            status.Text = text;
-            setup.Content = "Change";
-            remove.Visibility = Visibility.Visible;
-        }
-        else
-        {
-            status.Text = "Not scheduled";
-            setup.Content = "Set up";
-            remove.Visibility = Visibility.Collapsed;
-        }
-    }
-
-    private void AutoseedNaSetup_Click(object sender, RoutedEventArgs e) => _ = SetupAutoseedAsync("na", "12:00");
-
-    private void AutoseedEuSetup_Click(object sender, RoutedEventArgs e) => _ = SetupAutoseedAsync("eu", "06:00");
-
-    private void AutoseedNaRemove_Click(object sender, RoutedEventArgs e) => _ = RemoveAutoseedAsync("na");
-
-    private void AutoseedEuRemove_Click(object sender, RoutedEventArgs e) => _ = RemoveAutoseedAsync("eu");
-
-    private async Task SetupAutoseedAsync(string region, string defaultUtc)
-    {
-        var label = region.ToUpperInvariant();
-        var localHint = AutoSeedTime.TryParseUtc(defaultUtc, out var h, out var m)
-            ? $"\n\n{defaultUtc} UTC = {AutoSeedTime.UtcToLocalDisplay(h, m)} your time."
-            : "";
-
-        var input = new TextBox { PlaceholderText = "HH:MM", Text = defaultUtc, MaxLength = 5 };
-        var dialog = new ContentDialog
-        {
-            Title = $"{label} Auto-Seed",
-            Content = new StackPanel
-            {
-                Spacing = 8,
-                Children =
-                {
-                    new TextBlock
-                    {
-                        Text = $"Enter the daily {label} seed time in UTC (24-hour HH:MM).{localHint}",
-                        TextWrapping = TextWrapping.Wrap,
-                    },
-                    input,
-                },
-            },
-            PrimaryButtonText = "Save",
-            CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = XamlRoot,
-        };
-
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
-        {
-            return;
-        }
-
         try
         {
-            var message = await _autoseed.SetupAsync(region, input.Text);
+            var message = await _autoseed.SetupAsync();
             await LoadAutoseedStatusAsync();
             await AlertAsync("Auto-Seed Setup", message);
         }
-        catch (FormatException)
-        {
-            await AlertAsync("Invalid Time", $"Please enter the time as HH:MM (e.g. {defaultUtc}).");
-        }
         catch (Exception)
         {
-            await AlertAsync("Error", $"Failed to set up the {label} auto-seed task. Check the logs for details.");
+            await AlertAsync("Error", "Failed to set up the auto-seed task. Check the logs for details.");
         }
     }
 
-    private async Task RemoveAutoseedAsync(string region)
+    private async Task RemoveAutoseedAsync()
     {
         try
         {
-            await _autoseed.UninstallAsync(region);
+            await _autoseed.UninstallAsync();
         }
         catch (Exception)
         {
@@ -306,38 +256,6 @@ public sealed partial class SettingsPage : Page
     }
 
     // ── Settings toggles ────────────────────────────────────────────────────
-
-    private async void EuServersToggle_Toggled(object sender, RoutedEventArgs e)
-    {
-        if (_loading)
-        {
-            return;
-        }
-
-        EuSpinner.Visibility = Visibility.Visible;
-        EuServersToggle.IsEnabled = false;
-        try
-        {
-            // Block disabling EU while an EU auto-seed task still exists — otherwise the CHLL-Seeding-EU
-            // scheduled task keeps firing for a region the app no longer seeds. Port of settings.rs:347-378.
-            if (!EuServersToggle.IsOn && await _autoseed.IsEuInstalledAsync())
-            {
-                await AlertAsync("EU Auto-Seed Active",
-                    "Please remove the EU auto-seed scheduled task before disabling EU seeding.");
-                _loading = true;
-                EuServersToggle.IsOn = true; // revert
-                _loading = false;
-                return;
-            }
-
-            _config.SetString("eu_enabled", EuServersToggle.IsOn ? "true" : "false");
-        }
-        finally
-        {
-            EuServersToggle.IsEnabled = true;
-            EuSpinner.Visibility = Visibility.Collapsed;
-        }
-    }
 
     private void DarkModeToggle_Toggled(object sender, RoutedEventArgs e)
     {

@@ -21,7 +21,7 @@ public sealed class LiveStats(ServerStore servers)
     {
         foreach (var s in stats)
         {
-            var server = servers.GetGameServer(s.Game, s.Region, s.Index);
+            var server = servers.GetServer(s.Game, s.Index);
             if (server is null)
             {
                 continue;

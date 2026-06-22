@@ -4,29 +4,42 @@ namespace ChllSeeding.MockApi;
 // PascalCase here → snake_case on the wire via the configured JsonNamingPolicy.SnakeCaseLower.
 // Kept as a standalone copy so the mock doesn't take a dependency on the net9.0-windows Core lib.
 
-public record ServerInfo(string Ip, string ShortName, string Name, int SeedingThreshold, string Game);
+public record ServerInfo(string Ip, long BmId, string ShortName, string Name, int SeedingThreshold, string Game);
 
 public record BatchStatsResult(
-    string Game, string Region, int Index, string? MapName,
+    string Game, int Index, string? MapName,
     int? PlayerCount, int? MaxPlayerCount, bool Offline, bool PasswordProtected, string? Error);
 
-public record RegionServers(List<ServerInfo> Na, List<ServerInfo> Eu);
-public record ServersResponse(RegionServers Hll, RegionServers? Hllv, long CachedAt);
+// One ordered rotation per game (region removed).
+public record ServersResponse(List<ServerInfo> Hll, List<ServerInfo>? Hllv, long CachedAt);
 
-public record RegionCandidate(string Game, int Index, ServerInfo Server);
-public record GameSeedingStatus(RegionCandidate? Na, RegionCandidate? Eu);
-public record SeedingStatusResponse(GameSeedingStatus Hll, GameSeedingStatus? Hllv, long UpdatedAt);
+public record SeedingCandidate(string Game, int Index, ServerInfo Server, long DbId);
+public record SeedingStatusResponse(SeedingCandidate? Hll, SeedingCandidate? Hllv, long UpdatedAt);
 
 public record RegisterResponse(string UserId, string ApiKey, string Username, string DisplayName);
 public record AuthRefreshResponse(string Token, string RefreshToken);
 
-public record NextServerRequest(
-    string Game, string CurrentRegion, int CurrentIndex, bool EuEnabled, string Reason, string? SteamId);
-public record NextServerResponse(
-    string Game, string Region, int Index, ServerInfo Server, bool AllExhausted, string? SessionId);
+// ── Seeding config + directive (server-decided rotation/timing) ────────────────
+
+public record TimeWindow(int StartMin, int EndMin);
+
+public record SeedingConfig(
+    int StaggerMaxSecs, int StaggerJitterSecs, int SwitchCountdownSecs, int SnoozeMinSecs, int SnoozeMaxSecs,
+    int MaxSessionSecs, int MonitorMinSecs, int MonitorMaxSecs, int MonitorBackoffStepSecs, int HeartbeatSecs,
+    int PollFallbackSecs, int PollIdleSecs, int DefaultSeedingThreshold, int SseKeepaliveSecs, int SseBackoffCapSecs,
+    int CacheStaleSecs, List<int> GameOpenRetrySecs, int GameOpenTimeoutSecs, int SplashBypassSecs,
+    int MissedAutoseedWindowHours, List<TimeWindow> ActiveWindows, int DailyResetHourUtc);
+
+public record DirectiveTarget(string Game, int Index, ServerInfo Server, long DbId);
+
+// action: "seed" | "switch" | "stay" | "stop" (lowercase on the wire).
+public record SeedingDirective(
+    string Action, DirectiveTarget? Target, bool AllExhausted, bool ScheduledPause, int? NextActiveInSecs,
+    int StaggerSecs, int CountdownSecs, int SnoozeMinSecs, int SnoozeMaxSecs, int PollAgainInSecs,
+    int MaxSessionSecs, SeedingConfig Config);
 
 public record StartSessionRequest(
-    string Game, string Region, int Index, string? SteamId,
+    string Game, int Index, string? SteamId,
     string? OsVersion, string? OsArch, bool? EfficiencyMode, bool? EuEnabled, bool? AutoSeed);
 public record StartSessionResponse(string SessionId);
 

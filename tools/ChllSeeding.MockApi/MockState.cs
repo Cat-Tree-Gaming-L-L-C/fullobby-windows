@@ -7,10 +7,9 @@ namespace ChllSeeding.MockApi;
 /// <summary>A single SSE frame to push to subscribers.</summary>
 public sealed record SseMessage(string Event, string Data);
 
-/// <summary>Mutable per-server state the scenarios drive.</summary>
+/// <summary>Mutable per-server state the scenarios drive (single ordered rotation; region removed).</summary>
 public sealed class ServerState
 {
-    public required string Region { get; init; }
     public required int Index { get; init; }
     public required ServerInfo Info { get; set; }
     public string? MapName { get; set; } = "Foy";
@@ -43,15 +42,15 @@ public sealed class MockState
     public ArmedError? Armed { get; set; }
 
     // Auto-advance: simulate the server *currently being seeded* filling up over time so it crosses
-    // threshold → candidate changes → the client transitions (switch countdown / Seed All rotation).
-    // Only the seeded server (from the latest start-session) fills, so the next server stays put until
-    // the client actually switches to it — no back-to-back transitions.
+    // threshold → candidate changes → the client transitions (switch countdown). Only the seeded
+    // server (from the latest start-session) fills, so the next server stays put until the client
+    // actually switches to it — no back-to-back transitions.
     public bool AutoAdvanceEnabled { get; set; }
     public int AutoAdvanceStep { get; set; } = 4;
     public int AutoAdvanceIntervalSecs { get; set; } = 4;
     public int DwellTicks { get; set; } = 3;   // beats to hold a freshly-seeded server before it climbs
 
-    private (string Region, int Index)? _seedTarget;
+    private int? _seedTarget;
     private int _dwellRemaining;
 
     public MockState() => ResetToDefaults();
@@ -65,18 +64,18 @@ public sealed class MockState
 
     // ── Defaults ────────────────────────────────────────────────────────────────
 
-    /// <summary>Reset to a clean, useful baseline: two NA + one EU HLL server, all seedable.</summary>
+    /// <summary>Reset to a clean, useful baseline: three HLL servers in one rotation, all seedable.</summary>
     public void ResetToDefaults()
     {
         lock (_gate)
         {
             _servers.Clear();
-            _servers.Add(new ServerState { Region = "na", Index = 0, MapName = "Foy",
-                Info = new ServerInfo("10.0.0.1:28015", "Esprit", "Esprit de Corps Gaming", 50, "hll"), PlayerCount = 32 });
-            _servers.Add(new ServerState { Region = "na", Index = 1, MapName = "Carentan",
-                Info = new ServerInfo("10.0.0.2:28015", "Pathfinders", "Pathfinders Chicago", 50, "hll"), PlayerCount = 14 });
-            _servers.Add(new ServerState { Region = "eu", Index = 0, MapName = "Omaha",
-                Info = new ServerInfo("10.0.1.1:28015", "EU-One", "EU Seed Server One", 50, "hll"), PlayerCount = 8 });
+            _servers.Add(new ServerState { Index = 0, MapName = "Foy",
+                Info = new ServerInfo("10.0.0.1:28015", 1001, "Esprit", "Esprit de Corps Gaming", 50, "hll"), PlayerCount = 32 });
+            _servers.Add(new ServerState { Index = 1, MapName = "Carentan",
+                Info = new ServerInfo("10.0.0.2:28015", 1002, "Pathfinders", "Pathfinders Chicago", 50, "hll"), PlayerCount = 14 });
+            _servers.Add(new ServerState { Index = 2, MapName = "Omaha",
+                Info = new ServerInfo("10.0.1.1:28015", 1003, "Seed-Three", "Seed Server Three", 50, "hll"), PlayerCount = 8 });
             _sessions.Clear();
             Armed = null;
             _seedTarget = null;
@@ -90,12 +89,11 @@ public sealed class MockState
         get { lock (_gate) { return _servers.ToList(); } }
     }
 
-    public ServerState? Find(string region, int index)
+    public ServerState? Find(int index)
     {
         lock (_gate)
         {
-            return _servers.FirstOrDefault(s =>
-                s.Region.Equals(region, StringComparison.OrdinalIgnoreCase) && s.Index == index);
+            return _servers.FirstOrDefault(s => s.Index == index);
         }
     }
 
@@ -105,9 +103,8 @@ public sealed class MockState
     {
         lock (_gate)
         {
-            var na = _servers.Where(s => s.Region == "na").OrderBy(s => s.Index).Select(s => s.Info).ToList();
-            var eu = _servers.Where(s => s.Region == "eu").OrderBy(s => s.Index).Select(s => s.Info).ToList();
-            return new ServersResponse(new RegionServers(na, eu), null, NowMs());
+            var hll = _servers.OrderBy(s => s.Index).Select(s => s.Info).ToList();
+            return new ServersResponse(hll, null, NowMs());
         }
     }
 
@@ -115,37 +112,83 @@ public sealed class MockState
     {
         lock (_gate)
         {
-            return _servers.OrderBy(s => s.Region).ThenBy(s => s.Index).Select(s =>
-                new BatchStatsResult(s.Info.Game, s.Region, s.Index, s.MapName,
+            return _servers.OrderBy(s => s.Index).Select(s =>
+                new BatchStatsResult(s.Info.Game, s.Index, s.MapName,
                     s.PlayerCount, s.MaxPlayerCount, s.Offline, s.PasswordProtected, s.Error)).ToList();
         }
     }
 
-    /// <summary>Best seeding candidate per region: an online, non-passworded server still under its
-    /// threshold, preferring the one closest to filling (highest population). Null when none qualify.</summary>
+    /// <summary>Best seeding candidate: the first online, non-passworded server still under its
+    /// threshold (lowest index wins — sequential rotation). Null when none qualify.</summary>
     public SeedingStatusResponse SeedingStatus()
     {
         lock (_gate)
         {
-            return new SeedingStatusResponse(new GameSeedingStatus(Candidate("na"), Candidate("eu")), null, NowMs());
+            return new SeedingStatusResponse(Candidate(), null, NowMs());
         }
     }
 
-    private RegionCandidate? Candidate(string region)
+    private SeedingCandidate? Candidate()
     {
         var best = _servers
-            .Where(s => s.Region == region && !s.Offline && !s.PasswordProtected
-                && s.PlayerCount is { } pc && pc < s.Info.SeedingThreshold)
-            .OrderByDescending(s => s.PlayerCount)
+            .Where(s => Seedable(s))
+            .OrderBy(s => s.Index)
             .FirstOrDefault();
-        return best is null ? null : new RegionCandidate(best.Info.Game, best.Index, best.Info);
+        return best is null ? null : new SeedingCandidate(best.Info.Game, best.Index, best.Info, best.Info.BmId);
+    }
+
+    private static bool Seedable(ServerState s) =>
+        !s.Offline && !s.PasswordProtected
+        && s.PlayerCount is { } pc && pc < s.Info.SeedingThreshold;
+
+    // ── Directive (server-decided rotation) ────────────────────────────────────────
+
+    /// <summary>Default seeding config served to the client (mirrors the Core defaults).</summary>
+    public static SeedingConfig DefaultConfig() => new(
+        StaggerMaxSecs: 90, StaggerJitterSecs: 15, SwitchCountdownSecs: 30, SnoozeMinSecs: 60, SnoozeMaxSecs: 1800,
+        MaxSessionSecs: 18000, MonitorMinSecs: 15, MonitorMaxSecs: 60, MonitorBackoffStepSecs: 15, HeartbeatSecs: 30,
+        PollFallbackSecs: 10, PollIdleSecs: 60, DefaultSeedingThreshold: 75, SseKeepaliveSecs: 60, SseBackoffCapSecs: 300,
+        CacheStaleSecs: 90, GameOpenRetrySecs: new List<int> { 60, 120 }, GameOpenTimeoutSecs: 180, SplashBypassSecs: 20,
+        MissedAutoseedWindowHours: 4, ActiveWindows: new List<TimeWindow>(), DailyResetHourUtc: 10);
+
+    /// <summary>Compute the directive for a polling client: sequential seeding of the first
+    /// not-yet-seeded server. <c>stay</c> when the client is already on the target, <c>switch</c>
+    /// when a different server should be seeded, <c>stop</c> when all are seeded.</summary>
+    public SeedingDirective Directive(int? currentIndex)
+    {
+        lock (_gate)
+        {
+            var config = DefaultConfig();
+            var target = _servers.Where(Seedable).OrderBy(s => s.Index).FirstOrDefault();
+
+            if (target is null)
+            {
+                // Nothing left to seed.
+                return new SeedingDirective("stop", null, AllExhausted: true, ScheduledPause: false,
+                    NextActiveInSecs: null, StaggerSecs: 0, CountdownSecs: config.SwitchCountdownSecs,
+                    SnoozeMinSecs: config.SnoozeMinSecs, SnoozeMaxSecs: config.SnoozeMaxSecs,
+                    PollAgainInSecs: config.PollIdleSecs, MaxSessionSecs: config.MaxSessionSecs, Config: config);
+            }
+
+            var tgt = new DirectiveTarget(target.Info.Game, target.Index, target.Info, target.Info.BmId);
+
+            // Already on the target → keep seeding it.
+            var action = currentIndex is { } ci && ci == target.Index ? "stay" : "switch";
+
+            return new SeedingDirective(action, tgt, AllExhausted: false, ScheduledPause: false,
+                NextActiveInSecs: null,
+                StaggerSecs: action == "switch" ? 0 : 0,
+                CountdownSecs: config.SwitchCountdownSecs,
+                SnoozeMinSecs: config.SnoozeMinSecs, SnoozeMaxSecs: config.SnoozeMaxSecs,
+                PollAgainInSecs: config.MonitorMinSecs, MaxSessionSecs: config.MaxSessionSecs, Config: config);
+        }
     }
 
     // ── Mutators (each broadcasts) ────────────────────────────────────────────────
 
-    public bool SetPlayers(string region, int index, int? players, int? max)
+    public bool SetPlayers(int index, int? players, int? max)
     {
-        var s = Find(region, index);
+        var s = Find(index);
         if (s is null) return false;
         lock (_gate)
         {
@@ -156,9 +199,9 @@ public sealed class MockState
         return true;
     }
 
-    public bool SetFlags(string region, int index, bool? offline, bool? passworded)
+    public bool SetFlags(int index, bool? offline, bool? passworded)
     {
-        var s = Find(region, index);
+        var s = Find(index);
         if (s is null) return false;
         lock (_gate)
         {
@@ -169,10 +212,9 @@ public sealed class MockState
         return true;
     }
 
-    /// <summary>Advance each region's current seeding candidate toward (and over) its threshold,
-    /// simulating the server filling as it's seeded. When a candidate crosses its threshold it stops
-    /// being a candidate and the next server takes over — which is exactly what makes the client
-    /// switch / rotate. Broadcasts the new state.</summary>
+    /// <summary>Advance the current seeding candidate toward (and over) its threshold, simulating the
+    /// server filling as it's seeded. When a candidate crosses its threshold it stops being a candidate
+    /// and the next server takes over — which is exactly what makes the client switch / rotate.</summary>
     public void Tick()
     {
         var changed = false;
@@ -185,15 +227,12 @@ public sealed class MockState
             }
             else if (_seedTarget is { } tgt)
             {
-                var s = _servers.FirstOrDefault(x => x.Region == tgt.Region && x.Index == tgt.Index);
+                var s = _servers.FirstOrDefault(x => x.Index == tgt);
                 if (s is { Offline: false, PasswordProtected: false }
                     && s.PlayerCount is { } pc && pc < s.Info.SeedingThreshold)
                 {
                     var max = s.MaxPlayerCount ?? 100;
                     var next = pc + Math.Max(1, AutoAdvanceStep);
-                    // Climb gradually to the threshold; on the tick that reaches it, fill the rest of
-                    // the way (self-sustaining). The full server collapses the client's fill-based
-                    // switch stagger to ~0, so the candidate change triggers a prompt switch.
                     s.PlayerCount = next >= s.Info.SeedingThreshold ? max : next;
                     changed = true;
                 }
@@ -204,7 +243,7 @@ public sealed class MockState
 
     // ── Sessions ──────────────────────────────────────────────────────────────────
 
-    public string StartSession(string region, int index)
+    public string StartSession(int index)
     {
         var id = $"sess-{Interlocked.Increment(ref _seq)}";
         _sessions[id] = new SessionRec(id, DateTimeOffset.UtcNow);
@@ -212,9 +251,9 @@ public sealed class MockState
         {
             // Auto-advance now fills THIS server. When it's a new target (first seed or a switch),
             // hold it at its starting population for a few beats before climbing.
-            if (_seedTarget != (region, index))
+            if (_seedTarget != index)
             {
-                _seedTarget = (region, index);
+                _seedTarget = index;
                 _dwellRemaining = DwellTicks;
             }
         }

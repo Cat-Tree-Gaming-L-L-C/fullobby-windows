@@ -1,3 +1,4 @@
+using ChllSeeding.Core.Api;
 using ChllSeeding.Core.Config;
 using ChllSeeding.Core.Games;
 using ChllSeeding.Core.Native;
@@ -7,16 +8,16 @@ using Microsoft.Extensions.Logging;
 namespace ChllSeeding.Core.Scheduling;
 
 /// <summary>
-/// Background watchdog that fires a region's auto-seed when Task Scheduler missed it — typically
-/// after the machine woke from Modern Standby past the scheduled time. Polls every 60s; if a region's
-/// task is installed, its stored UTC time has passed within the last <see cref="MissedWindowHours"/>
-/// hours, and it hasn't already fired today (and nothing is in progress / HLL isn't running), it
-/// raises <see cref="AutoseedDue"/>. Port of <c>check_missed_autoseed</c> + the 60s poll in <c>app.rs</c>.
+/// Background watchdog that fires the auto-seed when Task Scheduler missed it — typically after the
+/// machine woke from Modern Standby past the scheduled time. Polls every 60s; if the task is
+/// installed, its stored UTC time has passed within the last (config-driven) missed window, and it
+/// hasn't already fired today (and nothing is in progress / HLL isn't running), it raises
+/// <see cref="AutoseedDue"/>. Port of <c>check_missed_autoseed</c> + the 60s poll in <c>app.rs</c>,
+/// collapsed to one slot.
 /// </summary>
 public sealed class MissedAutoseedMonitor : IHostedService, IDisposable
 {
     public const int PollIntervalSecs = 60;
-    public const int MissedWindowHours = 4;
 
     /// <summary>If a poll tick is this much later than expected, the machine likely slept — log it.</summary>
     private const int WakeThresholdSecs = 180;
@@ -26,25 +27,28 @@ public sealed class MissedAutoseedMonitor : IHostedService, IDisposable
     private readonly ConfigService _config;
     private readonly AutoSeedState _state;
     private readonly ProcessMonitor _process;
+    private readonly SeedingConfigProvider _configProvider;
 
     private CancellationTokenSource? _cts;
     private Task? _loop;
 
-    /// <summary>Raised (off the UI thread) with the region ("na"/"eu") whose missed seed should run.</summary>
-    public event Action<string>? AutoseedDue;
+    /// <summary>Raised (off the UI thread) when the missed seed should run.</summary>
+    public event Action? AutoseedDue;
 
     public MissedAutoseedMonitor(
         ILogger<MissedAutoseedMonitor> log,
         ScheduledTaskService tasks,
         ConfigService config,
         AutoSeedState state,
-        ProcessMonitor process)
+        ProcessMonitor process,
+        SeedingConfigProvider configProvider)
     {
         _log = log;
         _tasks = tasks;
         _config = config;
         _state = state;
         _process = process;
+        _configProvider = configProvider;
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
@@ -94,46 +98,40 @@ public sealed class MissedAutoseedMonitor : IHostedService, IDisposable
 
     private async Task CheckOnceAsync(bool afterWake, CancellationToken ct)
     {
-        foreach (var slot in AutoSeedSlot.All)
+        var slot = AutoSeedSlot.Default;
+        if (_state.IsInProgress || _state.WasTriggeredToday())
         {
-            if (_state.IsInProgress)
-            {
-                return; // an auto-seed is already running — nothing else fires this tick
-            }
-            if (_state.WasTriggeredToday(slot.Region))
-            {
-                continue;
-            }
-            if (!await _tasks.IsInstalledAsync(slot.TaskName, ct).ConfigureAwait(false))
-            {
-                continue;
-            }
-            if (!AutoSeedTime.TryParseStoredUtc(_config.GetString(slot.StoreKey), out var scheduledUtc))
-            {
-                continue;
-            }
-
-            var nowUtc = DateTime.UtcNow;
-            if (!IsWithinMissedWindow(nowUtc, scheduledUtc, MissedWindowHours))
-            {
-                continue;
-            }
-
-            // Final guards: don't stomp an in-progress seed or a hand-launched game.
-            if (_state.IsInProgress || _process.IsGameRunning(GameCatalog.Hll))
-            {
-                continue;
-            }
-
-            var late = nowUtc - new DateTime(DateOnly.FromDateTime(nowUtc), scheduledUtc, DateTimeKind.Utc);
-            _log.Log(afterWake ? LogLevel.Information : LogLevel.Debug,
-                "Missed auto-seed due for {Region}: scheduled {Time} UTC, {Late:F1}h late (afterWake={Wake})",
-                slot.Region.ToUpperInvariant(), scheduledUtc, late.TotalHours, afterWake);
-
-            _state.RecordTriggered(slot.Region);
-            AutoseedDue?.Invoke(slot.Region);
-            return; // one per tick; the in-progress guard handles the rest
+            return;
         }
+        if (!await _tasks.IsInstalledAsync(slot.TaskName, ct).ConfigureAwait(false))
+        {
+            return;
+        }
+        if (!AutoSeedTime.TryParseStoredUtc(_config.GetString(slot.StoreKey), out var scheduledUtc))
+        {
+            return;
+        }
+
+        var nowUtc = DateTime.UtcNow;
+        var windowHours = _configProvider.Current.MissedAutoseedWindowHours;
+        if (!IsWithinMissedWindow(nowUtc, scheduledUtc, windowHours))
+        {
+            return;
+        }
+
+        // Final guards: don't stomp an in-progress seed or a hand-launched game.
+        if (_state.IsInProgress || _process.IsGameRunning(GameCatalog.Hll))
+        {
+            return;
+        }
+
+        var late = nowUtc - new DateTime(DateOnly.FromDateTime(nowUtc), scheduledUtc, DateTimeKind.Utc);
+        _log.Log(afterWake ? LogLevel.Information : LogLevel.Debug,
+            "Missed auto-seed due: scheduled {Time} UTC, {Late:F1}h late (afterWake={Wake})",
+            scheduledUtc, late.TotalHours, afterWake);
+
+        _state.RecordTriggered();
+        AutoseedDue?.Invoke();
     }
 
     /// <summary>

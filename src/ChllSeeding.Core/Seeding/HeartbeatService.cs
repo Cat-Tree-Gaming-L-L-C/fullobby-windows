@@ -12,7 +12,7 @@ namespace ChllSeeding.Core.Seeding;
 /// Port of <c>src-rust/src/backend/heartbeat.rs</c> (the AtomicBool/Notify globals
 /// become per-instance state). DI singleton; the loop runs off the UI thread.
 /// </summary>
-public sealed class HeartbeatService(SeedingApiClient api, ILogger<HeartbeatService> log)
+public sealed class HeartbeatService(SeedingApiClient api, SeedingConfigProvider configProvider, ILogger<HeartbeatService> log)
 {
     public const long HeartbeatIntervalSecs = 30;
 
@@ -99,7 +99,7 @@ public sealed class HeartbeatService(SeedingApiClient api, ILogger<HeartbeatServ
 
         while (!ct.IsCancellationRequested)
         {
-            var backoff = BackoffIntervalSecs(consecutiveFailures);
+            var backoff = BackoffIntervalSecs(consecutiveFailures, configProvider.Current.HeartbeatSecs);
 
             var before = Stopwatch.StartNew();
             try { await Task.Delay(TimeSpan.FromSeconds(backoff), ct).ConfigureAwait(false); }
@@ -150,15 +150,22 @@ public sealed class HeartbeatService(SeedingApiClient api, ILogger<HeartbeatServ
 
     // ── Pure helper (unit-tested) ──────────────────────────────────────────────
 
-    /// <summary>Heartbeat send interval: 30s normally, else <c>min(30 * 2^min(failures,4), 300)</c>
-    /// seconds of exponential backoff. Port of the backoff math in <c>heartbeat.rs</c>.</summary>
-    public static long BackoffIntervalSecs(int consecutiveFailures)
+    /// <summary>Heartbeat send interval: the base interval normally, else
+    /// <c>min(interval * 2^min(failures,4), 300)</c> seconds of exponential backoff. The no-interval
+    /// overload uses the baked-in default (30s) so the unit tests stay stable; the loop passes the
+    /// server-configured <c>HeartbeatSecs</c>. Port of the backoff math in <c>heartbeat.rs</c>.</summary>
+    public static long BackoffIntervalSecs(int consecutiveFailures) =>
+        BackoffIntervalSecs(consecutiveFailures, HeartbeatIntervalSecs);
+
+    /// <summary>Backoff over an explicit base interval (server-configured).</summary>
+    public static long BackoffIntervalSecs(int consecutiveFailures, long intervalSecs)
     {
+        var baseInterval = intervalSecs > 0 ? intervalSecs : HeartbeatIntervalSecs;
         if (consecutiveFailures <= 0)
         {
-            return HeartbeatIntervalSecs;
+            return baseInterval;
         }
         var shift = Math.Min(consecutiveFailures, 4);
-        return Math.Min(HeartbeatIntervalSecs * (1L << shift), 300);
+        return Math.Min(baseInterval * (1L << shift), 300);
     }
 }

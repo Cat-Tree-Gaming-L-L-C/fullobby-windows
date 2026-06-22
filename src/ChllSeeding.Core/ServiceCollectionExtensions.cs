@@ -19,6 +19,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddChllSeedingCore(this IServiceCollection services)
     {
         services.AddSingleton<ConfigService>();
+        services.AddSingleton<SeedingConfigProvider>();
         services.AddSingleton<AuthSession>();
         services.AddSingleton<AuthRefresher>();
         services.AddSingleton<Activation.OAuthStateStore>();

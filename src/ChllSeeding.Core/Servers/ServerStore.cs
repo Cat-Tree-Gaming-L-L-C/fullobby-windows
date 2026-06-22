@@ -10,84 +10,44 @@ namespace ChllSeeding.Core.Servers;
 public sealed class ServerStore
 {
     private readonly object _gate = new();
-    private List<ServerInfo> _na = [];
-    private List<ServerInfo> _eu = [];
 
-    // game -> region -> servers
-    private readonly Dictionary<string, Dictionary<string, List<ServerInfo>>> _gameServers = new(StringComparer.Ordinal);
+    // game -> ordered server rotation (region removed)
+    private readonly Dictionary<string, List<ServerInfo>> _gameServers = new(StringComparer.Ordinal);
     private readonly HashSet<string> _offline = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (int Players, int MaxPlayers)> _playerCounts = new(StringComparer.Ordinal);
 
-    /// <summary>Replace the NA/EU and game-aware server lists from a /api/servers response.</summary>
+    /// <summary>Replace the per-game server rotations from a /api/servers response.</summary>
     public void Load(ServersResponse response)
     {
         lock (_gate)
         {
-            _na = [.. response.Hll.Na];
-            _eu = [.. response.Hll.Eu];
-
             _gameServers.Clear();
-            _gameServers["hll"] = new(StringComparer.Ordinal)
-            {
-                ["na"] = [.. response.Hll.Na],
-                ["eu"] = [.. response.Hll.Eu],
-            };
+            _gameServers["hll"] = [.. response.Hll];
             if (response.Hllv is { } hllv)
             {
-                _gameServers["hllv"] = new(StringComparer.Ordinal)
-                {
-                    ["na"] = [.. hllv.Na],
-                    ["eu"] = [.. hllv.Eu],
-                };
+                _gameServers["hllv"] = [.. hllv];
             }
         }
     }
 
-    /// <summary>Get a server by region ("eu" → EU list, anything else → NA) and index,
-    /// or null when the index is out of range.</summary>
-    public ServerInfo? GetServerByRegion(string region, int index)
+    /// <summary>Get a server by game and index in its rotation, or null when out of range.</summary>
+    public ServerInfo? GetServer(string game, int index)
     {
         lock (_gate)
         {
-            var list = region == "eu" ? _eu : _na;
-            return index >= 0 && index < list.Count ? list[index] : null;
+            return _gameServers.TryGetValue(game, out var servers)
+                && index >= 0 && index < servers.Count
+                ? servers[index]
+                : null;
         }
     }
 
-    public IReadOnlyList<ServerInfo> GetServers()
-    {
-        lock (_gate) { return [.. _na]; }
-    }
-
-    public IReadOnlyList<ServerInfo> GetEuServers()
-    {
-        lock (_gate) { return [.. _eu]; }
-    }
-
-    public ServerInfo? GetGameServer(string game, string region, int index)
+    /// <summary>The ordered server rotation for a game (defaults to HLL).</summary>
+    public IReadOnlyList<ServerInfo> GetServers(string game = "hll")
     {
         lock (_gate)
         {
-            if (_gameServers.TryGetValue(game, out var regions)
-                && regions.TryGetValue(region, out var servers)
-                && index >= 0 && index < servers.Count)
-            {
-                return servers[index];
-            }
-            return null;
-        }
-    }
-
-    public IReadOnlyList<ServerInfo> GetGameServers(string game, string region)
-    {
-        lock (_gate)
-        {
-            if (_gameServers.TryGetValue(game, out var regions)
-                && regions.TryGetValue(region, out var servers))
-            {
-                return [.. servers];
-            }
-            return [];
+            return _gameServers.TryGetValue(game, out var servers) ? [.. servers] : [];
         }
     }
 

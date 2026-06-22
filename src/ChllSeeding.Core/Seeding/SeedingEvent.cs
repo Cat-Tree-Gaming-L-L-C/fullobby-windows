@@ -33,10 +33,10 @@ public abstract record SeedingEvent
     public sealed record ServerSwitchCancelled : SeedingEvent;
 
     /// <summary>The launch watcher is waiting for a phantom/updating launch to settle before retrying.</summary>
-    public sealed record SeedingUpdateWaiting(int ServerIndex, string Region) : SeedingEvent;
+    public sealed record SeedingUpdateWaiting(int ServerIndex) : SeedingEvent;
 
     /// <summary>The launch watcher successfully restarted seeding after an update/phantom launch.</summary>
-    public sealed record SeedingUpdateStarted(int ServerIndex, string Region) : SeedingEvent;
+    public sealed record SeedingUpdateStarted(int ServerIndex) : SeedingEvent;
 
     /// <summary>The launch watcher gave up after its timeout.</summary>
     public sealed record SeedingUpdateTimeout : SeedingEvent;
