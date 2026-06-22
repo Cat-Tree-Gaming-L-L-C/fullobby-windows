@@ -635,6 +635,9 @@ public sealed class SeedingEngine : IDisposable
 
     private async Task StartImplAsync(int serverNumber, CancellationToken ct)
     {
+        // Clear any leftover stop flag from a prior seed/stop, otherwise FocusHllAsync's
+        // phase-1 stop check trips immediately and the splash bypass never sends a key.
+        ClearStopForNewSession();
         CancelLaunchWatcher();
         var server = _servers.GetServer(_currentGame.Id, serverNumber)
             ?? throw new SeedingException($"No server at index {serverNumber}");
