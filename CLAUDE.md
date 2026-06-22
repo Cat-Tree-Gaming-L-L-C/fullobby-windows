@@ -9,8 +9,6 @@ breakdown, rebrand checklist, and current status of the rewrite.
 ## Layout
 
 - `src/` — C# solution (`ChllSeeding.sln`: App, Core, Core.Tests) *(created in Phase 0)*
-- `src-rust/` — the original Rust/Dioxus app, kept as a porting reference until
-  Phase 5 parity sign-off. Do not modify; read-only reference.
 - `installer/` — Inno Setup script
 - `docs/REWRITE_PLAN.md` — the rewrite plan
 
