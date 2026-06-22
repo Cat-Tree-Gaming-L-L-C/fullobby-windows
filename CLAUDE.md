@@ -1,16 +1,17 @@
 # CHLL Seeding Windows
 
 C# + WinUI 3 (Windows App SDK) desktop app for Hell Let Loose server seeding.
-Formerly "Esprit Seeder" (Rust/Dioxus) — currently being rewritten and rebranded.
+Formerly "Esprit Seeder" (Rust/Dioxus); rewritten to native C#/WinUI 3.
 
-**Read `docs/REWRITE_PLAN.md` first** — it contains the full architecture, phase
-breakdown, rebrand checklist, and current status of the rewrite.
+**Read `docs/ARCHITECTURE.md` first** — solution layout, Rust→C# subsystem map,
+WinUI 3 gotchas, and the open cross-repo coordination items.
 
 ## Layout
 
-- `src/` — C# solution (`ChllSeeding.sln`: App, Core, Core.Tests) *(created in Phase 0)*
+- `src/` — C# solution (`ChllSeeding.sln`: App, Core, Core.Tests)
 - `installer/` — Inno Setup script
-- `docs/REWRITE_PLAN.md` — the rewrite plan
+- `tools/ChllSeeding.MockApi/` — local mock API for offline dev
+- `docs/ARCHITECTURE.md` — architecture reference
 
 ## Build Commands (Windows, dotnet CLI)
 

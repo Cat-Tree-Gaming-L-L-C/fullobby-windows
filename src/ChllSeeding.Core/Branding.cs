@@ -2,7 +2,7 @@ namespace ChllSeeding.Core;
 
 /// <summary>
 /// CHLL Seeding brand identity — single source of truth for every identifier in
-/// the rebrand checklist (docs/REWRITE_PLAN.md). Clean break from the old
+/// the rebrand (docs/ARCHITECTURE.md). Clean break from the old
 /// Esprit-branded identifiers; no config migration.
 /// </summary>
 public static class Branding
