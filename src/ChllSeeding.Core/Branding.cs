@@ -39,6 +39,22 @@ public static class Branding
     /// <summary>Default API base URL (configurable via CHLL_SEEDING_API_URL).</summary>
     public const string DefaultApiBaseUrl = "https://seeding.comp-hll.org";
 
+    // ── Community / About links ──────────────────────────────────────────────
+    // Website/FAQ/Terms/Privacy match the existing links in ToolsPage. Discord and
+    // GitHub are TODO(links): confirm exact URLs with the user.
+    /// <summary>Community Discord invite (permanent redirect to the current invite).</summary>
+    public const string DiscordUrl = "https://comp-hll.org/discord";
+    /// <summary>Comp HLL community website.</summary>
+    public const string WebsiteUrl = "https://comp-hll.org";
+    /// <summary>Source / issue tracker. TODO(links): confirm.</summary>
+    public const string GitHubUrl = "https://github.com/catalloc/chll-seeding-windows";
+    /// <summary>Seeding FAQ / "how it works" docs.</summary>
+    public const string FaqUrl = "https://comp-hll.org/faq";
+    /// <summary>Terms and conditions.</summary>
+    public const string TermsUrl = "https://comp-hll.org/terms";
+    /// <summary>Privacy policy.</summary>
+    public const string PrivacyUrl = "https://comp-hll.org/privacy";
+
     /// <summary>%APPDATA%\org.comphll.chllseeding</summary>
     public static string ConfigDir => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ConfigDirName);

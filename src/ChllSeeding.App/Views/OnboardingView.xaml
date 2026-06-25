@@ -23,7 +23,7 @@
 
                 <!-- Step 0: Sign in -->
                 <StackPanel x:Name="StepSignIn" Spacing="10">
-                    <Image Source="ms-appx:///Assets/logo_nbg.png" Width="56" Height="56" HorizontalAlignment="Center" />
+                    <Image Source="ms-appx:///Assets/logo_no_text.png" Width="56" Height="56" HorizontalAlignment="Center" />
                     <TextBlock Text="Welcome to CHLL Seeding" Style="{StaticResource SubtitleTextBlockStyle}" HorizontalAlignment="Center" TextAlignment="Center" />
                     <TextBlock
                         Text="Sign in to track your seeding contributions, or continue as a guest."

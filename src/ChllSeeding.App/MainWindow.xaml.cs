@@ -314,6 +314,7 @@ public sealed partial class MainWindow : Window
             "launch" => typeof(Views.LaunchPage),
             "leaderboard" => typeof(Views.LeaderboardPage),
             "tools" => typeof(Views.ToolsPage),
+            "about" => typeof(Views.AboutPage),
             _ => null,
         };
         if (pageType is not null)

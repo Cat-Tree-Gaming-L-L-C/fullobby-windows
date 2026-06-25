@@ -19,17 +19,20 @@
             <StackPanel
                 Spacing="6"
                 Visibility="{x:Bind Account.IsLoggedIn, Mode=OneWay, Converter={StaticResource BoolToVis}}">
-                <Grid>
-                    <TextBlock Text="{x:Bind Account.DisplayName, Mode=OneWay}" FontWeight="SemiBold" VerticalAlignment="Center" />
-                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
-                        <Button
-                            Content="Rotate API Key"
-                            Command="{x:Bind Account.RotateApiKeyCommand}"
-                            Visibility="{x:Bind Account.CanRotateApiKey, Mode=OneWay, Converter={StaticResource BoolToVis}}" />
-                        <Button Content="Sign Out" Command="{x:Bind Account.SignOutCommand}" />
-                        <Button Content="Delete Account" Click="DeleteAccount_Click" />
-                    </StackPanel>
-                </Grid>
+                <!-- Name on its own row so it can use the full width; actions sit below. -->
+                <TextBlock
+                    Text="{x:Bind Account.DisplayName, Mode=OneWay}"
+                    FontWeight="SemiBold"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="NoWrap" />
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <Button
+                        Content="Rotate API Key"
+                        Command="{x:Bind Account.RotateApiKeyCommand}"
+                        Visibility="{x:Bind Account.CanRotateApiKey, Mode=OneWay, Converter={StaticResource BoolToVis}}" />
+                    <Button Content="Sign Out" Command="{x:Bind Account.SignOutCommand}" />
+                    <Button Content="Delete Account" Click="DeleteAccount_Click" />
+                </StackPanel>
 
                 <!-- Linked providers -->
                 <TextBlock

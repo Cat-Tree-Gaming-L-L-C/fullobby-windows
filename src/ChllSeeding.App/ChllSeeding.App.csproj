@@ -42,7 +42,9 @@
 
   <ItemGroup>
     <Content Include="..\..\icons\icon.ico" Link="Assets\icon.ico" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\..\assets\logo_nbg.png" Link="Assets\logo_nbg.png" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Brand marks: logo_no_text = icon glyph (titlebar/onboarding); logo_text = full wordmark (About). -->
+    <Content Include="..\..\assets\logo_no_text.png" Link="Assets\logo_no_text.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\assets\logo_text.png" Link="Assets\logo_text.png" CopyToOutputDirectory="PreserveNewest" />
     <!-- Brand fonts (SIL OFL): Bebas Neue = display/wordmark, Inter = body/UI.
          The OFL.txt licenses ship alongside the .ttf files so they're carried into
          the publish output (and thus the installer) — OFL requires redistributing
