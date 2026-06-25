@@ -1,43 +1,27 @@
 namespace ChllSeeding.Core.Scheduling;
 
 /// <summary>
-/// Static configuration for one auto-seed region slot (NA / EU). Mirrors the Rust
-/// <c>AUTOSEED_SLOTS</c> table. The store key holds the user's chosen UTC time; the task name is
-/// the schtasks task; the CLI arg is what the scheduled task passes back to a fresh app instance.
-/// Clean-break rename: no legacy task-name fallbacks (Esprit-Seeder-2 etc. are gone).
+/// Static configuration for the single auto-seed slot. The store key holds the user's chosen UTC
+/// wake time (derived from the server's active window); the task name is the schtasks task; the CLI
+/// arg is what the scheduled task passes back to a fresh app instance. Region is removed — the
+/// server now decides the rotation, so there is only one daily seed task.
 /// </summary>
-public sealed record AutoSeedSlot(string Region, string StoreKey, string TaskName, string CliArg)
+public sealed record AutoSeedSlot(string StoreKey, string TaskName, string CliArg)
 {
-    /// <summary>NA: stored under "auto_seed_time", task "CHLL-Seeding", arg "--autoseed-na".</summary>
-    public static readonly AutoSeedSlot Na = new("na", "auto_seed_time", Branding.ScheduledTaskNa, "--autoseed-na");
+    /// <summary>The single auto-seed slot: stored under "auto_seed_time", task "CHLL-Seeding",
+    /// arg "--autoseed".</summary>
+    public static readonly AutoSeedSlot Default = new("auto_seed_time", Branding.ScheduledTaskNa, "--autoseed");
 
-    /// <summary>EU: stored under "auto_seed_time_secondary", task "CHLL-Seeding-EU", arg "--autoseed-eu".</summary>
-    public static readonly AutoSeedSlot Eu = new("eu", "auto_seed_time_secondary", Branding.ScheduledTaskEu, "--autoseed-eu");
-
-    public static readonly IReadOnlyList<AutoSeedSlot> All = [Na, Eu];
-
-    /// <summary>Resolve a slot by region ("na"/"eu"). Returns null for anything else.</summary>
-    public static AutoSeedSlot? ByRegion(string region) => region switch
+    /// <summary>Whether a CLI arg requests an auto-seed launch. Accepts --autoseed (+ legacy --seed*).</summary>
+    public static bool IsAutoseedArg(string arg) => arg switch
     {
-        "na" => Na,
-        "eu" => Eu,
-        _ => null,
-    };
-
-    /// <summary>Resolve a slot by its CLI arg ("--autoseed-na"/"--autoseed-eu").</summary>
-    public static AutoSeedSlot? ByCliArg(string arg) => arg switch
-    {
-        "--autoseed-na" or "--seed-na" => Na,
-        "--autoseed-eu" or "--seed-eu" => Eu,
-        _ => null,
+        "--autoseed" or "--autoseed-na" or "--autoseed-eu" or "--seed-na" or "--seed-eu" => true,
+        _ => false,
     };
 }
 
-/// <summary>Snapshot of both auto-seed scheduled tasks for the Settings UI. Port of <c>AutoseedStatus</c>.</summary>
+/// <summary>Snapshot of the auto-seed scheduled task for the Settings UI.</summary>
 public sealed record AutoseedStatus(
-    bool NaInstalled,
-    string? NaNextRun,
-    string? NaUtcTime,
-    bool EuInstalled,
-    string? EuNextRun,
-    string? EuUtcTime);
+    bool Installed,
+    string? NextRun,
+    string? UtcTime);

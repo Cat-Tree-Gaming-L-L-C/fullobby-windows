@@ -2,7 +2,7 @@ namespace ChllSeeding.Core;
 
 /// <summary>
 /// CHLL Seeding brand identity — single source of truth for every identifier in
-/// the rebrand checklist (docs/REWRITE_PLAN.md). Clean break from the old
+/// the rebrand (docs/ARCHITECTURE.md). Clean break from the old
 /// Esprit-branded identifiers; no config migration.
 /// </summary>
 public static class Branding
@@ -36,8 +36,8 @@ public static class Branding
     public const string ScheduledTaskNa = "CHLL-Seeding";
     public const string ScheduledTaskEu = "CHLL-Seeding-EU";
 
-    /// <summary>Default API base URL (configurable; exact host TBD).</summary>
-    public const string DefaultApiBaseUrl = "https://seeding-api.comp-hll.org";
+    /// <summary>Default API base URL (configurable via CHLL_SEEDING_API_URL).</summary>
+    public const string DefaultApiBaseUrl = "https://seeding.comp-hll.org";
 
     /// <summary>%APPDATA%\org.comphll.chllseeding</summary>
     public static string ConfigDir => Path.Combine(

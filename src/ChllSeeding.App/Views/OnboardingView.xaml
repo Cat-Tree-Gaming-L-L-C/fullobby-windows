@@ -60,17 +60,44 @@
 
                 <!-- Step 1: Link accounts -->
                 <StackPanel x:Name="StepLink" Spacing="10" Visibility="Collapsed">
-                    <TextBlock Text="Link Accounts" Style="{StaticResource SubtitleTextBlockStyle}" HorizontalAlignment="Center" />
+                    <TextBlock Text="Link Accounts for Session Tracking" Style="{StaticResource SubtitleTextBlockStyle}" HorizontalAlignment="Center" TextAlignment="Center" />
                     <TextBlock
-                        Text="Link your Steam and Discord accounts to track your seeding sessions. You can also do this later from Settings."
+                        Text="Link your Steam and Discord accounts to track your seeding sessions."
                         Opacity="0.7" TextWrapping="Wrap" TextAlignment="Center" />
 
-                    <Button Content="Link Steam Account"
+                    <!-- Steam: already-linked status row, then the (re-)link button + helper copy. -->
+                    <Grid x:Name="SteamLinkedRow" Visibility="Collapsed"
+                          Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                          CornerRadius="8" Padding="12,8">
+                        <TextBlock Text="Steam linked" Foreground="{StaticResource BrandBadgeSuccessBrush}"
+                                   FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
+                        <Border x:Name="SteamSignedInBadge" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="4" Padding="6,1">
+                            <TextBlock Text="signed in" FontSize="10" Opacity="0.8" />
+                        </Border>
+                    </Grid>
+                    <Button x:Name="LinkSteamButton" Content="Link Steam Account"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="steam" />
-                    <Button Content="Link Discord Account"
+                    <TextBlock x:Name="SteamLinkHelp" Text="Required to verify seeding time"
+                               FontSize="11" Opacity="0.5" Margin="2,-4,0,0" />
+
+                    <!-- Discord: same shape (button hides once linked). -->
+                    <Grid x:Name="DiscordLinkedRow" Visibility="Collapsed"
+                          Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                          CornerRadius="8" Padding="12,8">
+                        <TextBlock Text="Discord linked" Foreground="{StaticResource BrandBadgeSuccessBrush}"
+                                   FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
+                        <Border x:Name="DiscordSignedInBadge" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="4" Padding="6,1">
+                            <TextBlock Text="signed in" FontSize="10" Opacity="0.8" />
+                        </Border>
+                    </Grid>
+                    <Button x:Name="LinkDiscordButton" Content="Link Discord Account"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="discord" />
+                    <TextBlock x:Name="DiscordLinkHelp" Text="For community features and richer profile"
+                               FontSize="11" Opacity="0.5" Margin="2,-4,0,0" />
 
                     <!-- Not live yet: exposed but disabled. To turn one on, drop its
                          IsEnabled="False" and add the provider to ApiValidation.ValidProviders. -->
@@ -84,31 +111,50 @@
                                FontSize="11" Opacity="0.5" TextWrapping="Wrap"
                                TextAlignment="Center" HorizontalAlignment="Center" />
 
-                    <Button Content="Continue" Style="{StaticResource AccentButtonStyle}"
+                    <Button x:Name="LinkContinueButton" Content="Skip for now" Style="{StaticResource AccentButtonStyle}"
                             HorizontalAlignment="Center" Margin="0,6,0,0" Click="ToNickname_Click" />
+                    <TextBlock x:Name="LinkLaterHint" Text="You can link accounts later from Settings"
+                               FontSize="11" Opacity="0.4" TextAlignment="Center" HorizontalAlignment="Center" />
                 </StackPanel>
 
                 <!-- Step 2: Nickname -->
                 <StackPanel x:Name="StepNickname" Spacing="10" Visibility="Collapsed">
-                    <TextBlock Text="Choose a Nickname" Style="{StaticResource SubtitleTextBlockStyle}" HorizontalAlignment="Center" />
-                    <TextBlock
+                    <TextBlock x:Name="NicknameHeading" Text="Choose a Nickname" Style="{StaticResource SubtitleTextBlockStyle}" HorizontalAlignment="Center" />
+                    <TextBlock x:Name="NicknameSubtext"
                         Text="Pick a display name for the leaderboard, or go anonymous."
                         Opacity="0.7" TextWrapping="Wrap" TextAlignment="Center" />
 
                     <TextBox x:Name="NicknameBox" PlaceholderText="Enter nickname…" MaxLength="32" />
 
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                        <Button Content="Randomize" Command="{x:Bind Account.RandomizeNameCommand}" />
+                        <Button x:Name="RandomizeNameButton" Content="Go Anonymous" Command="{x:Bind Account.RandomizeNameCommand}" />
                         <Button x:Name="SaveNameButton" Content="Save" Style="{StaticResource AccentButtonStyle}" Click="SaveName_Click" />
                     </StackPanel>
 
                     <HyperlinkButton Content="Skip" HorizontalAlignment="Center" Click="ToDone_Click" />
+
+                    <!-- Leaderboard opt-out toggle (the toggle is the inverse of opt-out). -->
+                    <Grid Margin="0,8,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Show on Leaderboard" FontSize="13" />
+                            <TextBlock Text="Appear in public rankings" FontSize="11" Opacity="0.5" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="OnboardLeaderboardToggle" HorizontalAlignment="Right" Toggled="OnboardLeaderboardToggle_Toggled" />
+                    </Grid>
+                    <TextBlock Text="You can change this anytime from Settings"
+                               FontSize="11" Opacity="0.4" TextAlignment="Center" HorizontalAlignment="Center" />
                 </StackPanel>
 
                 <!-- Step 3: Done -->
                 <StackPanel x:Name="StepDone" Spacing="12" Visibility="Collapsed" HorizontalAlignment="Center">
                     <TextBlock Text="You're all set!" Style="{StaticResource TitleTextBlockStyle}" HorizontalAlignment="Center" />
-                    <TextBlock x:Name="DoneSummary" Opacity="0.8" HorizontalAlignment="Center" TextAlignment="Center" />
+                    <StackPanel Spacing="2" HorizontalAlignment="Center">
+                        <TextBlock x:Name="DoneSummary" Opacity="0.8" HorizontalAlignment="Center" TextAlignment="Center" />
+                        <TextBlock x:Name="DoneSteamLine" Text="Steam: Linked" Visibility="Collapsed"
+                                   Foreground="{StaticResource BrandBadgeSuccessBrush}" FontSize="13" HorizontalAlignment="Center" />
+                        <TextBlock x:Name="DoneDiscordLine" Text="Discord: Linked" Visibility="Collapsed"
+                                   Foreground="{StaticResource BrandBadgeSuccessBrush}" FontSize="13" HorizontalAlignment="Center" />
+                    </StackPanel>
                     <Button Content="Start Seeding" Style="{StaticResource AccentButtonStyle}"
                             HorizontalAlignment="Center" Click="Finish_Click" />
                 </StackPanel>

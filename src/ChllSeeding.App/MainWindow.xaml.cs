@@ -3,7 +3,9 @@ using ChllSeeding.App.Services;
 using ChllSeeding.App.ViewModels;
 using ChllSeeding.Core;
 using ChllSeeding.Core.Config;
+using ChllSeeding.Core.Seeding;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Windowing;
@@ -41,6 +43,13 @@ public sealed partial class MainWindow : Window
 
         Title = Branding.ProductName;
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "icon.ico"));
+
+        // Titlebar version string + debug-build badge (port of titlebar.rs version + the seed_banner
+        // DEV BUILD badge under debug_assertions).
+        VersionText.Text = $"v{typeof(App).Assembly.GetName().Version?.ToString(3)}";
+#if DEBUG
+        DevBadge.Visibility = Visibility.Visible;
+#endif
 
         // Frameless window: extend content into the titlebar, custom drag region
         ExtendsContentIntoTitleBar = true;
@@ -192,6 +201,19 @@ public sealed partial class MainWindow : Window
         try
         {
             _config.FlushPendingSaves();
+
+            // End any open seeding session BEFORE relaunch, like the Rust stop_heartbeat_sync — so
+            // the new instance doesn't briefly overlap an old, still-open session. The window-close
+            // path also stops it, but doing it here gives the stop the full 2s relaunch delay to land.
+            try
+            {
+                App.AppHost.Services.GetRequiredService<HeartbeatService>().StopFireAndForget("app_restart");
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Heartbeat stop on restart failed");
+            }
+
             var exe = Environment.ProcessPath;
             if (exe is not null)
             {
@@ -209,6 +231,54 @@ public sealed partial class MainWindow : Window
 
         _forceQuit = true;
         Close();
+
+        // Hard-exit safety net (port of restart_app's sleep(3) + process::exit(0)): if the normal
+        // close/host-shutdown path hangs, force the process down so the relaunched instance — which
+        // starts after the 2s timeout — doesn't redirect back into this dying one. No-op if we
+        // already exited cleanly (this task dies with the process).
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+            Log.Warning("Restart: clean shutdown didn't exit in time, forcing process exit");
+            Environment.Exit(0);
+        });
+    }
+
+    /// <summary>Shut the app down so a freshly launched installer can replace the running exe.
+    /// Mirrors the restart shutdown sequence (flush config + stop heartbeat + force-close + hard-exit
+    /// safety net) but without the delayed relaunch — the installer owns the relaunch. Port of the
+    /// shutdown half of <c>updater::launch_installer</c> (flush + stop_heartbeat_sync + close_app).</summary>
+    public void QuitForUpdate()
+    {
+        try
+        {
+            _config.FlushPendingSaves();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Config flush before update exit failed");
+        }
+
+        try
+        {
+            App.AppHost.Services.GetRequiredService<HeartbeatService>().StopFireAndForget("update");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Heartbeat stop before update exit failed");
+        }
+
+        _forceQuit = true;
+        Close();
+
+        // Hard-exit safety net (mirrors the restart path): if the clean shutdown hangs, force the
+        // process down so it isn't holding the exe open when the installer tries to overwrite it.
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+            Log.Warning("Update: clean shutdown didn't exit in time, forcing process exit");
+            Environment.Exit(0);
+        });
     }
 
     private void Toast_Closed(InfoBar sender, InfoBarClosedEventArgs args)

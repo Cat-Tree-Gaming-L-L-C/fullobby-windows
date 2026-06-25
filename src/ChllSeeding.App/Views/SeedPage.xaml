@@ -9,6 +9,28 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,12">
             <StackPanel Spacing="8">
 
+                <!-- Live-feed connectivity indicator + manual reconnect (stats still poll over HTTP
+                     while the SSE stream is down). Port of the seed_banner Live dot + reconnect_button. -->
+                <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                    <Ellipse
+                        Width="8" Height="8"
+                        VerticalAlignment="Center"
+                        Fill="{ThemeResource SystemFillColorSuccessBrush}"
+                        Visibility="{x:Bind ViewModel.SseConnected, Mode=OneWay, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock
+                        Text="{x:Bind ViewModel.ConnectionStatusText, Mode=OneWay}"
+                        FontSize="11"
+                        Opacity="0.7"
+                        VerticalAlignment="Center" />
+                    <HyperlinkButton
+                        Content="Reconnect"
+                        FontSize="11"
+                        Padding="4,0"
+                        VerticalAlignment="Center"
+                        Command="{x:Bind ViewModel.ReconnectCommand}"
+                        Visibility="{x:Bind ViewModel.ShowReconnect, Mode=OneWay, Converter={StaticResource BoolToVis}}" />
+                </StackPanel>
+
                 <!-- Status banner (shared seeding lifecycle) -->
                 <Border
                     Visibility="{x:Bind ViewModel.ShowStatusBanner, Mode=OneWay, Converter={StaticResource BoolToVis}}"
@@ -75,14 +97,8 @@
                         Visibility="{x:Bind ViewModel.ServerLoadError, Mode=OneWay, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
 
-                <!-- NA server stats list -->
-                <TextBlock
-                    Text="NA"
-                    FontSize="12"
-                    Opacity="0.7"
-                    Margin="0,4,0,0"
-                    Visibility="{x:Bind ViewModel.EuEnabled, Mode=OneWay, Converter={StaticResource BoolToVis}}" />
-                <ItemsControl ItemsSource="{x:Bind ViewModel.NaServers}">
+                <!-- Server stats list (single ordered rotation; the server decides what to seed) -->
+                <ItemsControl ItemsSource="{x:Bind ViewModel.Servers}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:ServerRow">
                             <Border
@@ -110,91 +126,18 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <!-- EU server stats list -->
-                <TextBlock
-                    Text="EU"
-                    FontSize="12"
-                    Opacity="0.7"
-                    Margin="0,4,0,0"
-                    Visibility="{x:Bind ViewModel.EuEnabled, Mode=OneWay, Converter={StaticResource BoolToVis}}" />
-                <ItemsControl
-                    ItemsSource="{x:Bind ViewModel.EuServers}"
-                    Visibility="{x:Bind ViewModel.EuEnabled, Mode=OneWay, Converter={StaticResource BoolToVis}}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:ServerRow">
-                            <Border
-                                Background="{ThemeResource SystemControlBackgroundBaseLowBrush}"
-                                CornerRadius="6"
-                                Padding="10,4"
-                                Margin="0,2"
-                                Opacity="0.85">
-                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                    <TextBlock Text="{x:Bind StatsLine, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" />
-                                    <Border
-                                        Visibility="{x:Bind IsPassworded, Mode=OneWay, Converter={StaticResource BoolToVis}}"
-                                        Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
-                                        CornerRadius="4"
-                                        Padding="6,1"
-                                        VerticalAlignment="Center"
-                                        ToolTipService.ToolTip="Password-protected — excluded from seeding (HLL can't join a passworded server via the launcher)">
-                                        <StackPanel Orientation="Horizontal" Spacing="4">
-                                            <FontIcon Glyph="&#xE72E;" FontSize="11" />
-                                            <TextBlock Text="Passworded" FontSize="11" />
-                                        </StackPanel>
-                                    </Border>
-                                </StackPanel>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-                <!-- Seed buttons (idle states) -->
+                <!-- Seed button (idle states) -->
                 <StackPanel
                     Spacing="8"
                     Margin="0,8,0,0"
                     Visibility="{x:Bind ViewModel.ShowSeedButtons, Mode=OneWay, Converter={StaticResource BoolToVis}}">
-
-                    <!-- EU enabled: separate NA / EU buttons -->
-                    <Grid
-                        ColumnSpacing="8"
-                        Visibility="{x:Bind ViewModel.EuEnabled, Mode=OneWay, Converter={StaticResource BoolToVis}}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Button
-                            Grid.Column="0"
-                            Content="Seed NA"
-                            Height="56"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Center"
-                            Command="{x:Bind ViewModel.SeedNaCommand}" />
-                        <Button
-                            Grid.Column="1"
-                            Content="Seed EU"
-                            Height="56"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Center"
-                            Command="{x:Bind ViewModel.SeedEuCommand}" />
-                    </Grid>
-
-                    <!-- EU disabled: single Seed button -->
                     <Button
                         Content="Seed"
                         Height="56"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
                         Style="{StaticResource AccentButtonStyle}"
-                        Command="{x:Bind ViewModel.SeedNaCommand}"
-                        Visibility="{x:Bind ViewModel.EuEnabled, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
-
-                    <!-- Seed All: rotate across every server/region (and game) until all are seeded -->
-                    <Button
-                        Content="Seed All"
-                        Height="44"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Center"
-                        Command="{x:Bind ViewModel.SeedAllCommand}" />
+                        Command="{x:Bind ViewModel.SeedCommand}" />
                 </StackPanel>
 
                 <!-- Waiting for update: cancel -->
@@ -247,7 +190,7 @@
                 VerticalAlignment="Center">
                 <StackPanel Spacing="10" HorizontalAlignment="Center">
                     <TextBlock
-                        Text="{x:Bind ViewModel.ServerSwitchTitle, Mode=OneWay}"
+                        Text="{x:Bind ViewModel.ServerSwitchHeading, Mode=OneWay}"
                         FontWeight="SemiBold"
                         FontSize="16"
                         HorizontalAlignment="Center" />

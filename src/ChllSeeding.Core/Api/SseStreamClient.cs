@@ -23,7 +23,6 @@ public sealed class SseStreamClient : IHostedService
     /// <summary>Named client: infinite timeout, no auth/resilience handlers (see ServiceCollectionExtensions).</summary>
     public const string ClientName = "sse";
 
-    private const int KeepaliveSecs = 60;
     private const int WakeThresholdSecs = 120;
     private const int ConnectTimeoutSecs = 30;
     private const long BackoffCapSecs = 300;
@@ -35,6 +34,7 @@ public sealed class SseStreamClient : IHostedService
     private readonly LiveStats _liveStats;
     private readonly SseConnectionState _state;
     private readonly SeedingEngine _engine;
+    private readonly SeedingConfigProvider _configProvider;
     private readonly ILogger<SseStreamClient> _log;
 
     private readonly CancellationTokenSource _lifetime = new();
@@ -50,6 +50,7 @@ public sealed class SseStreamClient : IHostedService
         LiveStats liveStats,
         SseConnectionState state,
         SeedingEngine engine,
+        SeedingConfigProvider configProvider,
         ILogger<SseStreamClient> log)
     {
         _httpFactory = httpFactory;
@@ -59,6 +60,7 @@ public sealed class SseStreamClient : IHostedService
         _liveStats = liveStats;
         _state = state;
         _engine = engine;
+        _configProvider = configProvider;
         _log = log;
     }
 
@@ -102,7 +104,7 @@ public sealed class SseStreamClient : IHostedService
                 continue;
             }
 
-            var backoff = ComputeBackoffSecs(failures);
+            var backoff = ComputeBackoffSecs(failures, _configProvider.Current.SseBackoffCapSecs);
             if (backoff > 0)
             {
                 _state.FailureCount = failures;
@@ -235,8 +237,9 @@ public sealed class SseStreamClient : IHostedService
         var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         using var reader = new StreamReader(stream);
 
+        var keepaliveSecs = _configProvider.Current.SseKeepaliveSecs;
         var lastActivity = Stopwatch.StartNew();
-        kaCts.CancelAfter(TimeSpan.FromSeconds(KeepaliveSecs));
+        kaCts.CancelAfter(TimeSpan.FromSeconds(keepaliveSecs));
 
         while (true)
         {
@@ -272,12 +275,15 @@ public sealed class SseStreamClient : IHostedService
                 return new ConnectionOutcome(1, false, false);
             }
 
-            // Any line is proof of life — reset the keepalive window.
-            lastActivity.Restart();
-            kaCts.CancelAfter(TimeSpan.FromSeconds(KeepaliveSecs));
-
             if (parser.Feed(line) is { } frame)
             {
+                // A dispatched event (incl. server "heartbeat") is proof of life — reset the
+                // keepalive window here, NOT on every raw line. Mirrors the Rust client, which
+                // resets keepalive_started only on Event::Message/Open: ":keepalive" comment
+                // lines and partial field lines must NOT reset it, otherwise the wake-from-sleep
+                // elapsed measurement below can never accumulate past the wake threshold.
+                lastActivity.Restart();
+                kaCts.CancelAfter(TimeSpan.FromSeconds(keepaliveSecs));
                 Dispatch(frame);
             }
         }
@@ -296,7 +302,7 @@ public sealed class SseStreamClient : IHostedService
             _state.FailureCount = 0;
             return new ConnectionOutcome(0, false, false);
         }
-        _log.LogInformation("SSE keepalive timeout ({Secs}s), reconnecting", KeepaliveSecs);
+        _log.LogInformation("SSE keepalive timeout ({Secs:F0}s), reconnecting", elapsed.TotalSeconds);
         _state.RequestPoll();
         return new ConnectionOutcome(1, false, false);
     }
@@ -334,15 +340,20 @@ public sealed class SseStreamClient : IHostedService
     // ── Pure helpers (unit-tested) ─────────────────────────────────────────────
 
     /// <summary>Exponential reconnect backoff: 0 when there were no failures, else
-    /// <c>min(2^(failures-1), 300)</c> seconds (jitter added separately).</summary>
-    public static long ComputeBackoffSecs(int failures)
+    /// <c>min(2^(failures-1), 300)</c> seconds (jitter added separately). The no-cap overload uses the
+    /// baked-in 300s cap so the unit tests stay stable; the loop passes the server-configured cap.</summary>
+    public static long ComputeBackoffSecs(int failures) => ComputeBackoffSecs(failures, BackoffCapSecs);
+
+    /// <summary>Exponential reconnect backoff with an explicit cap (server-configured).</summary>
+    public static long ComputeBackoffSecs(int failures, long capSecs)
     {
         if (failures <= 0)
         {
             return 0;
         }
+        var cap = capSecs > 0 ? capSecs : BackoffCapSecs;
         var shift = Math.Min(failures - 1, 30);
-        return Math.Min(1L << shift, BackoffCapSecs);
+        return Math.Min(1L << shift, cap);
     }
 
     /// <summary>True when an inactivity gap is long enough to imply the system slept (vs a normal

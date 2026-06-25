@@ -146,48 +146,48 @@ public partial class App : Application
         }
 
         // The first instance itself may have been protocol-launched or scheduled-task-launched
-        // (chllseeding:// deep link, or --autoseed-na/--autoseed-eu from a scheduled task).
+        // (chllseeding:// deep link, or --autoseed from a scheduled task).
         HandleActivation(AppInstance.GetCurrent().GetActivatedEventArgs());
 
         // Fallback for a fresh scheduled-task launch where the activation args don't carry the flag.
-        if (ExtractAutoseedRegion(Environment.GetCommandLineArgs()) is { } cliRegion)
+        if (HasAutoseedArg(Environment.GetCommandLineArgs()))
         {
-            StartAutoseed(cliRegion);
+            StartAutoseed();
         }
     }
 
     /// <summary>Missed-autoseed watchdog fired (off-thread) — marshal onto the UI and run it.</summary>
-    private void OnAutoseedDue(string region) => StartAutoseed(region);
+    private void OnAutoseedDue() => StartAutoseed();
 
-    /// <summary>Marshal to the UI thread and kick off the auto-seed countdown for a region.</summary>
-    private void StartAutoseed(string region)
+    /// <summary>Marshal to the UI thread and kick off the (single, region-free) auto-seed countdown.</summary>
+    private void StartAutoseed()
     {
-        Log.Information("Auto-seed requested for {Region}", region.ToUpperInvariant());
+        Log.Information("Auto-seed requested");
         var vm = AppHost.Services.GetRequiredService<ViewModels.SeedingViewModel>();
         var queue = _window?.DispatcherQueue;
         if (queue is null)
         {
-            _ = vm.RunAutoseedAsync(region);
+            _ = vm.RunAutoseedAsync();
             return;
         }
         queue.TryEnqueue(() =>
         {
             _window?.BringToFront();
-            _ = vm.RunAutoseedAsync(region);
+            _ = vm.RunAutoseedAsync();
         });
     }
 
-    /// <summary>Find the auto-seed region in a token list, or null. Accepts --autoseed-* (+ legacy --seed-*).</summary>
-    private static string? ExtractAutoseedRegion(IReadOnlyList<string> args)
+    /// <summary>Whether any token requests an auto-seed launch (--autoseed, plus legacy --autoseed-*/--seed-*).</summary>
+    private static bool HasAutoseedArg(IReadOnlyList<string> args)
     {
         foreach (var arg in args)
         {
-            if (AutoSeedSlot.ByCliArg(arg) is { } slot)
+            if (AutoSeedSlot.IsAutoseedArg(arg))
             {
-                return slot.Region;
+                return true;
             }
         }
-        return null;
+        return false;
     }
 
     /// <summary>Raised on a non-UI thread; marshal before touching the window.</summary>
@@ -202,13 +202,13 @@ public partial class App : Application
 
     private void HandleActivation(AppActivationArguments args)
     {
-        // A scheduled task launching a second instance forwards its --autoseed-* flag here.
+        // A scheduled task launching a second instance forwards its --autoseed flag here.
         if (args.Kind == ExtendedActivationKind.Launch
             && args.Data is Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs autoseedLaunch
             && autoseedLaunch.Arguments is { Length: > 0 } rawArgs
-            && ExtractAutoseedRegion(rawArgs.Split(' ', StringSplitOptions.RemoveEmptyEntries)) is { } region)
+            && HasAutoseedArg(rawArgs.Split(' ', StringSplitOptions.RemoveEmptyEntries)))
         {
-            StartAutoseed(region);
+            StartAutoseed();
             return;
         }
 

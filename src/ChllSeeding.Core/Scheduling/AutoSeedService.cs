@@ -1,3 +1,4 @@
+using ChllSeeding.Core.Api;
 using ChllSeeding.Core.Config;
 using ChllSeeding.Core.Native;
 using Microsoft.Extensions.Logging;
@@ -5,10 +6,11 @@ using Microsoft.Extensions.Logging;
 namespace ChllSeeding.Core.Scheduling;
 
 /// <summary>
-/// High-level auto-seed orchestration: create/remove the daily scheduled tasks and report their
-/// status. The user picks a daily time in <b>UTC</b>; we persist that UTC string (for the missed-task
-/// monitor) and register the task at the equivalent local time. Port of the public surface of
-/// <c>backend/autoseed.rs</c> (<c>setup_auto_seed</c>, <c>uninstall_auto_seed*</c>, <c>get_autoseed_status</c>).
+/// High-level auto-seed orchestration: create/remove the single daily scheduled task and report its
+/// status. The wake time is no longer user-picked per region — it's derived from the server's first
+/// active window (UTC), so the PC wakes when seeding actually starts. We persist that UTC string (for
+/// the missed-task monitor) and register the task at the equivalent local time. Port of the public
+/// surface of <c>backend/autoseed.rs</c>, collapsed to one slot.
 /// </summary>
 public sealed class AutoSeedService
 {
@@ -16,35 +18,34 @@ public sealed class AutoSeedService
     private readonly ScheduledTaskService _tasks;
     private readonly ConfigService _config;
     private readonly PowerStatus _power;
+    private readonly SeedingConfigProvider _configProvider;
 
     public AutoSeedService(
         ILogger<AutoSeedService> log,
         ScheduledTaskService tasks,
         ConfigService config,
-        PowerStatus power)
+        PowerStatus power,
+        SeedingConfigProvider configProvider)
     {
         _log = log;
         _tasks = tasks;
         _config = config;
         _power = power;
+        _configProvider = configProvider;
     }
 
     /// <summary>
-    /// Set up the daily auto-seed for a region. <paramref name="utcTime"/> is the user-entered UTC
-    /// "HH:MM". Persists it, creates the scheduled task at the local-equivalent time, and returns a
-    /// status message (plus any power-config warnings). Throws <see cref="FormatException"/> on a bad time.
+    /// Set up the daily auto-seed. The wake time is the server's first active-window start (UTC),
+    /// or <c>DailyResetHourUtc:00</c> when no windows are configured. Persists it, creates the
+    /// scheduled task at the local-equivalent time, and returns a status message (plus any
+    /// power-config warnings).
     /// </summary>
-    public async Task<string> SetupAsync(string region, string utcTime, CancellationToken ct = default)
+    public async Task<string> SetupAsync(CancellationToken ct = default)
     {
-        var slot = AutoSeedSlot.ByRegion(region)
-            ?? throw new ArgumentException($"Unknown region '{region}'", nameof(region));
-
-        if (!AutoSeedTime.TryParseUtc(utcTime, out var h, out var m))
-        {
-            throw new FormatException($"Invalid UTC time '{utcTime}' (expected HH:MM).");
-        }
+        var (h, m) = WakeTimeUtc(_configProvider.Current);
         var normalizedUtc = $"{h:D2}:{m:D2}";
         var localHms = AutoSeedTime.UtcToLocalHms(h, m);
+        var slot = AutoSeedSlot.Default;
 
         // Persist the UTC time first so the missed-task monitor can act even if task creation is slow.
         _config.SetString(slot.StoreKey, normalizedUtc);
@@ -52,11 +53,19 @@ public sealed class AutoSeedService
         var ok = await _tasks.CreateDailyTaskAsync(slot.TaskName, localHms, slot.CliArg, ct).ConfigureAwait(false);
         if (!ok)
         {
-            throw new InvalidOperationException($"Failed to create the {region.ToUpperInvariant()} scheduled task.");
+            throw new InvalidOperationException("Failed to create the auto-seed scheduled task.");
+        }
+
+        // Re-query to confirm the task actually registered — schtasks can report success on /create
+        // yet leave nothing queryable. Port of the post-create verification in autoseed.rs:40-54.
+        if (!await _tasks.IsInstalledAsync(slot.TaskName, ct).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException(
+                "The auto-seed scheduled task could not be verified after creation. Please try again.");
         }
 
         var localDisplay = AutoSeedTime.UtcToLocalDisplay(h, m);
-        var message = $"Daily {region.ToUpperInvariant()} auto-seed is set up for {normalizedUtc} UTC " +
+        var message = $"Daily auto-seed is set up for {normalizedUtc} UTC " +
                       $"({localDisplay} your time). Your computer will wake from sleep to seed.";
 
         var warnings = _power.CheckPowerWarnings();
@@ -67,31 +76,36 @@ public sealed class AutoSeedService
         return message;
     }
 
-    /// <summary>Remove a region's scheduled task and forget its stored time. Returns true if a task was deleted.</summary>
-    public async Task<bool> UninstallAsync(string region, CancellationToken ct = default)
+    /// <summary>Remove the scheduled task and forget its stored time. Returns true if a task was deleted.</summary>
+    public async Task<bool> UninstallAsync(CancellationToken ct = default)
     {
-        var slot = AutoSeedSlot.ByRegion(region)
-            ?? throw new ArgumentException($"Unknown region '{region}'", nameof(region));
-
+        var slot = AutoSeedSlot.Default;
         var deleted = await _tasks.DeleteTaskAsync(slot.TaskName, ct).ConfigureAwait(false);
         _config.Remove(slot.StoreKey);
         return deleted;
     }
 
-    /// <summary>Whether the EU auto-seed task is installed (gates the EU "Set up/Remove" UI).</summary>
-    public Task<bool> IsEuInstalledAsync(CancellationToken ct = default) =>
-        _tasks.IsInstalledAsync(AutoSeedSlot.Eu.TaskName, ct);
-
-    /// <summary>Snapshot both tasks (installed + next-run + stored UTC time) for the Settings UI.</summary>
+    /// <summary>Snapshot the task (installed + next-run + stored UTC time) for the Settings UI.</summary>
     public async Task<AutoseedStatus> GetStatusAsync(CancellationToken ct = default)
     {
-        var naInstalled = await _tasks.IsInstalledAsync(AutoSeedSlot.Na.TaskName, ct).ConfigureAwait(false);
-        var naNext = naInstalled ? await _tasks.GetNextRunTimeAsync(AutoSeedSlot.Na.TaskName, ct).ConfigureAwait(false) : null;
-        var euInstalled = await _tasks.IsInstalledAsync(AutoSeedSlot.Eu.TaskName, ct).ConfigureAwait(false);
-        var euNext = euInstalled ? await _tasks.GetNextRunTimeAsync(AutoSeedSlot.Eu.TaskName, ct).ConfigureAwait(false) : null;
+        var slot = AutoSeedSlot.Default;
+        var installed = await _tasks.IsInstalledAsync(slot.TaskName, ct).ConfigureAwait(false);
+        var next = installed ? await _tasks.GetNextRunTimeAsync(slot.TaskName, ct).ConfigureAwait(false) : null;
+        return new AutoseedStatus(installed, next, _config.GetString(slot.StoreKey));
+    }
 
-        return new AutoseedStatus(
-            naInstalled, naNext, _config.GetString(AutoSeedSlot.Na.StoreKey),
-            euInstalled, euNext, _config.GetString(AutoSeedSlot.Eu.StoreKey));
+    /// <summary>
+    /// The daily wake time (UTC) derived from the seeding config: the earliest active-window start,
+    /// or <c>DailyResetHourUtc:00</c> when no windows are configured. Pure; unit-testable.
+    /// </summary>
+    public static (int Hours, int Minutes) WakeTimeUtc(SeedingConfig config)
+    {
+        if (config.ActiveWindows is { Count: > 0 } windows)
+        {
+            var minStart = windows.Min(w => w.StartMin);
+            minStart = Math.Clamp(minStart, 0, 1439);
+            return (minStart / 60, minStart % 60);
+        }
+        return (Math.Clamp(config.DailyResetHourUtc, 0, 23), 0);
     }
 }

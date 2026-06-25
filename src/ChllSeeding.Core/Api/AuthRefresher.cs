@@ -22,21 +22,24 @@ public sealed class AuthRefresher(IHttpClientFactory httpFactory, AuthSession se
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     /// <summary>Refresh the JWT once. <paramref name="tokenBefore"/> is the token value the caller
-    /// saw on the request that got the 401; if it has since changed, another refresh already ran.</summary>
-    public async Task RefreshAsync(string? tokenBefore, CancellationToken ct = default)
+    /// saw on the request that got the 401; if it has since changed, another refresh already ran.
+    /// Returns <c>true</c> when a usable token is in place afterwards (freshly refreshed, or already
+    /// refreshed by a concurrent caller), <c>false</c> when the refresh failed and tokens were cleared
+    /// — the caller should then surface the original 401 rather than retry. Port of <c>refresh_auth</c>.</summary>
+    public async Task<bool> RefreshAsync(string? tokenBefore, CancellationToken ct = default)
     {
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             if (session.Token != tokenBefore)
             {
-                return; // someone else already refreshed
+                return true; // someone else already refreshed — the current token is usable
             }
 
             var refresh = session.RefreshToken;
             if (refresh is null)
             {
-                return;
+                return false;
             }
 
             var http = httpFactory.CreateClient(ClientName);
@@ -50,7 +53,7 @@ public sealed class AuthRefresher(IHttpClientFactory httpFactory, AuthSession se
             {
                 log.LogWarning("Token refresh failed: {Status}", (int)resp.StatusCode);
                 session.ClearTokens();
-                return;
+                return false;
             }
 
             var body = await resp.Content.ReadFromJsonAsync<AuthRefreshResponse>(ApiJson.Options, ct)
@@ -58,13 +61,15 @@ public sealed class AuthRefresher(IHttpClientFactory httpFactory, AuthSession se
             if (body is null || string.IsNullOrEmpty(body.Token))
             {
                 session.ClearTokens();
-                return;
+                return false;
             }
             session.SetTokens(body.Token, body.RefreshToken);
+            return true;
         }
         catch (Exception e) when (e is HttpRequestException or JsonException or TaskCanceledException)
         {
             log.LogWarning(e, "Token refresh failed");
+            return false;
         }
         finally
         {

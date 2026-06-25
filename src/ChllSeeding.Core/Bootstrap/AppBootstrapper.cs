@@ -15,12 +15,6 @@ namespace ChllSeeding.Core.Bootstrap;
 /// </summary>
 public sealed class AppBootstrapper : IHostedService
 {
-    /// <summary>Poll cadence while SSE is disconnected (the active fallback).</summary>
-    public static readonly TimeSpan FallbackPollInterval = TimeSpan.FromSeconds(10);
-
-    /// <summary>Poll cadence while SSE is connected (a slow safety net for missed events).</summary>
-    public static readonly TimeSpan IdlePollInterval = TimeSpan.FromSeconds(60);
-
     private readonly ILogger<AppBootstrapper> _log;
     private readonly SeedingApiClient _api;
     private readonly AuthSession _auth;
@@ -28,6 +22,7 @@ public sealed class AppBootstrapper : IHostedService
     private readonly ConfigService _config;
     private readonly LiveStats _live;
     private readonly SseConnectionState _sse;
+    private readonly SeedingConfigProvider _configProvider;
 
     private readonly CancellationTokenSource _cts = new();
     private Task? _runLoop;
@@ -39,7 +34,8 @@ public sealed class AppBootstrapper : IHostedService
         ServerStore servers,
         ConfigService config,
         LiveStats live,
-        SseConnectionState sse)
+        SseConnectionState sse,
+        SeedingConfigProvider configProvider)
     {
         _log = log;
         _api = api;
@@ -48,6 +44,7 @@ public sealed class AppBootstrapper : IHostedService
         _config = config;
         _live = live;
         _sse = sse;
+        _configProvider = configProvider;
     }
 
     /// <summary>Raised after the server list is (re)loaded successfully.</summary>
@@ -84,14 +81,22 @@ public sealed class AppBootstrapper : IHostedService
     private async Task RunAsync(CancellationToken ct)
     {
         await EnsureGuestAuthAsync(ct).ConfigureAwait(false);
+        await RefreshConfigAsync(ct).ConfigureAwait(false);
         await LoadServersAsync(ct).ConfigureAwait(false);
 
         while (!ct.IsCancellationRequested)
         {
             // Idle slowly while SSE feeds data; poll fast (and wake on disconnect) when it doesn't.
-            var interval = _sse.Connected ? IdlePollInterval : FallbackPollInterval;
+            // Intervals come from the server config (with the baked-in defaults as fallback).
+            var cfg = _configProvider.Current;
+            var interval = _sse.Connected
+                ? TimeSpan.FromSeconds(Math.Max(1, cfg.PollIdleSecs))
+                : TimeSpan.FromSeconds(Math.Max(1, cfg.PollFallbackSecs));
             try { await _sse.WaitForPollOrInterval(interval, ct).ConfigureAwait(false); }
             catch (OperationCanceledException) { break; }
+
+            // Refresh the server-decided config each loop so timing changes propagate without a restart.
+            await RefreshConfigAsync(ct).ConfigureAwait(false);
 
             // Skip the redundant HTTP round-trip if SSE reconnected while we waited.
             if (_sse.Connected)
@@ -99,6 +104,21 @@ public sealed class AppBootstrapper : IHostedService
                 continue;
             }
             await PollStatsAsync(ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Fetch the seeding config and publish it. Non-fatal — keeps the previous (or baked-in)
+    /// config on failure so the app still works when the endpoint is unreachable.</summary>
+    private async Task RefreshConfigAsync(CancellationToken ct)
+    {
+        try
+        {
+            var cfg = await _api.GetSeedingConfigAsync(ct).ConfigureAwait(false);
+            _configProvider.Update(cfg);
+        }
+        catch (Exception e)
+        {
+            _log.LogDebug(e, "Seeding config fetch failed (keeping current config)");
         }
     }
 
@@ -133,7 +153,7 @@ public sealed class AppBootstrapper : IHostedService
             var resp = await _api.GetServersAsync(ct).ConfigureAwait(false);
             _servers.Load(resp);
             HasServers = true;
-            _log.LogInformation("Loaded {Na} NA / {Eu} EU servers", resp.Hll.Na.Count, resp.Hll.Eu.Count);
+            _log.LogInformation("Loaded {Count} servers", resp.Hll.Count);
             ServersLoaded?.Invoke();
 
             // Seed the banner immediately rather than waiting a full poll interval.
