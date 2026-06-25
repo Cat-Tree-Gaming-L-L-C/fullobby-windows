@@ -548,6 +548,9 @@ public sealed partial class AccountViewModel : ObservableObject
         {
             var entries = await _api.GetSteamIdsAsync().ConfigureAwait(false);
             var ids = entries.Select(e => e.SteamId).ToList();
+            // Persist for the seeding backend's start-session analytics (the engine/VM has no account
+            // context), mirroring Rust's stored "linked_steam_ids" session key.
+            _config.Set("linked_steam_ids", ids);
             RunOnUi(() =>
             {
                 LinkedSteamIds.Clear();
@@ -610,6 +613,7 @@ public sealed partial class AccountViewModel : ObservableObject
     {
         _auth.ClearTokens();
         _auth.ClearApiKey();
+        _config.Remove("linked_steam_ids");
         RunOnUi(() =>
         {
             User = null;

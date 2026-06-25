@@ -272,12 +272,15 @@ public sealed class SseStreamClient : IHostedService
                 return new ConnectionOutcome(1, false, false);
             }
 
-            // Any line is proof of life — reset the keepalive window.
-            lastActivity.Restart();
-            kaCts.CancelAfter(TimeSpan.FromSeconds(KeepaliveSecs));
-
             if (parser.Feed(line) is { } frame)
             {
+                // A dispatched event (incl. server "heartbeat") is proof of life — reset the
+                // keepalive window here, NOT on every raw line. Mirrors the Rust client, which
+                // resets keepalive_started only on Event::Message/Open: ":keepalive" comment
+                // lines and partial field lines must NOT reset it, otherwise the wake-from-sleep
+                // elapsed measurement below can never accumulate past the wake threshold.
+                lastActivity.Restart();
+                kaCts.CancelAfter(TimeSpan.FromSeconds(KeepaliveSecs));
                 Dispatch(frame);
             }
         }

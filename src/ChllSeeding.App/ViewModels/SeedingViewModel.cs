@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using ChllSeeding.App.Services;
+using ChllSeeding.Core;
 using ChllSeeding.Core.Api;
 using ChllSeeding.Core.Bootstrap;
 using ChllSeeding.Core.Config;
@@ -35,13 +36,9 @@ public sealed partial class SeedingViewModel : ObservableObject
     private readonly ToastService _toast;
     private readonly InAppToastService _inAppToast;
     private readonly AutoSeedState _autoSeedState;
-    private readonly SseConnectionState _sse;
+    private readonly SseConnectionState _sseState;
     private readonly DispatcherQueue _dispatcher;
     private readonly DispatcherTimer _timer;
-
-    /// <summary>Consecutive SSE failures before the indicator reads "Polling" (the fallback is
-    /// reliably delivering data) instead of "Disconnected". Port of <c>POLLING_FALLBACK_THRESHOLD</c>.</summary>
-    private const int PollingFallbackThreshold = 3;
 
     /// <summary>The active seeding session id (from start-session), heartbeat-ed until stop. Null
     /// when no session is open. Analytics only — non-fatal if session creation failed.</summary>
@@ -51,6 +48,14 @@ public sealed partial class SeedingViewModel : ObservableObject
     /// fetches the next best candidate and re-launches. Cleared by a stop or when all are exhausted.
     /// Port of the Rust IS_SEED_ALL signal.</summary>
     private bool _isSeedAll;
+
+    // Anti-spam cooldowns (port of state::cooldown + SEED_ALL_COOLDOWN_SECS / SEED_REGION_COOLDOWN_SECS):
+    // Seed All gets a 30s cooldown after an "all full"/error no-op (where IsBusy is already back to
+    // Idle, so it wouldn't otherwise block a rapid re-click); region buttons get a 5s cooldown.
+    private const int SeedAllCooldownSecs = 30;
+    private const int SeedRegionCooldownSecs = 5;
+    private long _seedAllCooldownUntilMs;
+    private long _seedRegionCooldownUntilMs;
 
     /// <summary>Set by the hosting page (which has a XamlRoot) so the VM can ask the user to
     /// confirm closing a running game. Returns true when the user confirms.</summary>
@@ -69,7 +74,7 @@ public sealed partial class SeedingViewModel : ObservableObject
         ToastService toast,
         InAppToastService inAppToast,
         AutoSeedState autoSeedState,
-        SseConnectionState sse)
+        SseConnectionState sseState)
     {
         _log = log;
         _engine = engine;
@@ -83,7 +88,7 @@ public sealed partial class SeedingViewModel : ObservableObject
         _toast = toast;
         _inAppToast = inAppToast;
         _autoSeedState = autoSeedState;
-        _sse = sse;
+        _sseState = sseState;
 
         // Constructed on the UI thread (first page resolve), so this captures the UI queue.
         _dispatcher = DispatcherQueue.GetForCurrentThread();
@@ -183,10 +188,17 @@ public sealed partial class SeedingViewModel : ObservableObject
     private bool serverSwitchActive;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ServerSwitchHeading))]
     private bool serverSwitchSnoozed;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ServerSwitchHeading))]
     private string serverSwitchTitle = "";
+
+    /// <summary>Overlay heading: the snoozed state gets its own title ("Server Switch Snoozed"),
+    /// otherwise the reason-derived <see cref="ServerSwitchTitle"/>. Mirrors the Rust seed.rs overlay,
+    /// which swaps to a distinct snoozed layout/heading.</summary>
+    public string ServerSwitchHeading => ServerSwitchSnoozed ? "Server Switch Snoozed" : ServerSwitchTitle;
 
     [ObservableProperty]
     private string serverSwitchServerName = "";
@@ -197,16 +209,6 @@ public sealed partial class SeedingViewModel : ObservableObject
     private long _switchCountdown;
     private long _switchSnoozeRemaining;
 
-    /// <summary>Ticks since the last game-running poll (the timer fires every 1s; the poll runs every
-    /// 5s, matching the Rust check_game_running loop).</summary>
-    private int _gameCheckTicks;
-
-    /// <summary>Index/region of the server currently being seeded, used to give the status banner
-    /// server-name context ("Seeding {server} (EU)"). Port of the Rust SEEDING_INDEX/SEEDING_REGION
-    /// signals read by seed_banner.rs. Null index ⇒ no active seed (bare launch or idle).</summary>
-    private int? _seedingIndex;
-    private string _seedingRegion = "na";
-
     // Auto-seed countdown overlay (a scheduled or missed auto-seed shows a 60s cancellable countdown
     // before launching). Port of the AutoseedCountdown* AppEvents in setup.rs run_autoseed.
     [ObservableProperty]
@@ -215,20 +217,43 @@ public sealed partial class SeedingViewModel : ObservableObject
     [ObservableProperty]
     private string autoseedCountdownText = "";
 
-    // Live-data connection indicator (port of components/reconnect_button.rs). Shown only while SSE
-    // is disconnected: "Disconnected" (warning) for the first few failures, then a neutral "Polling"
-    // once the HTTP fallback is reliably delivering data.
+    // Connectivity to the live SSE feed, polled from SseConnectionState on the 1s timer. The UI
+    // shows a "Live" indicator while connected and a Reconnect affordance when it's down (stats
+    // still update via the HTTP poll fallback meanwhile). Port of the seed_banner Live/Disconnected
+    // dot + reconnect_button.
     [ObservableProperty]
-    private bool connectionIndicatorVisible;
+    [NotifyPropertyChangedFor(nameof(ShowReconnect))]
+    [NotifyPropertyChangedFor(nameof(ConnectionStatusText))]
+    private bool sseConnected;
 
     [ObservableProperty]
-    private bool connectionPolling;
+    [NotifyPropertyChangedFor(nameof(ShowReconnect))]
+    [NotifyPropertyChangedFor(nameof(ConnectionStatusText))]
+    private int connectionFailures;
 
-    [ObservableProperty]
-    private string connectionStatusText = "Disconnected";
+    /// <summary>Show the Reconnect button only when the stream is down after a real failure (avoids a
+    /// flash during the first connect, where failures is still 0).</summary>
+    public bool ShowReconnect => !SseConnected && ConnectionFailures > 0;
 
+    /// <summary>Live-feed indicator label.</summary>
+    public string ConnectionStatusText => SseConnected
+        ? "Live"
+        : (ConnectionFailures > 0 ? "Reconnecting…" : "Connecting…");
+
+    // Seed All cooldown (reactive remaining seconds, ticked by the 1s timer). Mirrors the Rust
+    // SEED_ALL_COOLDOWN_REMAINING signal driving the "Retry in {n}s" button label.
     [ObservableProperty]
-    private string connectionAgeText = "";
+    [NotifyPropertyChangedFor(nameof(CanSeedAll))]
+    [NotifyPropertyChangedFor(nameof(SeedAllButtonText))]
+    private int seedAllCooldownRemaining;
+
+    /// <summary>Seed All is clickable only when not in its post-no-op cooldown.</summary>
+    public bool CanSeedAll => SeedAllCooldownRemaining == 0;
+
+    /// <summary>Seed All button label: counts down during the cooldown, else "Seed All".</summary>
+    public string SeedAllButtonText => SeedAllCooldownRemaining > 0
+        ? $"Retry in {SeedAllCooldownRemaining}s"
+        : "Seed All";
 
     public ObservableCollection<ServerRow> NaServers { get; } = [];
     public ObservableCollection<ServerRow> EuServers { get; } = [];
@@ -323,40 +348,19 @@ public sealed partial class SeedingViewModel : ObservableObject
             or SeedingStatus.Stopping or SeedingStatus.Switching
             || (Status == SeedingStatus.Running && IsSeeding);
 
-        // Give the active-seed banners server-name + region context when we have an index (port of
-        // the match arms in seed_banner.rs). EU adds " (EU)" / " EU"; NA adds nothing.
-        var name = SeedingServerName();
-        var hasContext = _seedingIndex is not null && name.Length > 0;
-        var suffix = _seedingRegion == "eu" ? " (EU)" : "";
-        var suffixShort = _seedingRegion == "eu" ? " EU" : "";
-
         var banner = Status switch
         {
-            SeedingStatus.Initializing => hasContext ? $"Initializing {name}{suffix}" : "Initializing",
+            SeedingStatus.Initializing => "Initializing",
             SeedingStatus.Running => "Game Running",
-            SeedingStatus.Seeding => hasContext ? $"Seeding {name}{suffix}" : "Seeding",
+            SeedingStatus.Seeding => "Seeding",
             SeedingStatus.Stopping => "Stopping…",
             SeedingStatus.Switching => "Switching…",
             SeedingStatus.Stopped => "Stopped",
-            SeedingStatus.WaitingForUpdate => hasContext
-                ? $"Waiting for game update ({name}{suffixShort})"
-                : "Waiting for game update…",
+            SeedingStatus.WaitingForUpdate => "Waiting for game update…",
             _ => "",
         };
         StatusBanner = banner;
         ShowStatusBanner = banner.Length > 0;
-    }
-
-    /// <summary>Resolve the display name of the server currently being seeded from the row lists, by
-    /// the tracked index + region. Empty when no seed is active or the index is out of range.</summary>
-    private string SeedingServerName()
-    {
-        if (_seedingIndex is not { } idx)
-        {
-            return "";
-        }
-        var rows = _seedingRegion == "eu" ? EuServers : NaServers;
-        return idx >= 0 && idx < rows.Count ? rows[idx].Name : "";
     }
 
     private bool IsBusy => Status is SeedingStatus.Initializing or SeedingStatus.Seeding
@@ -383,6 +387,12 @@ public sealed partial class SeedingViewModel : ObservableObject
             await _bootstrap.LoadServersAsync().ConfigureAwait(true);
             return;
         }
+        // 5s anti-spam cooldown for repeated region clicks (port of seed_region cooldown).
+        if (Environment.TickCount64 < _seedRegionCooldownUntilMs)
+        {
+            return;
+        }
+        _seedRegionCooldownUntilMs = Environment.TickCount64 + SeedRegionCooldownSecs * 1000L;
 
         ClearSeedError();
         IsSeeding = true;
@@ -443,13 +453,10 @@ public sealed partial class SeedingViewModel : ObservableObject
     /// which case the status/error has already been set. Port of start_seeding_inner + the monitor await.</summary>
     private async Task<bool> LaunchAndMonitorAsync(int index, string region, bool autoSeed = false)
     {
-        _seedingRegion = region;
-        _seedingIndex = index;
         SetStatus(SeedingStatus.Initializing);
         try
         {
             var actual = await _engine.StartSeedingAsync(index, region).ConfigureAwait(true);
-            _seedingIndex = actual;
             SetStatus(SeedingStatus.Seeding);
 
             // Create the analytics session + heartbeat after a successful launch (non-fatal).
@@ -496,6 +503,11 @@ public sealed partial class SeedingViewModel : ObservableObject
             await _bootstrap.LoadServersAsync().ConfigureAwait(true);
             return;
         }
+        if (SeedAllCooldownRemaining > 0)
+        {
+            _inAppToast.Info($"Please wait {SeedAllCooldownRemaining}s before trying again.");
+            return;
+        }
 
         ClearSeedError();
         IsSeeding = true;
@@ -515,6 +527,7 @@ public sealed partial class SeedingViewModel : ObservableObject
         {
             _log.LogError(e, "Seed All: failed to fetch seeding status");
             _isSeedAll = false;
+            StartSeedAllCooldown(); // throttle rapid retries after an error (Rust seed.rs:521)
             SetSeedError("Couldn't reach the seeding service. Please try again.");
             return;
         }
@@ -522,6 +535,7 @@ public sealed partial class SeedingViewModel : ObservableObject
         if (hop is null)
         {
             _isSeedAll = false;
+            StartSeedAllCooldown(); // throttle rapid retries after "all full" (Rust seed.rs:473)
             SetSeedError("All servers are full or offline — no seeding needed.");
             return;
         }
@@ -705,9 +719,14 @@ public sealed partial class SeedingViewModel : ObservableObject
                 return;
             }
 
-            // 60s countdown the user can cancel. A desktop toast surfaces it even when the window is
-            // hidden in the tray (the in-window overlay alone would be invisible then).
+            // Desktop toast before the countdown so a user away from the keyboard gets a warning
+            // before the game launches, and so it's visible even when the window is hidden in the
+            // tray (the in-window overlay alone would be invisible then). Port of run_autoseed's
+            // show_notification. Deviation: Rust only raised this for NA (run_autoseed("na", true) vs
+            // ("eu", false) — an apparent oversight); we show it for both regions.
             _toast.ShowAutoseedStarting();
+
+            // 60s countdown the user can cancel.
             AutoseedCountdownActive = true;
             for (var i = 60; i > 0; i--)
             {
@@ -784,6 +803,14 @@ public sealed partial class SeedingViewModel : ObservableObject
         }
     }
 
+    /// <summary>Start the 30s Seed All cooldown (after an "all full"/error no-op). Port of
+    /// set_seed_all_cooldown.</summary>
+    private void StartSeedAllCooldown()
+    {
+        _seedAllCooldownUntilMs = Environment.TickCount64 + SeedAllCooldownSecs * 1000L;
+        SeedAllCooldownRemaining = SeedAllCooldownSecs;
+    }
+
     /// <summary>Cancel an in-progress auto-seed countdown.</summary>
     [RelayCommand]
     private void CancelAutoseed()
@@ -805,10 +832,13 @@ public sealed partial class SeedingViewModel : ObservableObject
         try
         {
             var analytics = Analytics.Gather(_config, autoSeed);
-            // This desktop app only ever launches Hell Let Loose through the Steam client,
-            // so every session it creates is a Steam-storefront session.
+            // This desktop app only ever launches Hell Let Loose through the Steam client, so every
+            // session it creates is a Steam-storefront session (platform=steam). Forward the first
+            // linked Steam ID (persisted by the account VM) like Rust's run_autoseed / start-session,
+            // which reads linked_steam_ids[0]; null when no Steam account is linked.
+            var steamId = _config.Get<List<string>>("linked_steam_ids")?.FirstOrDefault();
             var resp = await _api.StartSessionAsync(
-                _engine.CurrentGame.Id, region, index, Platform.Steam, steamId: null, analytics).ConfigureAwait(true);
+                _engine.CurrentGame.Id, region, index, Platform.Steam, steamId, analytics).ConfigureAwait(true);
             _sessionId = resp.SessionId;
             await _heartbeat.StartAsync(resp.SessionId).ConfigureAwait(true);
         }
@@ -853,7 +883,6 @@ public sealed partial class SeedingViewModel : ObservableObject
 
         ClearLaunchError();
         IsSeeding = false;
-        _seedingIndex = null; // bare launch has no seeding context (Rust SEEDING_INDEX = None)
         SetStatus(SeedingStatus.Initializing);
 
         if (!await ConfirmCloseRunningGameAsync().ConfigureAwait(true))
@@ -945,6 +974,11 @@ public sealed partial class SeedingViewModel : ObservableObject
     [RelayCommand]
     private Task RetryServersAsync() => _bootstrap.LoadServersAsync();
 
+    /// <summary>Manually drop and re-establish the live SSE connection. Port of the reconnect button's
+    /// request_reconnect().</summary>
+    [RelayCommand]
+    private void Reconnect() => _sseState.RequestReconnect();
+
     // ── Server-switch overlay commands ─────────────────────────────────────────
 
     [RelayCommand]
@@ -984,7 +1018,6 @@ public sealed partial class SeedingViewModel : ObservableObject
             case SeedingEvent.HllClosed:
                 ResetSwitchOverlay();
                 SplashBypassActive = false;
-                _seedingIndex = null;
                 SetStatus(SeedingStatus.Stopped);
                 IsSeeding = false;
                 break;
@@ -998,7 +1031,6 @@ public sealed partial class SeedingViewModel : ObservableObject
             case SeedingEvent.ServerSwitchSnoozed sn:
                 ServerSwitchSnoozed = true;
                 _switchSnoozeRemaining = sn.SnoozeSecs;
-                UpdateSwitchTitle();
                 UpdateSwitchText();
                 break;
             case SeedingEvent.ServerSwitchExecuting:
@@ -1023,15 +1055,14 @@ public sealed partial class SeedingViewModel : ObservableObject
         }
     }
 
-    /// <summary>Title shown while the switch countdown is active (not snoozed). Port of switch_title
-    /// in seed.rs. The engine only emits candidate_changed/time_limit today; server_full is mapped
-    /// defensively to match the Rust UI.</summary>
-    private string _switchReasonTitle = "Server Switching";
-
     private void ShowSwitchOverlay(SeedingEvent.ServerSwitchPending p)
     {
         ServerSwitchServerName = p.ServerName;
-        _switchReasonTitle = p.Reason switch
+        // Title-by-reason mirrors the Rust seed.rs mapping exactly: candidate_changed → "Server
+        // Switching", server_full → "Server is Full", anything else (incl. time_limit) → "Time
+        // Limit Reached". (The engine currently emits only candidate_changed/time_limit, but the
+        // full mapping keeps parity if server_full is ever emitted.)
+        ServerSwitchTitle = p.Reason switch
         {
             "candidate_changed" => "Server Switching",
             "server_full" => "Server is Full",
@@ -1040,14 +1071,8 @@ public sealed partial class SeedingViewModel : ObservableObject
         _switchCountdown = p.CountdownSecs;
         ServerSwitchSnoozed = false;
         ServerSwitchActive = true;
-        UpdateSwitchTitle();
         UpdateSwitchText();
     }
-
-    /// <summary>Title reflects the snoozed state: "Server Switch Snoozed" while snoozed, otherwise the
-    /// reason-based title (port of the snoozed/active branches of the switch modal in seed.rs).</summary>
-    private void UpdateSwitchTitle() =>
-        ServerSwitchTitle = ServerSwitchSnoozed ? "Server Switch Snoozed" : _switchReasonTitle;
 
     private void ResetSwitchOverlay()
     {
@@ -1117,6 +1142,17 @@ public sealed partial class SeedingViewModel : ObservableObject
 
     private void OnTimerTick(object? sender, object e)
     {
+        // Mirror the live SSE connection state into observable UI props (cheap, once a second).
+        SseConnected = _sseState.Connected;
+        ConnectionFailures = _sseState.FailureCount;
+
+        // Tick the Seed All cooldown down to 0 (drives the "Retry in {n}s" button label).
+        if (SeedAllCooldownRemaining > 0)
+        {
+            var remain = _seedAllCooldownUntilMs - Environment.TickCount64;
+            SeedAllCooldownRemaining = remain > 0 ? (int)Math.Ceiling(remain / 1000.0) : 0;
+        }
+
         if (SplashBypassActive && _splashRemaining > 0)
         {
             _splashRemaining--;
@@ -1138,68 +1174,7 @@ public sealed partial class SeedingViewModel : ObservableObject
             }
             UpdateSwitchText();
         }
-
-        UpdateConnectionIndicator();
-
-        if (++_gameCheckTicks >= 5)
-        {
-            _gameCheckTicks = 0;
-            CheckGameRunning();
-        }
     }
-
-    /// <summary>Poll whether the current game is running and flip the status banner so a game
-    /// launched or closed <b>outside</b> the app is reflected (e.g. the user starts HLL by hand, or
-    /// it crashes mid-seed). Port of app.rs check_game_running.
-    /// <para>Deviation: Rust only skips Initializing/Stopping. We also skip Switching and
-    /// WaitingForUpdate — both are engine-owned transitions in which the game exe is legitimately
-    /// absent (killed mid-relaunch / updating), so the Rust check would clobber them to Stopped. The
-    /// Rust 5s loop has the same latent flaw but it's masked there; our 1s timer makes it reachable.</para></summary>
-    private void CheckGameRunning()
-    {
-        if (Status is SeedingStatus.Initializing or SeedingStatus.Stopping
-            or SeedingStatus.Switching or SeedingStatus.WaitingForUpdate)
-        {
-            return;
-        }
-
-        var running = _engine.IsGameRunning;
-        if (running)
-        {
-            if (Status != SeedingStatus.Seeding)
-            {
-                SetStatus(SeedingStatus.Running);
-            }
-        }
-        else if (Status != SeedingStatus.Idle)
-        {
-            SetStatus(SeedingStatus.Stopped);
-        }
-    }
-
-    /// <summary>Refresh the live-data connection indicator from <see cref="SseConnectionState"/> and
-    /// the last stats timestamp. Port of the render logic in components/reconnect_button.rs.</summary>
-    private void UpdateConnectionIndicator()
-    {
-        if (_sse.Connected)
-        {
-            ConnectionIndicatorVisible = false;
-            return;
-        }
-
-        ConnectionIndicatorVisible = true;
-        ConnectionPolling = _sse.FailureCount >= PollingFallbackThreshold;
-        ConnectionStatusText = ConnectionPolling ? "Polling" : "Disconnected";
-
-        var secondsAgo = _live.LastUpdateUtc is { } last
-            ? Math.Max(0, (long)(DateTime.UtcNow - last).TotalSeconds)
-            : 0;
-        ConnectionAgeText = $"Updated {secondsAgo}s ago";
-    }
-
-    /// <summary>Ask the SSE loop to drop and reconnect immediately (manual refresh button).</summary>
-    [RelayCommand]
-    private void Reconnect() => _sse.RequestReconnect();
 
     private void UpdateSplashText() =>
         SplashBypassText = $"Skipping intro ({_splashRemaining / 60}:{_splashRemaining % 60:D2} remaining)";

@@ -34,13 +34,33 @@
         <Grid x:Name="AppTitleBar" Background="Transparent">
             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="12,0,0,0">
                 <Image Source="ms-appx:///Assets/logo_nbg.png" Width="18" Height="18" />
-                <TextBlock Text="CHLL Seeding" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
+                <TextBlock
+                    Text="CHLL Seeding"
+                    FontFamily="{StaticResource BrandDisplayFontFamily}"
+                    FontSize="17"
+                    CharacterSpacing="80"
+                    VerticalAlignment="Center" />
+                <TextBlock
+                    x:Name="VersionText"
+                    FontSize="11"
+                    Opacity="0.5"
+                    VerticalAlignment="Center" />
+                <Border
+                    x:Name="DevBadge"
+                    Visibility="Collapsed"
+                    Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                    CornerRadius="4"
+                    Padding="6,1"
+                    VerticalAlignment="Center">
+                    <TextBlock Text="DEV BUILD" FontSize="10" FontWeight="SemiBold" />
+                </Border>
             </StackPanel>
         </Grid>
 
         <NavigationView
             x:Name="NavView"
             Grid.Row="1"
+            Background="Transparent"
             PaneDisplayMode="Top"
             IsBackButtonVisible="Collapsed"
             IsSettingsVisible="True"

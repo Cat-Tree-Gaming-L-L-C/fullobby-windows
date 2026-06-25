@@ -9,6 +9,9 @@ namespace ChllSeeding.Core.Api;
 public sealed class ServerInfo
 {
     public string Ip { get; set; } = "";
+    /// <summary>BattleMetrics server id. Required field on the Rust ServerInfo (server.rs:15);
+    /// carried for wire-shape parity (no current C# consumer).</summary>
+    public long BmId { get; set; }
     public string ShortName { get; set; } = "";
     public string Name { get; set; } = "";
     public int SeedingThreshold { get; set; }

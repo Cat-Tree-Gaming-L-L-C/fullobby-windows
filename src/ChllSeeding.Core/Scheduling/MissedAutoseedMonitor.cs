@@ -139,8 +139,8 @@ public sealed class MissedAutoseedMonitor : IHostedService, IDisposable
     /// <summary>
     /// True when <paramref name="nowUtc"/> is at or after today's <paramref name="scheduledUtc"/> and
     /// strictly less than <paramref name="windowHours"/> past it — i.e. the window is [0, windowHours).
-    /// Matches the Rust check (<c>diff.num_hours() &gt;= MISSED_AUTOSEED_WINDOW_HOURS</c> excludes the
-    /// boundary). Pure; unit-tested.
+    /// The upper bound is exclusive to match Rust's <c>diff.num_hours() &gt;= MISSED_AUTOSEED_WINDOW_HOURS</c>
+    /// skip (autoseed.rs:335), which drops anything at or beyond the whole-hour mark. Pure; unit-tested.
     /// </summary>
     public static bool IsWithinMissedWindow(DateTime nowUtc, TimeOnly scheduledUtc, int windowHours)
     {

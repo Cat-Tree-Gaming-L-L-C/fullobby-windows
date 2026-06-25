@@ -43,6 +43,14 @@
   <ItemGroup>
     <Content Include="..\..\icons\icon.ico" Link="Assets\icon.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\assets\logo_nbg.png" Link="Assets\logo_nbg.png" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Brand fonts (SIL OFL): Bebas Neue = display/wordmark, Inter = body/UI.
+         The OFL.txt licenses ship alongside the .ttf files so they're carried into
+         the publish output (and thus the installer) — OFL requires redistributing
+         the license with the font. -->
+    <Content Include="..\..\assets\fonts\BebasNeue-Regular.ttf" Link="Assets\fonts\BebasNeue-Regular.ttf" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\assets\fonts\Inter-VariableFont.ttf" Link="Assets\fonts\Inter-VariableFont.ttf" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\assets\fonts\BebasNeue-OFL.txt" Link="Assets\fonts\BebasNeue-OFL.txt" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\assets\fonts\Inter-OFL.txt" Link="Assets\fonts\Inter-OFL.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
