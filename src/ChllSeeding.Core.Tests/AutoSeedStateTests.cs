@@ -34,30 +34,29 @@ public class AutoSeedStateTests
     }
 
     [Fact]
-    public void TriggeredToday_TracksPerRegionPerDay()
+    public void TriggeredToday_TracksPerDay()
     {
         var s = new AutoSeedState();
         var today = new DateOnly(2026, 6, 10);
 
-        Assert.False(s.WasTriggeredToday("na", today));
-        s.RecordTriggered("na", today);
-        Assert.True(s.WasTriggeredToday("na", today));
-        Assert.False(s.WasTriggeredToday("eu", today)); // independent regions
+        Assert.False(s.WasTriggeredToday(today));
+        s.RecordTriggered(today);
+        Assert.True(s.WasTriggeredToday(today));
     }
 
     [Fact]
-    public void RecordTriggered_PrunesStaleDays()
+    public void RecordTriggered_OnlyMatchesRecordedDay()
     {
         var s = new AutoSeedState();
         var yesterday = new DateOnly(2026, 6, 9);
         var today = new DateOnly(2026, 6, 10);
 
-        s.RecordTriggered("na", yesterday);
-        Assert.True(s.WasTriggeredToday("na", yesterday));
+        s.RecordTriggered(yesterday);
+        Assert.True(s.WasTriggeredToday(yesterday));
 
-        // Recording on a new day drops the previous day's entries.
-        s.RecordTriggered("eu", today);
-        Assert.False(s.WasTriggeredToday("na", yesterday));
-        Assert.True(s.WasTriggeredToday("eu", today));
+        // Recording on a new day means the previous day no longer matches.
+        s.RecordTriggered(today);
+        Assert.False(s.WasTriggeredToday(yesterday));
+        Assert.True(s.WasTriggeredToday(today));
     }
 }

@@ -19,10 +19,11 @@ namespace ChllSeeding.Core.Seeding;
 /// </summary>
 public sealed class SeedingEngine : IDisposable
 {
-    // ── Timing constants (seconds) — verbatim from seeding.rs ──────────────────
+    // ── Native launch/splash timing constants (seconds) — client mechanics, not
+    //    seeding policy. Seeding-policy timings (stagger, countdown, monitor cadence,
+    //    max session, snooze) now come from the server directive + SeedingConfig.
     public const long SplashBypassMinSecs = 10;
     public const long SplashBypassMaxSecs = 60;
-    public const long SplashBypassDefaultSecs = 20;
 
     public const long EacLaunchTimeoutSecs = 180;
     public const long WindowWaitTimeoutSecs = 60;
@@ -30,20 +31,10 @@ public sealed class SeedingEngine : IDisposable
     public const long GameOpenSecondRetrySecs = 120;
     public const long GameOpenTimeoutSecs = 180;
 
-    public const long MaxSeedingDurationSecs = 60 * 60 * 5; // 5 hours
     public const long PostKillWaitSecs = 20;
-    public const long ServerSwitchCountdownSecs = 30;
 
     public const long LaunchWatcherTimeoutSecs = 600; // 10 min
 
-    public const long MonitorMinIntervalSecs = 15;
-    public const long MonitorMaxIntervalSecs = 60;
-    public const long MonitorBackoffStepSecs = 15;
-
-    public const long StaggerMaxSecs = 90;
-    public const long StaggerJitterMaxSecs = 15;
-
-    public const long ForcedRefreshIntervalSecs = 180;
     public const long StatusLogIntervalSecs = 300;
 
     private readonly ILogger<SeedingEngine> _log;
@@ -57,6 +48,7 @@ public sealed class SeedingEngine : IDisposable
     private readonly SeedingStatusCache _statusCache;
     private readonly SeedingApiClient _api;
     private readonly ConfigService _config;
+    private readonly SeedingConfigProvider _configProvider;
     private readonly KeepAwake _keepAwake;
 
     private readonly CancellationTokenSource _lifetime = new();
@@ -85,6 +77,7 @@ public sealed class SeedingEngine : IDisposable
         SeedingStatusCache statusCache,
         SeedingApiClient api,
         ConfigService config,
+        SeedingConfigProvider configProvider,
         KeepAwake keepAwake)
     {
         _log = log;
@@ -98,6 +91,7 @@ public sealed class SeedingEngine : IDisposable
         _statusCache = statusCache;
         _api = api;
         _config = config;
+        _configProvider = configProvider;
         _keepAwake = keepAwake;
     }
 
@@ -119,20 +113,22 @@ public sealed class SeedingEngine : IDisposable
 
     // ── Public command surface (port of the pub fns in seeding.rs) ─────────────
 
-    /// <summary>Start seeding the NA/EU server at <paramref name="serverNumber"/>: launch the game
-    /// and run the splash bypass. Returns the server index. On launch failure, restores settings,
-    /// spawns the launch watcher, and rethrows. The caller then runs <see cref="MonitorSeedAsync"/>.</summary>
-    public Task<int> StartSeedingAsync(int serverNumber, string region = "na", CancellationToken ct = default) =>
-        StartSeedingImplAsync(serverNumber, region, ct);
+    /// <summary>Start seeding the server at index <paramref name="serverNumber"/> in the current
+    /// game's rotation: launch the game and run the splash bypass. Returns the server index. On
+    /// launch failure, restores settings, spawns the launch watcher, and rethrows. The caller then
+    /// runs <see cref="MonitorSeedAsync"/>.</summary>
+    public Task<int> StartSeedingAsync(int serverNumber, CancellationToken ct = default) =>
+        StartSeedingImplAsync(serverNumber, ct);
 
     /// <summary>Direct launch + focus (no seeding monitor, no efficiency mode). Port of <c>start_impl</c>.</summary>
-    public Task StartAsync(int serverNumber, string region = "na", CancellationToken ct = default) =>
-        StartImplAsync(serverNumber, region, ct);
+    public Task StartAsync(int serverNumber, CancellationToken ct = default) =>
+        StartImplAsync(serverNumber, ct);
 
-    /// <summary>Run the population monitor/rotation loop for an already-launched seed. Port of
-    /// <c>monitor_seed_impl</c>.</summary>
-    public Task MonitorSeedAsync(int serverNumber, string region = "na", CancellationToken ct = default) =>
-        MonitorSeedImplAsync(serverNumber, region, ct);
+    /// <summary>Run the directive-driven monitor loop for an already-launched seed: poll the server
+    /// for what to do (stay / switch / stop) and obey. <paramref name="sessionId"/> lets the server
+    /// enforce the max-session limit.</summary>
+    public Task<MonitorResult> MonitorSeedAsync(int serverNumber, string? sessionId = null, CancellationToken ct = default) =>
+        MonitorSeedImplAsync(serverNumber, sessionId, ct);
 
     /// <summary>Whether the game currently being seeded is running. UI guard for the
     /// "game already running" confirmation before (re)starting a seed or launch.</summary>
@@ -155,12 +151,14 @@ public sealed class SeedingEngine : IDisposable
         }
     }
 
-    /// <summary>Snooze a pending server switch for the given duration (clamped to 60–1800s).</summary>
+    /// <summary>Snooze a pending server switch for the given duration (clamped to the server-configured
+    /// snooze bounds, falling back to the baked-in defaults).</summary>
     public void SnoozeServerSwitch(long durationSecs)
     {
-        var clamped = Math.Clamp(durationSecs, SeedingState.SnoozeMinSecs, SeedingState.SnoozeMaxSecs);
+        var cfg = _configProvider.Current;
+        var clamped = Math.Clamp(durationSecs, cfg.SnoozeMinSecs, cfg.SnoozeMaxSecs);
         _log.LogInformation("Server switch snoozed for {Secs}s by user", clamped);
-        _state.SnoozeServerSwitch(durationSecs);
+        _state.SetSwitchSnooze(clamped);
     }
 
     /// <summary>Confirm a pending server switch immediately (skip the countdown).</summary>
@@ -320,92 +318,6 @@ public sealed class SeedingEngine : IDisposable
         _window.InvalidateCache();
     }
 
-    // ── Candidate-change check (port of has_candidate_changed) ─────────────────
-
-    private async Task<bool> HasCandidateChangedAsync(
-        string gameId, string region, int index, bool forceHttp, CancellationToken ct)
-    {
-        SeedingStatusResponse? status;
-        if (forceHttp)
-        {
-            try
-            {
-                status = await _api.GetSeedingStatusAsync(ct).ConfigureAwait(false);
-                _statusCache.Update(status);
-            }
-            catch (Exception e)
-            {
-                _log.LogWarning(e, "Forced refresh failed, falling back to cache");
-                status = _statusCache.GetCached();
-                if (status is null)
-                {
-                    _log.LogWarning("No cached seeding status available either");
-                    return false;
-                }
-            }
-        }
-        else
-        {
-            status = _statusCache.GetCached();
-            if (status is null)
-            {
-                try
-                {
-                    status = await _api.GetSeedingStatusAsync(ct).ConfigureAwait(false);
-                    _statusCache.Update(status);
-                }
-                catch (Exception e)
-                {
-                    _log.LogWarning(e, "Failed to fetch seeding status, continuing monitoring");
-                    return false;
-                }
-            }
-        }
-
-        var gameStatus = gameId switch
-        {
-            "hll" => status.Hll,
-            "hllv" => status.Hllv,
-            _ => null,
-        };
-        var candidate = region == "eu" ? gameStatus?.Eu : gameStatus?.Na;
-
-        if (candidate is null)
-        {
-            _log.LogInformation("No candidate for {Game}:{Region}, triggering switch", gameId, region);
-            return true;
-        }
-        if (candidate.Index != index)
-        {
-            _log.LogInformation("Candidate changed from {Old} to {New} in {Game}:{Region}, triggering switch",
-                index, candidate.Index, gameId, region);
-            return true;
-        }
-        return false;
-    }
-
-    // ── Stagger (port of compute_stagger_secs) ─────────────────────────────────
-
-    /// <summary>Compute the fill-based server-switch stagger delay: full server → 0s, barely above
-    /// the seeding threshold → <see cref="StaggerMaxSecs"/>, no population data → half of max.
-    /// Pure and dependency-free for unit coverage. Port of <c>compute_stagger_secs</c>.</summary>
-    public static long ComputeStaggerSecs(int threshold, (int Players, int MaxPlayers)? counts)
-    {
-        if (counts is not { } c)
-        {
-            return StaggerMaxSecs / 2; // no data yet — mid-range default
-        }
-
-        double headroom = Math.Max(c.MaxPlayers - threshold, 1);
-        double aboveThreshold = Math.Max(c.Players - threshold, 0);
-        var fillRatio = Math.Clamp(aboveThreshold / headroom, 0.0, 1.0);
-
-        return (long)(StaggerMaxSecs * (1.0 - fillRatio)); // truncating cast, matching Rust `as u64`
-    }
-
-    private long StaggerForServer(ServerInfo server) =>
-        ComputeStaggerSecs(server.SeedingThreshold, _servers.GetPlayerCount(server.Name));
-
     // ── Launch / open (port of open_game + the steam.rs orchestration) ─────────
 
     /// <summary>Launch the game through Steam and connect, applying efficiency mode first when
@@ -443,7 +355,8 @@ public sealed class SeedingEngine : IDisposable
 
     private async Task FocusHllAsync(CancellationToken ct)
     {
-        var bypassDuration = SplashBypassDefaultSecs;
+        // Default from the server config; a local user override still wins.
+        var bypassDuration = (long)_configProvider.Current.SplashBypassSecs;
         var configured = _config.GetString("splash_bypass_duration");
         if (configured is not null && long.TryParse(configured, out var parsed))
         {
@@ -668,7 +581,23 @@ public sealed class SeedingEngine : IDisposable
 
     // ── Public-command implementations ─────────────────────────────────────────
 
-    private async Task<int> StartSeedingImplAsync(int serverNumber, string region, CancellationToken ct)
+    /// <summary>Why a monitor loop returned, so the caller (ViewModel) can orchestrate what's next.</summary>
+    public enum MonitorOutcome
+    {
+        /// <summary>The user stopped seeding.</summary>
+        UserStopped,
+        /// <summary>The game closed on its own.</summary>
+        GameClosed,
+        /// <summary>The server directed an action (switch/stop/pause) — see <see cref="MonitorResult.Directive"/>.</summary>
+        Directed,
+    }
+
+    /// <summary>Result of a monitor loop. When <see cref="Outcome"/> is <see cref="MonitorOutcome.Directed"/>,
+    /// <see cref="Directive"/> is the final directive (Switch → relaunch its target; Stop with
+    /// <c>ScheduledPause</c> → idle then resume; Stop otherwise → done for now).</summary>
+    public readonly record struct MonitorResult(MonitorOutcome Outcome, SeedingDirective? Directive);
+
+    private async Task<int> StartSeedingImplAsync(int serverNumber, CancellationToken ct)
     {
         ClearStopForNewSession();
         CancelLaunchWatcher();
@@ -677,14 +606,14 @@ public sealed class SeedingEngine : IDisposable
         {
             // The monitor will run against the already-running game, so keep the system awake.
             _keepAwake.Acquire();
-            _log.LogInformation("HLL is already running, exiting start_seeding ({Region})", region);
+            _log.LogInformation("HLL is already running, exiting start_seeding");
             return serverNumber;
         }
 
         // Resolve the server BEFORE acquiring keep-awake: a no-server throw here would otherwise leak
         // the SetThreadExecutionState hold (this method throws past MonitorSeed's release finally).
-        var server = _servers.GetServerByRegion(region, serverNumber)
-            ?? throw new SeedingException($"No server at {region}:{serverNumber}");
+        var server = _servers.GetServer(_currentGame.Id, serverNumber)
+            ?? throw new SeedingException($"No server at index {serverNumber}");
 
         // Committed to launching — hold the system awake (released on monitor exit / stop / cleanup).
         _keepAwake.Acquire();
@@ -696,206 +625,180 @@ public sealed class SeedingEngine : IDisposable
         catch (Exception e) when (e is not OperationCanceledException)
         {
             _backup.RestoreAfterSeeding();
-            SpawnLaunchWatcher(server, serverNumber, region);
+            SpawnLaunchWatcher(server, serverNumber);
             throw;
         }
 
-        _log.LogInformation("Seeding started ({Region} region). Monitor process will now run. - {Name}",
-            region.ToUpperInvariant(), server.Name);
+        _log.LogInformation("Seeding started. Monitor process will now run. - {Name}", server.Name);
         return serverNumber;
     }
 
-    private async Task StartImplAsync(int serverNumber, string region, CancellationToken ct)
+    private async Task StartImplAsync(int serverNumber, CancellationToken ct)
     {
+        // Clear any leftover stop flag from a prior seed/stop, otherwise FocusHllAsync's
+        // phase-1 stop check trips immediately and the splash bypass never sends a key.
+        ClearStopForNewSession();
         CancelLaunchWatcher();
-        var server = _servers.GetServerByRegion(region, serverNumber)
-            ?? throw new SeedingException($"No server at {region}:{serverNumber}");
+        var server = _servers.GetServer(_currentGame.Id, serverNumber)
+            ?? throw new SeedingException($"No server at index {serverNumber}");
 
         // Direct launch: do NOT apply efficiency mode.
         await OpenGameAsync(server, applyEfficiency: false, ct).ConfigureAwait(false);
         await FocusHllAsync(ct).ConfigureAwait(false);
 
-        _log.LogInformation("Start {Region} complete.", region.ToUpperInvariant());
+        _log.LogInformation("Launch complete - {Name}", server.Name);
     }
 
-    private async Task MonitorSeedImplAsync(int serverNumber, string region, CancellationToken ct)
+    private async Task<MonitorResult> MonitorSeedImplAsync(int serverNumber, string? sessionId, CancellationToken ct)
     {
-        _log.LogInformation("Monitoring {Region} seed running", region.ToUpperInvariant());
-        var elapsed = Stopwatch.StartNew();
+        _log.LogInformation("Monitoring seed running (index {Index})", serverNumber);
 
-        var server = _servers.GetServerByRegion(region, serverNumber)
-            ?? throw new SeedingException($"No server at {region}:{serverNumber}");
+        var server = _servers.GetServer(_currentGame.Id, serverNumber)
+            ?? throw new SeedingException($"No server at index {serverNumber}");
 
         try
         {
-            await MonitorLoopAsync(elapsed, server, region, serverNumber, ct).ConfigureAwait(false);
+            return await MonitorLoopAsync(server, serverNumber, sessionId, ct).ConfigureAwait(false);
         }
         finally
         {
-            // Always restore the user's real settings (this also resets the efficiency-applied flag
-            // so it can re-apply on the next seed) and drop the keep-awake hold. Both are idempotent.
-            // NOTE: this is a DELIBERATE divergence from Rust's monitor_seed_impl, which defers the
-            // restore to the stop/launch-watcher callers. Every monitor return here is a terminal
-            // path with the game already killed (switch-kill, HLL-closed, stop) or about to be, so
-            // restoring eagerly is strictly safer — it can never leave HLL on degraded graphics
-            // settings between a switch-kill and the next launch. A Seed-All rotation simply
-            // re-applies efficiency on the next hop.
+            // Always restore the user's real settings (also resets the efficiency-applied flag) and
+            // drop the keep-awake hold. Both idempotent. Deliberate divergence from Rust (which defers
+            // restore to the caller): every monitor return is terminal with the game killed or closing.
             _backup.RestoreAfterSeeding();
             _keepAwake.Release();
         }
     }
 
-    // ── Monitor loop (port of monitor_loop) ────────────────────────────────────
+    // ── Monitor loop (directive-driven) ────────────────────────────────────────
 
-    private async Task MonitorLoopAsync(
-        Stopwatch elapsedTime, ServerInfo server, string region, int index, CancellationToken ct)
+    /// <summary>Fetch the current directive and refresh the shared config from it, or null on failure.</summary>
+    private async Task<SeedingDirective?> TryGetDirectiveAsync(int? currentIndex, string? sessionId, CancellationToken ct)
     {
-        // Entry check: if the candidate already changed before we start, kill and exit.
-        if (await HasCandidateChangedAsync(_currentGame.Id, region, index, false, ct).ConfigureAwait(false))
+        try
         {
-            _log.LogInformation("Candidate already changed at monitor start, exiting - {Name}", server.Name);
-            KillGameProcess();
-            await Task.Delay(TimeSpan.FromSeconds(PostKillWaitSecs), ct).ConfigureAwait(false);
+            var d = await _api.GetDirectiveAsync(_currentGame.Id, currentIndex, sessionId, ct).ConfigureAwait(false);
+            _configProvider.Update(d.Config);
+            return d;
+        }
+        catch (Exception e)
+        {
+            _log.LogWarning(e, "Directive fetch failed; will keep seeding and retry");
+            return null;
+        }
+    }
+
+    /// <summary>Interruptible sleep that wakes early on an SSE-reconnect/stop notification.</summary>
+    private async Task InterruptibleSleepAsync(int secs, CancellationToken ct)
+    {
+        if (secs <= 0)
+        {
             return;
         }
+        if (await _monitorSignal.WaitAsync(TimeSpan.FromSeconds(secs), ct).ConfigureAwait(false))
+        {
+            _log.LogDebug("Monitor woken early (SSE reconnect or stop)");
+        }
+    }
 
-        var currentInterval = MonitorMinIntervalSecs;
-        var lastCandidateChanged = false;
-
-        Stopwatch? switchFirstDetected = null;
-        var staggerJitter = Random.Shared.NextInt64(0, StaggerJitterMaxSecs + 1);
-
-        var lastForcedRefresh = Stopwatch.StartNew();
-        var lastStatusLog = Stopwatch.StartNew();
-
+    /// <summary>Poll the server directive and obey it until the game closes, the user stops, or the
+    /// server tells us to switch/stop. All decision/timing logic lives server-side; this loop is a
+    /// thin executor.</summary>
+    private async Task<MonitorResult> MonitorLoopAsync(
+        ServerInfo server, int index, string? sessionId, CancellationToken ct)
+    {
         while (true)
         {
             if (_state.IsStopRequested)
             {
                 _log.LogInformation("Stop requested during monitor loop - {Name}", server.Name);
-                break;
+                await GuardConfigAfterCloseAsync().ConfigureAwait(false);
+                return new MonitorResult(MonitorOutcome.UserStopped, null);
             }
             if (!_process.IsGameRunning(_currentGame))
             {
                 _log.LogInformation("HLL is not running, stopping seeding - {Name}", server.Name);
-                // Set stop so the UI won't try to relaunch after a user-closed game.
                 _state.RequestStop();
                 Emit(new SeedingEvent.HllClosed());
                 _keepAwake.Release();
-                break;
+                await GuardConfigAfterCloseAsync().ConfigureAwait(false);
+                return new MonitorResult(MonitorOutcome.GameClosed, null);
             }
 
-            var forceHttp = lastForcedRefresh.Elapsed.TotalSeconds >= ForcedRefreshIntervalSecs;
-            if (forceHttp)
+            var d = await TryGetDirectiveAsync(index, sessionId, ct).ConfigureAwait(false);
+            if (d is null)
             {
-                lastForcedRefresh.Restart();
+                // API unreachable — keep seeding and retry at the (config-driven) fallback cadence.
+                await InterruptibleSleepAsync((int)_configProvider.Current.PollFallbackSecs, ct).ConfigureAwait(false);
+                continue;
             }
 
-            var candidateChanged = await HasCandidateChangedAsync(_currentGame.Id, region, index, forceHttp, ct)
-                .ConfigureAwait(false);
-
-            if (candidateChanged != lastCandidateChanged)
+            if (d.Action is DirectiveAction.Stay or DirectiveAction.Seed)
             {
-                currentInterval = MonitorMinIntervalSecs;
-                lastCandidateChanged = candidateChanged;
-            }
-            else
-            {
-                currentInterval = Math.Min(currentInterval + MonitorBackoffStepSecs, MonitorMaxIntervalSecs);
+                await InterruptibleSleepAsync(d.PollAgainInSecs, ct).ConfigureAwait(false);
+                continue;
             }
 
-            var isTimedOut = elapsedTime.Elapsed.TotalSeconds > MaxSeedingDurationSecs;
-            var shouldSwitch = candidateChanged || isTimedOut;
-
-            if (shouldSwitch && switchFirstDetected is null)
+            // Switch or Stop → we must leave this server. Stagger first (server-computed) for a Switch.
+            if (d.Action == DirectiveAction.Switch && d.StaggerSecs > 0)
             {
-                switchFirstDetected = Stopwatch.StartNew();
-                var stagger = StaggerForServer(server);
-                var reason = candidateChanged ? "candidate changed" : "time limit reached";
-                _log.LogInformation("Server switch needed ({Reason}), fill-based stagger ~{Stagger}s + {Jitter}s jitter - {Name}",
-                    reason, stagger, staggerJitter, server.Name);
-            }
-            else if (!shouldSwitch && switchFirstDetected is not null)
-            {
-                _log.LogInformation("Switch conditions cleared, cancelling stagger - {Name}", server.Name);
-                switchFirstDetected = null;
-            }
-
-            var staggerReady = switchFirstDetected is { } sw
-                && sw.Elapsed.TotalSeconds >= StaggerForServer(server) + staggerJitter;
-
-            if (shouldSwitch && staggerReady)
-            {
-                if (_state.IsStopRequested) break;
-
-                if (!_config.GetBool("switch_notification", true))
+                _log.LogInformation("Switch needed, staggering ~{Secs}s - {Name}", d.StaggerSecs, server.Name);
+                await InterruptibleSleepAsync(d.StaggerSecs, ct).ConfigureAwait(false);
+                if (_state.IsStopRequested)
                 {
-                    _log.LogInformation("Switch notification disabled, killing HLL immediately - {Name}", server.Name);
-                    KillGameProcess();
-                    _log.LogInformation("Waiting {Secs} seconds for HLL to close - {Name}", PostKillWaitSecs, server.Name);
-                    await Task.Delay(TimeSpan.FromSeconds(PostKillWaitSecs), ct).ConfigureAwait(false);
-                    break;
+                    return new MonitorResult(MonitorOutcome.UserStopped, null);
                 }
-
-                var resumeMonitoring = await RunSwitchCountdownAsync(server, region, index, elapsedTime, candidateChanged, ct)
-                    .ConfigureAwait(false);
-
-                if (_state.IsStopRequested) break;
-
-                if (resumeMonitoring)
+                // Re-confirm after the stagger — conditions may have cleared.
+                var again = await TryGetDirectiveAsync(index, sessionId, ct).ConfigureAwait(false) ?? d;
+                if (again.Action is DirectiveAction.Stay or DirectiveAction.Seed)
                 {
-                    _state.ClearSwitchState();
-                    switchFirstDetected = null;
+                    _log.LogInformation("Switch conditions cleared after stagger, resuming - {Name}", server.Name);
                     continue;
                 }
-
-                // Proceed with kill.
-                Emit(new SeedingEvent.ServerSwitchExecuting());
-                _log.LogInformation("Executing server switch, killing HLL - {Name}", server.Name);
-                KillGameProcess();
-                _state.ClearSwitchState();
-                _log.LogInformation("Waiting {Secs} seconds for HLL to close - {Name}", PostKillWaitSecs, server.Name);
-                await Task.Delay(TimeSpan.FromSeconds(PostKillWaitSecs), ct).ConfigureAwait(false);
-                break;
+                d = again;
             }
 
-            if (lastStatusLog.Elapsed.TotalSeconds >= StatusLogIntervalSecs)
+            // Run the countdown (unless the user disabled the switch notification, or it's a hard Stop).
+            var notify = _config.GetBool("switch_notification", true);
+            if (notify && d.Action == DirectiveAction.Switch)
             {
-                var fill = _servers.GetPlayerCount(server.Name) is { } pc ? $"{pc.Players}/{pc.MaxPlayers}" : "?";
-                _log.LogInformation("Monitor: candidate_changed={Changed}, timed_out={TimedOut}, switch_pending={Pending}, fill={Fill}, elapsed={Mins}m - {Name}",
-                    candidateChanged, isTimedOut, switchFirstDetected is not null, fill,
-                    (long)elapsedTime.Elapsed.TotalSeconds / 60, server.Name);
-                lastStatusLog.Restart();
+                var resume = await RunSwitchCountdownAsync(server, index, sessionId, d, ct).ConfigureAwait(false);
+                if (_state.IsStopRequested)
+                {
+                    return new MonitorResult(MonitorOutcome.UserStopped, null);
+                }
+                if (resume)
+                {
+                    _state.ClearSwitchState();
+                    continue;
+                }
             }
 
-            // Interruptible sleep: wake early if the monitor is notified (SSE reconnect / stop).
-            if (await _monitorSignal.WaitAsync(TimeSpan.FromSeconds(currentInterval), ct).ConfigureAwait(false))
-            {
-                _log.LogInformation("Monitor woken early (SSE reconnect or stop), re-checking candidate - {Name}", server.Name);
-            }
+            // Execute: kill the game and hand the final directive back to the caller.
+            Emit(new SeedingEvent.ServerSwitchExecuting());
+            _log.LogInformation("Executing {Action}, killing HLL - {Name}", d.Action, server.Name);
+            KillGameProcess();
+            _state.ClearSwitchState();
+            await Task.Delay(TimeSpan.FromSeconds(PostKillWaitSecs), ct).ConfigureAwait(false);
+            await GuardConfigAfterCloseAsync().ConfigureAwait(false);
+            return new MonitorResult(MonitorOutcome.Directed, d);
         }
-
-        // After the game exits (natural close or kill), restore config if HLL reset it.
-        await GuardConfigAfterCloseAsync().ConfigureAwait(false);
     }
 
-    /// <summary>Run the 30s switch countdown with notification, snooze, and switch-now handling.
-    /// Returns true if monitoring should resume (conditions cleared after a snooze). Port of the
-    /// <c>'countdown</c> block in <c>monitor_loop</c>.</summary>
+    /// <summary>Run the switch countdown (duration + snooze bounds from the directive) with snooze and
+    /// switch-now handling. Returns true if monitoring should resume (a re-poll after a snooze shows the
+    /// switch is no longer needed).</summary>
     private async Task<bool> RunSwitchCountdownAsync(
-        ServerInfo server, string region, int index, Stopwatch elapsedTime, bool candidateChanged, CancellationToken ct)
+        ServerInfo server, int index, string? sessionId, SeedingDirective directive, CancellationToken ct)
     {
         _log.LogInformation("Starting server switch countdown - {Name}", server.Name);
         _state.ClearSwitchState();
-
-        // Bring the app window forward. The OS toast + switch sound are Phase 2 (the UI
-        // subscribes to ServerSwitchPending); the event below carries everything it needs.
         _window.FocusSeedingWindow();
 
-        var reason = candidateChanged ? "candidate_changed" : "time_limit";
-        Emit(new SeedingEvent.ServerSwitchPending(ServerSwitchCountdownSecs, server.ShortName, reason));
+        var target = directive.Target?.Server.ShortName ?? server.ShortName;
+        Emit(new SeedingEvent.ServerSwitchPending(directive.CountdownSecs, target, "candidate_changed"));
 
-        for (var i = 0; i < ServerSwitchCountdownSecs; i++)
+        for (var i = 0; i < directive.CountdownSecs; i++)
         {
             await Task.Delay(TimeSpan.FromSeconds(1), ct).ConfigureAwait(false);
 
@@ -930,14 +833,11 @@ public sealed class SeedingEngine : IDisposable
                     }
                 }
 
-                // Snooze expired: re-check with a forced HTTP fetch for the freshest data.
-                var stillChanged = await HasCandidateChangedAsync(_currentGame.Id, region, index, true, ct)
-                    .ConfigureAwait(false);
-                var stillTimedOut = elapsedTime.Elapsed.TotalSeconds > MaxSeedingDurationSecs;
-
-                if (!stillChanged && !stillTimedOut)
+                // Snooze expired: re-poll the directive — if it no longer wants a switch, resume.
+                var again = await TryGetDirectiveAsync(index, sessionId, ct).ConfigureAwait(false);
+                if (again is not null && again.Action is DirectiveAction.Stay or DirectiveAction.Seed)
                 {
-                    _log.LogInformation("Conditions changed after snooze, resuming monitoring - {Name}", server.Name);
+                    _log.LogInformation("Switch no longer needed after snooze, resuming - {Name}", server.Name);
                     Emit(new SeedingEvent.ServerSwitchCancelled());
                     return true;
                 }
@@ -955,7 +855,7 @@ public sealed class SeedingEngine : IDisposable
     /// <summary>Spawn a background watcher that, after a failed seeding start, kills any phantom HLL
     /// launch (e.g. Steam was mid-update), retries seeding, and runs the monitor loop. Only one
     /// watcher runs at a time. Port of <c>spawn_launch_watcher</c>.</summary>
-    private void SpawnLaunchWatcher(ServerInfo server, int serverIndex, string region)
+    private void SpawnLaunchWatcher(ServerInfo server, int serverIndex)
     {
         if (Interlocked.CompareExchange(ref _launchWatcherActive, 1, 0) != 0)
         {
@@ -974,7 +874,7 @@ public sealed class SeedingEngine : IDisposable
                     return;
                 }
 
-                Emit(new SeedingEvent.SeedingUpdateWaiting(serverIndex, region));
+                Emit(new SeedingEvent.SeedingUpdateWaiting(serverIndex));
 
                 var start = Stopwatch.StartNew();
                 while (true)
@@ -1029,10 +929,9 @@ public sealed class SeedingEngine : IDisposable
 
                         _log.LogInformation("Launch watcher successfully restarted seeding for {Name}", server.ShortName);
                         Volatile.Write(ref _launchWatcherActive, 0);
-                        Emit(new SeedingEvent.SeedingUpdateStarted(serverIndex, region));
+                        Emit(new SeedingEvent.SeedingUpdateStarted(serverIndex));
 
-                        var elapsed = Stopwatch.StartNew();
-                        await MonitorLoopAsync(elapsed, server, region, serverIndex, ct).ConfigureAwait(false);
+                        await MonitorLoopAsync(server, serverIndex, null, ct).ConfigureAwait(false);
                         _backup.RestoreAfterSeeding();
                         return;
                     }

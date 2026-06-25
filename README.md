@@ -2,7 +2,7 @@
 
 Windows desktop app for [Hell Let Loose](https://store.steampowered.com/app/686810/Hell_Let_Loose/) server seeding. One click to launch, seed, and keep your community servers populated.
 
-Built by [Comp HLL](https://github.com/catalloc/chll-seeding-windows). Formerly "Esprit Seeder"; currently being rewritten in C# + WinUI 3 — see [docs/REWRITE_PLAN.md](docs/REWRITE_PLAN.md) for status.
+Built by [Comp HLL](https://github.com/catalloc/chll-seeding-windows). Formerly "Esprit Seeder"; rewritten in C# + WinUI 3 — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Download
 
@@ -136,9 +136,9 @@ src/
   ChllSeeding.App/         WinUI 3 app (views, view models, custom Main, tray)
   ChllSeeding.Core/        Non-UI logic (API, seeding engine, config, deep links)
   ChllSeeding.Core.Tests/  xUnit tests
-src-rust/                 Original Rust/Dioxus app (read-only porting reference)
+tools/ChllSeeding.MockApi/ Local mock API for offline dev
 installer/                Inno Setup script
-docs/REWRITE_PLAN.md      Rewrite architecture, phases, and status
+docs/ARCHITECTURE.md      Architecture reference
 ```
 
 ## Contributing

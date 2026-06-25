@@ -44,7 +44,6 @@ public sealed partial class SettingsPage : Page
     private void SeedControls()
     {
         _loading = true;
-        EuServersToggle.IsOn = _config.GetBool("eu_enabled");
         DarkModeToggle.IsOn = _window.IsDarkTheme;
         CloseToTrayToggle.IsOn = _config.GetBool("close_to_tray", true);
         SwitchNotificationToggle.IsOn = _config.GetBool("switch_notification", true);
@@ -61,8 +60,7 @@ public sealed partial class SettingsPage : Page
         };
 
         StartupToggle.IsOn = _startup.IsEnabled();
-        BetaUpdatesToggle.IsOn = _config.GetString("update_channel") == "beta";
-        VersionText.Text = $"Current version: v{UpdaterService.CurrentVersion}";
+        BetaToggle.IsOn = _config.GetString("update_channel") == "beta";
         _loading = false;
 
         // Auto-seed task status comes from schtasks — load it off the UI thread.
@@ -104,238 +102,59 @@ public sealed partial class SettingsPage : Page
         try
         {
             var s = await _autoseed.GetStatusAsync();
-            UpdateAutoseedRow(s.NaInstalled, s.NaUtcTime, s.NaNextRun, AutoseedNaStatus, AutoseedNaSetup, AutoseedNaView, AutoseedNaRemove);
-            UpdateAutoseedRow(s.EuInstalled, s.EuUtcTime, s.EuNextRun, AutoseedEuStatus, AutoseedEuSetup, AutoseedEuView, AutoseedEuRemove);
+            if (s.Installed)
+            {
+                var text = s.UtcTime is not null ? $"Daily at {s.UtcTime} UTC" : "Scheduled";
+                if (!string.IsNullOrEmpty(s.NextRun))
+                {
+                    text += $" · next: {s.NextRun}";
+                }
+                AutoseedStatus.Text = text;
+                AutoseedSetup.Content = "Change";
+                AutoseedRemove.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                AutoseedStatus.Text = "Not scheduled";
+                AutoseedSetup.Content = "Set up";
+                AutoseedRemove.Visibility = Visibility.Collapsed;
+            }
         }
         catch (Exception)
         {
-            AutoseedNaStatus.Text = "Status unavailable";
-            AutoseedEuStatus.Text = "Status unavailable";
+            AutoseedStatus.Text = "Status unavailable";
         }
     }
 
-    private static void UpdateAutoseedRow(
-        bool installed, string? utc, string? nextRun, TextBlock status, Button setup, Button view, Button remove)
+    private void AutoseedSetup_Click(object sender, RoutedEventArgs e) => _ = SetupAutoseedAsync();
+
+    private void AutoseedRemove_Click(object sender, RoutedEventArgs e) => _ = RemoveAutoseedAsync();
+
+    private async Task SetupAutoseedAsync()
     {
-        if (installed)
-        {
-            var text = utc is not null ? $"Daily at {utc} UTC" : "Scheduled";
-            if (!string.IsNullOrEmpty(nextRun))
-            {
-                text += $" · next: {nextRun}";
-            }
-            status.Text = text;
-            setup.Content = "Change";
-            view.Visibility = Visibility.Visible;
-            remove.Visibility = Visibility.Visible;
-        }
-        else
-        {
-            status.Text = "Not scheduled";
-            setup.Content = "Set up";
-            view.Visibility = Visibility.Collapsed;
-            remove.Visibility = Visibility.Collapsed;
-        }
-    }
-
-    private void AutoseedNaSetup_Click(object sender, RoutedEventArgs e) => _ = SetupAutoseedAsync("na", "12:00");
-
-    private void AutoseedEuSetup_Click(object sender, RoutedEventArgs e) => _ = SetupAutoseedAsync("eu", "06:00");
-
-    private void AutoseedNaView_Click(object sender, RoutedEventArgs e) => _ = ViewAutoseedAsync("na");
-
-    private void AutoseedEuView_Click(object sender, RoutedEventArgs e) => _ = ViewAutoseedAsync("eu");
-
-    private void AutoseedNaRemove_Click(object sender, RoutedEventArgs e) => _ = RemoveAutoseedAsync("na");
-
-    private void AutoseedEuRemove_Click(object sender, RoutedEventArgs e) => _ = RemoveAutoseedAsync("eu");
-
-    private async Task SetupAutoseedAsync(string region, string defaultUtc)
-    {
-        var label = region.ToUpperInvariant();
-        var localHint = AutoSeedTime.TryParseUtc(defaultUtc, out var h, out var m)
-            ? $"\n\n{defaultUtc} UTC = {AutoSeedTime.UtcToLocalDisplay(h, m)} your time."
-            : "";
-
-        var input = new TextBox { PlaceholderText = "HH:MM", Text = defaultUtc, MaxLength = 5 };
-        var dialog = new ContentDialog
-        {
-            Title = $"{label} Auto-Seed",
-            Content = new StackPanel
-            {
-                Spacing = 8,
-                Children =
-                {
-                    new TextBlock
-                    {
-                        Text = $"Enter the daily {label} seed time in UTC (24-hour HH:MM).{localHint}",
-                        TextWrapping = TextWrapping.Wrap,
-                    },
-                    input,
-                },
-            },
-            PrimaryButtonText = "Save",
-            CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = XamlRoot,
-        };
-
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
-        {
-            return;
-        }
-
         try
         {
-            var message = await _autoseed.SetupAsync(region, input.Text);
+            var message = await _autoseed.SetupAsync();
             await LoadAutoseedStatusAsync();
             await AlertAsync("Auto-Seed Setup", message);
         }
-        catch (FormatException)
-        {
-            await AlertAsync("Invalid Time", $"Please enter the time as HH:MM (e.g. {defaultUtc}).");
-        }
         catch (Exception)
         {
-            await AlertAsync("Error", $"Failed to set up the {label} auto-seed task. Check the logs for details.");
+            await AlertAsync("Error", "Failed to set up the auto-seed task. Check the logs for details.");
         }
     }
 
-    /// <summary>Show the verbose schtasks listing for a region's task. Port of the View button in
-    /// render_autoseed_section (view_autoseed_schedule → show_alert).</summary>
-    private async Task ViewAutoseedAsync(string region)
-    {
-        string listing;
-        try
-        {
-            listing = await _autoseed.ViewScheduleAsync(region);
-        }
-        catch (Exception)
-        {
-            await AlertAsync("Error", "Failed to read the auto-seed schedule. Check the logs for details.");
-            return;
-        }
-
-        // The listing is monospace-ish schtasks output; show it scrollable so long output stays usable.
-        var dialog = new ContentDialog
-        {
-            Title = $"{region.ToUpperInvariant()} Auto-Seed Schedule",
-            Content = new ScrollViewer
-            {
-                MaxHeight = 360,
-                Content = new TextBlock
-                {
-                    Text = listing,
-                    TextWrapping = TextWrapping.Wrap,
-                    FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
-                    FontSize = 12,
-                    IsTextSelectionEnabled = true,
-                },
-            },
-            CloseButtonText = "OK",
-            XamlRoot = XamlRoot,
-        };
-        await dialog.ShowAsync();
-    }
-
-    private async Task RemoveAutoseedAsync(string region)
-    {
-        var label = region == "eu" ? "EU servers" : "auto-seed";
-        var confirm = new ContentDialog
-        {
-            Title = "Uninstall",
-            Content = $"Are you sure you want to uninstall the {label} scheduled task?",
-            PrimaryButtonText = "Uninstall",
-            CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = XamlRoot,
-        };
-        if (await confirm.ShowAsync() != ContentDialogResult.Primary)
-        {
-            return;
-        }
-
-        try
-        {
-            var deleted = await _autoseed.UninstallAsync(region);
-            await LoadAutoseedStatusAsync();
-            await AlertAsync(
-                deleted ? "Success" : "Info",
-                deleted
-                    ? $"Uninstalled the {label} scheduled task."
-                    : $"No {(region == "eu" ? "EU " : "")}scheduled task found to uninstall.");
-        }
-        catch (Exception)
-        {
-            await LoadAutoseedStatusAsync();
-            await AlertAsync("Error", $"Failed to uninstall the {label} task. Check the logs for details.");
-        }
-    }
-
-    // ── Updates ─────────────────────────────────────────────────────────────
-
-    private void BetaUpdatesToggle_Toggled(object sender, RoutedEventArgs e)
-    {
-        if (_loading)
-        {
-            return;
-        }
-        _config.SetString("update_channel", BetaUpdatesToggle.IsOn ? "beta" : "stable");
-    }
-
-    private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
-    {
-        CheckUpdatesButton.IsEnabled = false;
-        try
-        {
-            var update = await _updater.CheckForUpdatesAsync();
-            if (update is null)
-            {
-                await AlertAsync("No Updates", "You are running the latest version.");
-                return;
-            }
-
-            // Port of the Rust "Update Available" alert, extended (per the Phase 5 plan) to wire the
-            // installer download — the Rust UI only showed the URL; download_and_install was unused.
-            var notes = string.IsNullOrWhiteSpace(update.Notes) ? "" : $"\n\n{update.Notes}";
-            var dialog = new ContentDialog
-            {
-                Title = "Update Available",
-                Content = $"A new version (v{update.Version}) is available.{notes}",
-                PrimaryButtonText = "Download & Install",
-                CloseButtonText = "Later",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = XamlRoot,
-            };
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
-            {
-                return;
-            }
-
-            await DownloadAndInstallAsync(update);
-        }
-        catch (Exception)
-        {
-            await AlertAsync("Error", "Failed to check for updates.");
-        }
-        finally
-        {
-            CheckUpdatesButton.IsEnabled = true;
-        }
-    }
-
-    private async Task DownloadAndInstallAsync(UpdateInfo update)
+    private async Task RemoveAutoseedAsync()
     {
         try
         {
-            await _updater.DownloadAndInstallAsync(update);
-            // Installer launched — shut down through the normal path so it can replace the exe.
-            _window.ForceQuit();
+            await _autoseed.UninstallAsync();
         }
         catch (Exception)
         {
-            await AlertAsync("Update Failed", "The update could not be downloaded or verified. Please try again later.");
+            // Removal failures are non-fatal; reflect whatever the current status is.
         }
+        await LoadAutoseedStatusAsync();
     }
 
     private Task AlertAsync(string title, string content) =>
@@ -418,32 +237,25 @@ public sealed partial class SettingsPage : Page
         {
             return;
         }
-        await Account.SetShowOnLeaderboardAsync(LeaderboardToggle.IsOn);
+        LeaderboardSpinner.Visibility = Visibility.Visible;
+        LeaderboardToggle.IsEnabled = false;
+        try
+        {
+            await Account.SetShowOnLeaderboardAsync(LeaderboardToggle.IsOn);
+        }
+        finally
+        {
+            // Re-seed from VM state so a failed update reverts the toggle (the API call leaves
+            // User unchanged on error), mirroring the Rust toggle bound directly to USER.
+            _loading = true;
+            LeaderboardToggle.IsOn = Account.ShowOnLeaderboard;
+            _loading = false;
+            LeaderboardToggle.IsEnabled = true;
+            LeaderboardSpinner.Visibility = Visibility.Collapsed;
+        }
     }
 
     // ── Settings toggles ────────────────────────────────────────────────────
-
-    private async void EuServersToggle_Toggled(object sender, RoutedEventArgs e)
-    {
-        if (_loading)
-        {
-            return;
-        }
-
-        // Block disabling EU while an EU auto-seed task still exists — otherwise the CHLL-Seeding-EU
-        // scheduled task keeps firing for a region the app no longer seeds. Port of settings.rs:347-378.
-        if (!EuServersToggle.IsOn && await _autoseed.IsEuInstalledAsync())
-        {
-            await AlertAsync("EU Auto-Seed Active",
-                "Please remove the EU auto-seed scheduled task before disabling EU seeding.");
-            _loading = true;
-            EuServersToggle.IsOn = true; // revert
-            _loading = false;
-            return;
-        }
-
-        _config.SetString("eu_enabled", EuServersToggle.IsOn ? "true" : "false");
-    }
 
     private void DarkModeToggle_Toggled(object sender, RoutedEventArgs e)
     {
@@ -515,5 +327,106 @@ public sealed partial class SettingsPage : Page
         {
             _config.SetString("splash_bypass_duration", tag);
         }
+    }
+
+    // ── Updates ─────────────────────────────────────────────────────────────
+
+    private void BetaToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading)
+        {
+            return;
+        }
+        _config.SetString("update_channel", BetaToggle.IsOn ? "beta" : "stable");
+    }
+
+    private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        var current = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+
+        UpdateSpinner.Visibility = Visibility.Visible;
+        CheckUpdatesButton.IsEnabled = false;
+        UpdateStatus.Text = "Checking for updates…";
+        try
+        {
+            UpdateInfo? info;
+            try
+            {
+                info = await _updater.CheckForUpdatesAsync(current, _config.GetString("update_channel"));
+            }
+            catch (Exception)
+            {
+                UpdateStatus.Text = "Update check failed";
+                await AlertAsync("Update Check Failed",
+                    "Couldn't reach the update server. Check your connection and try again.");
+                return;
+            }
+
+            if (info is null)
+            {
+                UpdateStatus.Text = $"You're up to date (v{current})";
+                await AlertAsync("Up to Date", $"You're running the latest version (v{current}).");
+                return;
+            }
+
+            UpdateStatus.Text = $"Update available: v{info.Version}";
+            if (!await ConfirmUpdateAsync(info))
+            {
+                return;
+            }
+
+            UpdateStatus.Text = "Downloading update…";
+            string installerPath;
+            try
+            {
+                installerPath = await _updater.DownloadAndVerifyAsync(info);
+                _updater.LaunchInstaller(installerPath);
+            }
+            catch (Exception)
+            {
+                UpdateStatus.Text = "Update failed";
+                await AlertAsync("Update Failed",
+                    "The update couldn't be downloaded or verified. Please try again later.");
+                return;
+            }
+
+            // Installer is running — shut down so it can replace the running exe.
+            _window.QuitForUpdate();
+        }
+        finally
+        {
+            UpdateSpinner.Visibility = Visibility.Collapsed;
+            CheckUpdatesButton.IsEnabled = true;
+        }
+    }
+
+    /// <summary>Show the "update available" prompt with release notes; true if the user accepts.</summary>
+    private async Task<bool> ConfirmUpdateAsync(UpdateInfo info)
+    {
+        var content = new StackPanel { Spacing = 8 };
+        content.Children.Add(new TextBlock
+        {
+            Text = "A new version is available. Download and install it now? The app will close to apply the update.",
+            TextWrapping = TextWrapping.Wrap,
+        });
+        if (info.Notes.Length > 0)
+        {
+            content.Children.Add(new ScrollViewer
+            {
+                MaxHeight = 200,
+                Content = new TextBlock { Text = info.Notes, TextWrapping = TextWrapping.Wrap, FontSize = 12, Opacity = 0.8 },
+            });
+        }
+
+        var dialog = new ContentDialog
+        {
+            Title = $"Update Available: v{info.Version}",
+            Content = content,
+            PrimaryButtonText = "Update Now",
+            CloseButtonText = "Later",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+        return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
 }

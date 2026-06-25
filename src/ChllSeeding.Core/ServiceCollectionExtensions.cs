@@ -19,6 +19,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddChllSeedingCore(this IServiceCollection services)
     {
         services.AddSingleton<ConfigService>();
+        services.AddSingleton<SeedingConfigProvider>();
         services.AddSingleton<AuthSession>();
         services.AddSingleton<AuthRefresher>();
         services.AddSingleton<Activation.OAuthStateStore>();
@@ -36,6 +37,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<HllConfigBackupService>();
         services.AddSingleton<ManualBackupService>();
         services.AddSingleton<KeepAwake>();
+
+        // Self-updater (Phase 5): release check + installer download/verify/launch.
+        services.AddSingleton<UpdaterService>();
 
         // Automation & tools (Phase 4): startup registry + auto-seed scheduling.
         services.AddSingleton<StartupRegistry>();
@@ -101,6 +105,15 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient(SseStreamClient.ClientName, client =>
             {
                 client.Timeout = Timeout.InfiniteTimeSpan;
+                client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
+                client.DefaultRequestHeaders.Add("x-client-version", version);
+            });
+
+        // Updater client: unauthenticated (the release feed is public; downloads hit GitHub's CDN),
+        // with a long timeout to cover a large installer download. The size cap bounds the body.
+        services.AddHttpClient(UpdaterService.HttpClientName, client =>
+            {
+                client.Timeout = TimeSpan.FromMinutes(10);
                 client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
                 client.DefaultRequestHeaders.Add("x-client-version", version);
             });

@@ -64,28 +64,15 @@ app.MapGet("/api/servers/stats", () => Results.Json(state.Stats()));
 // ── Seeding ──────────────────────────────────────────────────────────────────────
 app.MapGet("/api/seeding/status", () => Results.Json(state.SeedingStatus()));
 
-app.MapPost("/api/seeding/next-server", (NextServerRequest req) =>
-{
-    // Pick the best candidate in the requested region, then fall back to the other (if eu_enabled).
-    var status = state.SeedingStatus();
-    RegionCandidate? c = req.CurrentRegion == "eu" ? status.Hll.Eu : status.Hll.Na;
-    var region = req.CurrentRegion;
-    if (c is null && req.EuEnabled)
-    {
-        c = req.CurrentRegion == "eu" ? status.Hll.Na : status.Hll.Eu;
-        region = req.CurrentRegion == "eu" ? "na" : "eu";
-    }
-    if (c is null)
-    {
-        // Nothing left to seed.
-        return Results.Json(new NextServerResponse(req.Game, req.CurrentRegion, req.CurrentIndex,
-            new ServerInfo("", "", "", 0, req.Game), AllExhausted: true, SessionId: null));
-    }
-    return Results.Json(new NextServerResponse(c.Game, region, c.Index, c.Server, AllExhausted: false, SessionId: null));
-});
+// Public timing config (no session) — primes the client's peripheral services.
+app.MapGet("/api/seeding/config", () => Results.Json(MockState.DefaultConfig()));
+
+// Server-decided directive: what to seed next and how to behave. Sequential rotation.
+app.MapGet("/api/seeding/directive", (string? game, int? current_index, string? session_id) =>
+    Results.Json(state.Directive(current_index)));
 
 app.MapPost("/api/seeding/start-session", (StartSessionRequest req) =>
-    Results.Json(new StartSessionResponse(state.StartSession(req.Region, req.Index))));
+    Results.Json(new StartSessionResponse(state.StartSession(req.Index))));
 
 app.MapPost("/api/seeding/heartbeat", (HeartbeatRequest req) =>
     Results.Json(state.Heartbeat(req.SessionId)));
@@ -174,22 +161,22 @@ mock.MapPost("/autoadvance", (AutoAdvanceRequest req) =>
 // One manual tick (advance candidates one step).
 mock.MapPost("/tick", () => { state.Tick(); return Results.Ok(new { seeding_status = state.SeedingStatus() }); });
 
-mock.MapPost("/servers/{region}/{index:int}/players", (string region, int index, SetPlayersRequest req) =>
-    state.SetPlayers(region, index, req.PlayerCount, req.MaxPlayerCount)
+mock.MapPost("/servers/{index:int}/players", (int index, SetPlayersRequest req) =>
+    state.SetPlayers(index, req.PlayerCount, req.MaxPlayerCount)
         ? Results.Ok(new { ok = true, seeding_status = state.SeedingStatus() })
-        : Results.NotFound(new { error = $"no server {region}/{index}" }));
+        : Results.NotFound(new { error = $"no server {index}" }));
 
-mock.MapPost("/servers/{region}/{index:int}/flags", (string region, int index, SetFlagsRequest req) =>
-    state.SetFlags(region, index, req.Offline, req.PasswordProtected)
+mock.MapPost("/servers/{index:int}/flags", (int index, SetFlagsRequest req) =>
+    state.SetFlags(index, req.Offline, req.PasswordProtected)
         ? Results.Ok(new { ok = true })
-        : Results.NotFound(new { error = $"no server {region}/{index}" }));
+        : Results.NotFound(new { error = $"no server {index}" }));
 
 // Convenience: push a server above its threshold (it stops being a seeding candidate → rotation advances).
-mock.MapPost("/fill/{region}/{index:int}", (string region, int index) =>
+mock.MapPost("/fill/{index:int}", (int index) =>
 {
-    var s = state.Find(region, index);
-    if (s is null) return Results.NotFound(new { error = $"no server {region}/{index}" });
-    state.SetPlayers(region, index, s.Info.SeedingThreshold + 20, s.MaxPlayerCount);
+    var s = state.Find(index);
+    if (s is null) return Results.NotFound(new { error = $"no server {index}" });
+    state.SetPlayers(index, s.Info.SeedingThreshold + 20, s.MaxPlayerCount);
     return Results.Ok(new { ok = true, seeding_status = state.SeedingStatus() });
 });
 
@@ -219,28 +206,28 @@ mock.MapPost("/scenario/{name}", (string name) =>
             state.ResetToDefaults();
             break;
         case "seed-all-rotation":
-            // Three seedable servers across NA + EU, auto-filling so the rotation advances hands-free.
+            // Three seedable servers in one rotation, auto-filling so the rotation advances hands-free.
             state.ResetToDefaults();
-            state.SetPlayers("na", 0, 40, 100);
-            state.SetPlayers("na", 1, 25, 100);
-            state.SetPlayers("eu", 0, 12, 100);
+            state.SetPlayers(0, 40, 100);
+            state.SetPlayers(1, 25, 100);
+            state.SetPlayers(2, 12, 100);
             state.AutoAdvanceEnabled = true;
             break;
         case "switch":
-            // Current best NA candidate (index 0) fills past threshold → candidate moves to index 1,
-            // which the client's monitor sees over SSE and starts the switch countdown.
-            state.SetPlayers("na", 1, 30, 100);   // make index 1 a valid fallback candidate
-            state.SetPlayers("na", 0, 70, 100);   // index 0 now over threshold → no longer a candidate
+            // Current best candidate (index 0) fills past threshold → candidate moves to index 1,
+            // which the client's monitor sees over SSE / the directive and starts the switch countdown.
+            state.SetPlayers(1, 30, 100);   // make index 1 a valid fallback candidate
+            state.SetPlayers(0, 70, 100);   // index 0 now over threshold → no longer a candidate
             break;
         case "edge-offline":
-            state.SetFlags("na", 1, offline: true, passworded: null);
+            state.SetFlags(1, offline: true, passworded: null);
             break;
         case "edge-passworded":
-            state.SetFlags("na", 0, offline: null, passworded: true);
+            state.SetFlags(0, offline: null, passworded: true);
             break;
         case "edge-empty":
             // Clear every server: list loads but is empty (seed buttons stay hidden).
-            foreach (var s in state.Servers) state.SetFlags(s.Region, s.Index, offline: true, passworded: null);
+            foreach (var s in state.Servers) state.SetFlags(s.Index, offline: true, passworded: null);
             break;
         default:
             return Results.NotFound(new { error = $"unknown scenario '{name}'" });

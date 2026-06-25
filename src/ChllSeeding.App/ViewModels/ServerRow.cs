@@ -4,14 +4,13 @@ using CommunityToolkit.Mvvm.ComponentModel;
 namespace ChllSeeding.App.ViewModels;
 
 /// <summary>
-/// One row in the server stats / launch lists. Static identity (name, index, region,
+/// One row in the server stats / launch lists. Static identity (name, index,
 /// threshold) is set at construction; <see cref="StatsLine"/> and <see cref="IsOffline"/>
 /// update in place on each stats poll so the launch buttons don't rebuild/flicker.
 /// </summary>
 public sealed partial class ServerRow : ObservableObject
 {
     public int Index { get; }
-    public string Region { get; }
     public string Name { get; }
     public string ShortName { get; }
     public int Threshold { get; }
@@ -49,10 +48,9 @@ public sealed partial class ServerRow : ObservableObject
         : IsPassworded ? "Password-protected — can't join via launcher"
         : "";
 
-    public ServerRow(int index, string region, ServerInfo info)
+    public ServerRow(int index, ServerInfo info)
     {
         Index = index;
-        Region = region;
         Name = info.Name;
         ShortName = info.ShortName;
         Threshold = info.SeedingThreshold;

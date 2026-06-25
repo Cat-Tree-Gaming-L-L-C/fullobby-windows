@@ -6,11 +6,8 @@ namespace ChllSeeding.Core.Api;
 /// stale or missing entry transparently falls back to HTTP polling. Port of the
 /// cache in <c>src-rust/src/backend/api_client.rs</c>. DI singleton, thread-safe.
 /// </summary>
-public sealed class SeedingStatusCache
+public sealed class SeedingStatusCache(SeedingConfigProvider configProvider)
 {
-    /// <summary>Cache is considered stale after this long without an SSE update.</summary>
-    private const long StaleSecs = 90;
-
     private readonly object _gate = new();
     private SeedingStatusResponse? _cached;
     private long _updatedAtUnix;
@@ -38,9 +35,10 @@ public sealed class SeedingStatusCache
     /// <summary>The cached status if present and fresh; otherwise null.</summary>
     public SeedingStatusResponse? GetCached()
     {
+        var staleSecs = configProvider.Current.CacheStaleSecs;
         lock (_gate)
         {
-            if (_updatedAtUnix == 0 || UnixNow() - _updatedAtUnix > StaleSecs)
+            if (_updatedAtUnix == 0 || UnixNow() - _updatedAtUnix > staleSecs)
             {
                 return null;
             }

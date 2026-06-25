@@ -4,7 +4,8 @@ using ChllSeeding.Core.Servers;
 namespace ChllSeeding.Core.Tests;
 
 /// <summary>Tests for the shared stats sink fed by both the SSE stream and the poll
-/// fallback (port of <c>app::apply_stats_update</c>).</summary>
+/// fallback (port of <c>app::apply_stats_update</c>). Region removed — stats match by
+/// (game, index) against the single rotation.</summary>
 public class LiveStatsTests
 {
     private static ServerInfo Make(string name) => new()
@@ -21,7 +22,7 @@ public class LiveStatsTests
         var store = new ServerStore();
         store.Load(new ServersResponse
         {
-            Hll = new RegionServers { Na = [Make("NA-1"), Make("NA-2")], Eu = [Make("EU-1")] },
+            Hll = [Make("HLL-1"), Make("HLL-2"), Make("HLL-3")],
         });
         return (store, new LiveStats(store));
     }
@@ -33,23 +34,23 @@ public class LiveStatsTests
 
         live.Apply(
         [
-            new BatchStatsResult { Game = "hll", Region = "na", Index = 0, PlayerCount = 42, MaxPlayerCount = 100 },
-            new BatchStatsResult { Game = "hll", Region = "eu", Index = 0, Offline = true },
+            new BatchStatsResult { Game = "hll", Index = 0, PlayerCount = 42, MaxPlayerCount = 100 },
+            new BatchStatsResult { Game = "hll", Index = 2, Offline = true },
         ]);
 
-        Assert.Equal((42, 100), store.GetPlayerCount("NA-1"));
-        Assert.True(store.IsOffline("EU-1"));
+        Assert.Equal((42, 100), store.GetPlayerCount("HLL-1"));
+        Assert.True(store.IsOffline("HLL-3"));
     }
 
     [Fact]
     public void Apply_ClearsOfflineWhenBackOnline()
     {
         var (store, live) = Setup();
-        store.MarkOffline("NA-1");
+        store.MarkOffline("HLL-1");
 
-        live.Apply([new BatchStatsResult { Game = "hll", Region = "na", Index = 0, PlayerCount = 5, MaxPlayerCount = 100 }]);
+        live.Apply([new BatchStatsResult { Game = "hll", Index = 0, PlayerCount = 5, MaxPlayerCount = 100 }]);
 
-        Assert.False(store.IsOffline("NA-1"));
+        Assert.False(store.IsOffline("HLL-1"));
     }
 
     [Fact]
@@ -59,10 +60,10 @@ public class LiveStatsTests
         // Index out of range / unknown game must not throw.
         live.Apply(
         [
-            new BatchStatsResult { Game = "hll", Region = "na", Index = 99, PlayerCount = 1 },
-            new BatchStatsResult { Game = "cs2", Region = "na", Index = 0, PlayerCount = 1 },
+            new BatchStatsResult { Game = "hll", Index = 99, PlayerCount = 1 },
+            new BatchStatsResult { Game = "cs2", Index = 0, PlayerCount = 1 },
         ]);
-        Assert.Null(store.GetPlayerCount("NA-1"));
+        Assert.Null(store.GetPlayerCount("HLL-1"));
     }
 
     [Fact]
@@ -73,7 +74,7 @@ public class LiveStatsTests
         IReadOnlyList<BatchStatsResult>? received = null;
         live.StatsUpdated += s => { count++; received = s; };
 
-        var batch = new[] { new BatchStatsResult { Game = "hll", Region = "na", Index = 0, PlayerCount = 7 } };
+        var batch = new[] { new BatchStatsResult { Game = "hll", Index = 0, PlayerCount = 7 } };
         live.Apply(batch);
 
         Assert.Equal(1, count);

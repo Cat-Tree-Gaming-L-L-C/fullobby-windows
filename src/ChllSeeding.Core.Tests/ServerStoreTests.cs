@@ -4,7 +4,7 @@ using ChllSeeding.Core.Servers;
 namespace ChllSeeding.Core.Tests;
 
 /// <summary>Port of the server.rs #[test] coverage. Instance-based here, so no
-/// global-state cleanup is needed.</summary>
+/// global-state cleanup is needed. Region removed — one ordered rotation per game.</summary>
 public class ServerStoreTests
 {
     private static ServerInfo Make(string name) => new()
@@ -21,46 +21,35 @@ public class ServerStoreTests
         var store = new ServerStore();
         store.Load(new ServersResponse
         {
-            Hll = new RegionServers
-            {
-                Na = [Make("NA-1"), Make("NA-2")],
-                Eu = [Make("EU-1")],
-            },
+            Hll = [Make("HLL-1"), Make("HLL-2"), Make("HLL-3")],
         });
         return store;
     }
 
     [Fact]
-    public void GetServerByRegion_Na()
+    public void GetServer_ByIndex()
     {
         var store = Populated();
-        Assert.Equal("NA-1", store.GetServerByRegion("na", 0)!.ShortName);
-        Assert.Equal("NA-2", store.GetServerByRegion("na", 1)!.ShortName);
+        Assert.Equal("HLL-1", store.GetServer("hll", 0)!.ShortName);
+        Assert.Equal("HLL-2", store.GetServer("hll", 1)!.ShortName);
+        Assert.Equal("HLL-3", store.GetServer("hll", 2)!.ShortName);
     }
 
     [Fact]
-    public void GetServerByRegion_Eu() =>
-        Assert.Equal("EU-1", Populated().GetServerByRegion("eu", 0)!.ShortName);
-
-    [Fact]
-    public void GetServerByRegion_OutOfBounds_Null()
+    public void GetServer_OutOfBounds_Null()
     {
         var store = Populated();
-        Assert.Null(store.GetServerByRegion("na", 99));
-        Assert.Null(store.GetServerByRegion("eu", 1));
+        Assert.Null(store.GetServer("hll", 99));
+        Assert.Null(store.GetServer("hll", -1));
     }
 
     [Fact]
-    public void GetServerByRegion_NonEu_DefaultsToNa() =>
-        Assert.Equal("NA-1", Populated().GetServerByRegion("us", 0)!.ShortName);
+    public void GetServer_UnknownGame_Null() =>
+        Assert.Null(Populated().GetServer("cs2", 0));
 
     [Fact]
-    public void GetServers_Counts()
-    {
-        var store = Populated();
-        Assert.Equal(2, store.GetServers().Count);
-        Assert.Single(store.GetEuServers());
-    }
+    public void GetServers_DefaultsToHll() =>
+        Assert.Equal(3, Populated().GetServers().Count);
 
     [Fact]
     public void GameServers_Lookup()
@@ -68,54 +57,49 @@ public class ServerStoreTests
         var store = new ServerStore();
         store.Load(new ServersResponse
         {
-            Hll = new RegionServers
-            {
-                Na = [Make("HLL-NA-1")],
-                Eu = [Make("HLL-EU-1"), Make("HLL-EU-2")],
-            },
+            Hll = [Make("HLL-1")],
+            Hllv = [Make("HLLV-1"), Make("HLLV-2")],
         });
 
-        Assert.Equal("HLL-NA-1", store.GetGameServer("hll", "na", 0)!.ShortName);
-        Assert.Equal("HLL-EU-2", store.GetGameServer("hll", "eu", 1)!.ShortName);
-        Assert.Null(store.GetGameServer("cs2", "na", 0));
-        Assert.Null(store.GetGameServer("hll", "oceania", 0));
-        Assert.Null(store.GetGameServer("hll", "na", 99));
-        Assert.Equal(2, store.GetGameServers("hll", "eu").Count);
-        Assert.Empty(store.GetGameServers("cs2", "na"));
-        Assert.Empty(store.GetGameServers("hll", "oceania"));
+        Assert.Equal("HLL-1", store.GetServer("hll", 0)!.ShortName);
+        Assert.Equal("HLLV-2", store.GetServer("hllv", 1)!.ShortName);
+        Assert.Null(store.GetServer("cs2", 0));
+        Assert.Null(store.GetServer("hll", 99));
+        Assert.Equal(2, store.GetServers("hllv").Count);
+        Assert.Empty(store.GetServers("cs2"));
     }
 
     [Fact]
     public void OfflineTracking()
     {
         var store = Populated();
-        store.MarkOffline("NA-1");
-        Assert.True(store.IsOffline("NA-1"));
-        store.ClearOffline("NA-1");
-        Assert.False(store.IsOffline("NA-1"));
+        store.MarkOffline("HLL-1");
+        Assert.True(store.IsOffline("HLL-1"));
+        store.ClearOffline("HLL-1");
+        Assert.False(store.IsOffline("HLL-1"));
 
-        store.MarkOffline("NA-1");
-        store.MarkOffline("EU-1");
+        store.MarkOffline("HLL-1");
+        store.MarkOffline("HLL-2");
         store.ClearAllOffline();
-        Assert.False(store.IsOffline("NA-1"));
-        Assert.False(store.IsOffline("EU-1"));
+        Assert.False(store.IsOffline("HLL-1"));
+        Assert.False(store.IsOffline("HLL-2"));
     }
 
     [Fact]
     public void PlayerCountTracking()
     {
         var store = Populated();
-        Assert.Null(store.GetPlayerCount("NA-1"));
+        Assert.Null(store.GetPlayerCount("HLL-1"));
 
-        store.UpdatePlayerCount("NA-1", 42, 100);
-        Assert.Equal((42, 100), store.GetPlayerCount("NA-1"));
+        store.UpdatePlayerCount("HLL-1", 42, 100);
+        Assert.Equal((42, 100), store.GetPlayerCount("HLL-1"));
 
-        store.UpdatePlayerCount("NA-1", 90, 100); // overwrite
-        Assert.Equal((90, 100), store.GetPlayerCount("NA-1"));
+        store.UpdatePlayerCount("HLL-1", 90, 100); // overwrite
+        Assert.Equal((90, 100), store.GetPlayerCount("HLL-1"));
 
-        store.UpdatePlayerCount("EU-1", 10, 100);
-        Assert.Equal((10, 100), store.GetPlayerCount("EU-1"));
-        Assert.Equal((90, 100), store.GetPlayerCount("NA-1"));
+        store.UpdatePlayerCount("HLL-2", 10, 100);
+        Assert.Equal((10, 100), store.GetPlayerCount("HLL-2"));
+        Assert.Equal((90, 100), store.GetPlayerCount("HLL-1"));
         Assert.Null(store.GetPlayerCount("NOPE"));
     }
 }

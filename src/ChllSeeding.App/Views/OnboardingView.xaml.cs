@@ -16,6 +16,9 @@ public sealed partial class OnboardingView : UserControl
 {
     public AccountViewModel Account { get; }
 
+    // Suppresses the opt-out Toggled handler while we seed the toggle from VM state.
+    private bool _loading;
+
     public OnboardingView()
     {
         Account = App.AppHost.Services.GetRequiredService<AccountViewModel>();
@@ -43,23 +46,89 @@ public sealed partial class OnboardingView : UserControl
         StepNickname.Visibility = Vis(step == 2);
         StepDone.Visibility = Vis(step == 3);
 
-        if (step == 2)
+        if (step == 1)
         {
-            // Guests can't set a custom name (random anonymous only); hide the text box + Save.
-            var guest = Account.IsGuest;
-            NicknameBox.Visibility = Vis(!guest);
-            SaveNameButton.Visibility = Vis(!guest);
-            if (!guest && NicknameBox.Text.Length == 0)
-            {
-                NicknameBox.Text = Account.DisplayName;
-            }
+            UpdateLinkStep();
+        }
+        else if (step == 2)
+        {
+            UpdateNicknameStep();
         }
         else if (step == 3)
         {
-            DoneSummary.Text = Account.IsGuest
-                ? "Mode: Guest"
-                : $"Account: {Account.DisplayName}";
+            UpdateDoneStep();
         }
+    }
+
+    /// <summary>Reflect linked-provider state into the link step (status rows, helper copy,
+    /// button labels). Port of <c>onboarding.rs StepLinkAccounts</c>.</summary>
+    private void UpdateLinkStep()
+    {
+        var steam = Account.SteamLinked;
+        var discord = Account.DiscordLinked;
+
+        SteamLinkedRow.Visibility = Vis(steam);
+        SteamSignedInBadge.Visibility = Vis(steam && Account.IsSteamSignedIn);
+        // Steam allows multiple accounts, so the button stays; it just relabels.
+        LinkSteamButton.Content = steam ? "Link Another Steam Account" : "Link Steam Account";
+        SteamLinkHelp.Visibility = Vis(!steam);
+
+        DiscordLinkedRow.Visibility = Vis(discord);
+        DiscordSignedInBadge.Visibility = Vis(discord && Account.IsDiscordSignedIn);
+        LinkDiscordButton.Visibility = Vis(!discord);
+        DiscordLinkHelp.Visibility = Vis(!discord);
+
+        var anyLinked = steam || discord;
+        LinkContinueButton.Content = anyLinked ? "Continue" : "Skip for now";
+        LinkLaterHint.Visibility = Vis(!anyLinked);
+    }
+
+    /// <summary>Apply guest/OAuth copy and seed the leaderboard opt-out toggle. Port of
+    /// <c>onboarding.rs StepNickname</c>.</summary>
+    private void UpdateNicknameStep()
+    {
+        // Guests can't set a custom name (random anonymous only); hide the text box + Save.
+        var guest = Account.IsGuest;
+        NicknameBox.Visibility = Vis(!guest);
+        SaveNameButton.Visibility = Vis(!guest);
+        if (!guest && NicknameBox.Text.Length == 0)
+        {
+            NicknameBox.Text = Account.DisplayName;
+        }
+
+        NicknameHeading.Text = guest ? "Randomize a Nickname" : "Choose a Nickname";
+        NicknameSubtext.Text = guest
+            ? "Guest accounts use a random anonymous name on the leaderboard."
+            : "Pick a display name for the leaderboard, or go anonymous.";
+        RandomizeNameButton.Content = guest ? "Randomize Name" : "Go Anonymous";
+
+        _loading = true;
+        OnboardLeaderboardToggle.IsOn = Account.ShowOnLeaderboard;
+        _loading = false;
+    }
+
+    /// <summary>Summarise the account + linked providers on the final step. Port of
+    /// <c>onboarding.rs StepComplete</c>.</summary>
+    private void UpdateDoneStep()
+    {
+        var guest = Account.IsGuest;
+        DoneSummary.Text = guest ? "Mode: Guest" : $"Account: {Account.DisplayName}";
+        DoneSteamLine.Visibility = Vis(!guest && Account.SteamLinked);
+        DoneDiscordLine.Visibility = Vis(!guest && Account.DiscordLinked);
+    }
+
+    private async void OnboardLeaderboardToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading)
+        {
+            return;
+        }
+        await Account.SetShowOnLeaderboardAsync(OnboardLeaderboardToggle.IsOn);
+        // Re-seed from VM state so a failed update reverts the toggle (the API call leaves
+        // User unchanged on error), matching the Rust toggle bound directly to USER.
+        _loading = true;
+        OnboardLeaderboardToggle.IsOn = Account.ShowOnLeaderboard;
+        _loading = false;
     }
 
     private static Visibility Vis(bool on) => on ? Visibility.Visible : Visibility.Collapsed;

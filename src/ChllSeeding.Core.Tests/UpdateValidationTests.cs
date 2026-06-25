@@ -1,18 +1,18 @@
+using System.Text;
 using ChllSeeding.Core.Update;
-using Xunit;
 
 namespace ChllSeeding.Core.Tests;
 
 /// <summary>
-/// Mirrors the <c>#[cfg(test)]</c> block in <c>src-rust/src/platform/updater.rs</c>: installer
-/// extension/filename sanitisation, SHA-256 verification, size limits, and download-URL trust.
+/// Port of the <c>#[cfg(test)]</c> block in <c>src-rust/src/platform/updater.rs</c> — the
+/// security-critical validation + sanitization helpers, plus the version-availability check.
 /// </summary>
 public class UpdateValidationTests
 {
-    private static readonly string[] Trusted =
-        ["seeding.comp-hll.org", "github.com", "objects.githubusercontent.com"];
+    private static readonly string[] TrustedHosts =
+        { "seeding.comp-hll.org", "github.com", "objects.githubusercontent.com" };
 
-    // ─── ValidateInstallerExtension ─────────────────────────────────
+    // ── ValidateInstallerExtension ──────────────────────────────────
 
     [Theory]
     [InlineData("exe")]
@@ -20,7 +20,8 @@ public class UpdateValidationTests
     [InlineData("EXE")]
     [InlineData("MSI")]
     [InlineData("Exe")]
-    public void Extension_Allowed(string ext) => Assert.Null(UpdateValidation.ValidateInstallerExtension(ext));
+    public void Extension_Allowed(string ext) =>
+        Assert.Null(UpdateValidation.ValidateInstallerExtension(ext));
 
     [Theory]
     [InlineData("bat")]
@@ -28,9 +29,10 @@ public class UpdateValidationTests
     [InlineData("cmd")]
     [InlineData("sh")]
     [InlineData("")]
-    public void Extension_Rejected(string ext) => Assert.NotNull(UpdateValidation.ValidateInstallerExtension(ext));
+    public void Extension_Rejected(string ext) =>
+        Assert.NotNull(UpdateValidation.ValidateInstallerExtension(ext));
 
-    // ─── SanitizeInstallerFilename ──────────────────────────────────
+    // ── SanitizeInstallerFilename ───────────────────────────────────
 
     [Fact]
     public void Sanitize_NormalName() =>
@@ -45,108 +47,114 @@ public class UpdateValidationTests
         Assert.Equal("setup.exe", UpdateValidation.SanitizeInstallerFilename(@"..\..\setup.exe"));
 
     [Fact]
-    public void Sanitize_DotsAndSlashesOnly() =>
-        Assert.Equal(UpdateValidation.DefaultInstallerName, UpdateValidation.SanitizeInstallerFilename("../\\"));
+    public void Sanitize_DotsAndSlashesOnly_FallsBack() =>
+        Assert.Equal("chll-seeding-update.exe", UpdateValidation.SanitizeInstallerFilename("../\\"));
 
     [Fact]
-    public void Sanitize_Empty() =>
-        Assert.Equal(UpdateValidation.DefaultInstallerName, UpdateValidation.SanitizeInstallerFilename(""));
+    public void Sanitize_Empty_FallsBack() =>
+        Assert.Equal("chll-seeding-update.exe", UpdateValidation.SanitizeInstallerFilename(""));
 
-    // ─── VerifySha256 ───────────────────────────────────────────────
+    // ── VerifySha256 ────────────────────────────────────────────────
 
     [Fact]
     public void Sha256_Valid()
     {
-        var data = "hello world"u8.ToArray();
-        Assert.Null(UpdateValidation.VerifySha256(
-            data, "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"));
+        var data = Encoding.ASCII.GetBytes("hello world");
+        const string expected = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9";
+        Assert.Null(UpdateValidation.VerifySha256(data, expected));
     }
 
     [Fact]
     public void Sha256_Mismatch()
     {
-        var data = "hello world"u8.ToArray();
-        var result = UpdateValidation.VerifySha256(
-            data, "0000000000000000000000000000000000000000000000000000000000000000");
-        Assert.NotNull(result);
-        Assert.Contains("Checksum mismatch", result);
+        var data = Encoding.ASCII.GetBytes("hello world");
+        const string wrong = "0000000000000000000000000000000000000000000000000000000000000000";
+        var error = UpdateValidation.VerifySha256(data, wrong);
+        Assert.NotNull(error);
+        Assert.Contains("Checksum mismatch", error);
     }
 
     [Fact]
     public void Sha256_WrongLength()
     {
-        var result = UpdateValidation.VerifySha256("hello"u8.ToArray(), "abc123");
-        Assert.NotNull(result);
-        Assert.Contains("Invalid SHA-256 hash length", result);
+        var data = Encoding.ASCII.GetBytes("hello");
+        var error = UpdateValidation.VerifySha256(data, "abc123");
+        Assert.NotNull(error);
+        Assert.Contains("Invalid SHA-256 hash length", error);
     }
 
     [Theory]
     [InlineData("B94D27B9934D3E08A52E52D7DA7DABFAC484EFE37A5380EE9088F7ACE2EFCDE9")]
     [InlineData("B94d27b9934D3e08A52e52d7DA7dabfAC484efe37A5380ee9088F7ace2EFCDE9")]
-    public void Sha256_CaseInsensitive(string hash) =>
-        Assert.Null(UpdateValidation.VerifySha256("hello world"u8.ToArray(), hash));
+    public void Sha256_CaseInsensitive(string hash)
+    {
+        var data = Encoding.ASCII.GetBytes("hello world");
+        Assert.Null(UpdateValidation.VerifySha256(data, hash));
+    }
 
     [Fact]
-    public void Sha256_EmptyInput() =>
-        Assert.Null(UpdateValidation.VerifySha256(
-            [], "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"));
+    public void Sha256_EmptyInput()
+    {
+        var data = Array.Empty<byte>();
+        const string expected = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        Assert.Null(UpdateValidation.VerifySha256(data, expected));
+    }
 
-    // ─── ValidateInstallerSize ──────────────────────────────────────
+    // ── ValidateInstallerSize ───────────────────────────────────────
 
-    [Fact]
-    public void Size_UnderLimit() => Assert.Null(UpdateValidation.ValidateInstallerSize(100L * 1024 * 1024));
-
-    [Fact]
-    public void Size_AtLimit() => Assert.Null(UpdateValidation.ValidateInstallerSize(500L * 1024 * 1024));
+    [Theory]
+    [InlineData(100L * 1024 * 1024)] // 100 MB
+    [InlineData(500L * 1024 * 1024)] // exactly 500 MB
+    [InlineData(0L)]
+    public void Size_WithinLimit(long len) =>
+        Assert.Null(UpdateValidation.ValidateInstallerSize(len));
 
     [Fact]
     public void Size_OverLimit()
     {
-        var result = UpdateValidation.ValidateInstallerSize(500L * 1024 * 1024 + 1);
-        Assert.NotNull(result);
-        Assert.Contains("too large", result);
+        var error = UpdateValidation.ValidateInstallerSize(500L * 1024 * 1024 + 1);
+        Assert.NotNull(error);
+        Assert.Contains("too large", error);
     }
 
-    [Fact]
-    public void Size_Zero() => Assert.Null(UpdateValidation.ValidateInstallerSize(0));
-
-    // ─── ValidateDownloadUrl ────────────────────────────────────────
+    // ── ValidateDownloadUrl ─────────────────────────────────────────
 
     [Theory]
     [InlineData("https://seeding.comp-hll.org/releases/v1.0.exe")]
     [InlineData("https://github.com/org/repo/releases/download/v1/setup.exe")]
     [InlineData("https://objects.githubusercontent.com/path/to/file")]
     public void DownloadUrl_TrustedDomains(string url) =>
-        Assert.Null(UpdateValidation.ValidateDownloadUrl(url, Trusted));
+        Assert.Null(UpdateValidation.ValidateDownloadUrl(url, TrustedHosts));
 
     [Fact]
     public void DownloadUrl_RejectsHttp()
     {
-        var result = UpdateValidation.ValidateDownloadUrl("http://seeding.comp-hll.org/file.exe", Trusted);
-        Assert.NotNull(result);
-        Assert.Contains("HTTPS", result);
+        var error = UpdateValidation.ValidateDownloadUrl("http://seeding.comp-hll.org/file.exe", TrustedHosts);
+        Assert.NotNull(error);
+        Assert.Contains("HTTPS", error);
     }
 
     [Fact]
     public void DownloadUrl_RejectsUntrustedDomain()
     {
-        var result = UpdateValidation.ValidateDownloadUrl("https://evil.com/malware.exe", Trusted);
-        Assert.NotNull(result);
-        Assert.Contains("not in the trusted domain list", result);
+        var error = UpdateValidation.ValidateDownloadUrl("https://evil.com/malware.exe", TrustedHosts);
+        Assert.NotNull(error);
+        Assert.Contains("not in the trusted domain list", error);
     }
 
     [Theory]
     [InlineData("not-a-url")]
     [InlineData("")]
-    public void DownloadUrl_RejectsInvalidUrl(string url) =>
-        Assert.NotNull(UpdateValidation.ValidateDownloadUrl(url, Trusted));
+    public void DownloadUrl_RejectsInvalid(string url) =>
+        Assert.NotNull(UpdateValidation.ValidateDownloadUrl(url, TrustedHosts));
 
-    // ─── IsUpdateAvailable ──────────────────────────────────────────
+    // ── IsUpdateAvailable ───────────────────────────────────────────
 
     [Theory]
-    [InlineData("1.0.0", "1.0.1", true)]
-    [InlineData("1.0.0", "1.0.0", false)]
-    [InlineData("1.0.0", "", false)]
+    [InlineData("1.0.0", "1.0.1", true)]   // newer
+    [InlineData("1.0.0", "0.9.0", true)]   // server decides ordering — any difference is "available"
+    [InlineData("1.0.0", "1.0.0", false)]  // same
+    [InlineData("1.0.0", "", false)]       // empty latest → no update
     public void IsUpdateAvailable_Cases(string current, string latest, bool expected) =>
         Assert.Equal(expected, UpdateValidation.IsUpdateAvailable(current, latest));
 }

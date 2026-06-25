@@ -252,6 +252,43 @@ public sealed partial class MainWindow : Window
         });
     }
 
+    /// <summary>Shut the app down so a freshly launched installer can replace the running exe.
+    /// Mirrors the restart shutdown sequence (flush config + stop heartbeat + force-close + hard-exit
+    /// safety net) but without the delayed relaunch — the installer owns the relaunch. Port of the
+    /// shutdown half of <c>updater::launch_installer</c> (flush + stop_heartbeat_sync + close_app).</summary>
+    public void QuitForUpdate()
+    {
+        try
+        {
+            _config.FlushPendingSaves();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Config flush before update exit failed");
+        }
+
+        try
+        {
+            App.AppHost.Services.GetRequiredService<HeartbeatService>().StopFireAndForget("update");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Heartbeat stop before update exit failed");
+        }
+
+        _forceQuit = true;
+        Close();
+
+        // Hard-exit safety net (mirrors the restart path): if the clean shutdown hangs, force the
+        // process down so it isn't holding the exe open when the installer tries to overwrite it.
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+            Log.Warning("Update: clean shutdown didn't exit in time, forcing process exit");
+            Environment.Exit(0);
+        });
+    }
+
     private void Toast_Closed(InfoBar sender, InfoBarClosedEventArgs args)
     {
         if (sender.DataContext is InAppToast toast)

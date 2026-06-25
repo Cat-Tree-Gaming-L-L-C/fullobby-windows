@@ -115,16 +115,14 @@
                     <TextBlock Text="Show on Leaderboard" />
                     <TextBlock Text="Appear in public rankings" FontSize="12" Opacity="0.5" />
                 </StackPanel>
-                <ToggleSwitch x:Name="LeaderboardToggle" HorizontalAlignment="Right" Toggled="LeaderboardToggle_Toggled" />
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <ProgressRing x:Name="LeaderboardSpinner" Width="16" Height="16" IsActive="True" Visibility="Collapsed" />
+                    <ToggleSwitch x:Name="LeaderboardToggle" Toggled="LeaderboardToggle_Toggled" />
+                </StackPanel>
             </Grid>
 
             <!-- ── Settings ────────────────────────────────────────────── -->
             <TextBlock Text="Settings" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
-
-            <ToggleSwitch
-                x:Name="EuServersToggle"
-                Header="Enable EU Servers"
-                Toggled="EuServersToggle_Toggled" />
 
             <ToggleSwitch
                 x:Name="DarkModeToggle"
@@ -176,46 +174,40 @@
                 Toggled="StartupToggle_Toggled" />
 
             <TextBlock Text="Auto-Seed" Margin="0,4,0,0" />
-            <TextBlock Text="Schedule daily seeding via Task Scheduler. Times are entered in UTC; your PC wakes from sleep to seed."
+            <TextBlock Text="Seed automatically once a day. The wake time follows the server's seeding schedule (UTC); your PC wakes from sleep to seed."
                        FontSize="12" Opacity="0.5" TextWrapping="Wrap" />
 
-            <!-- NA auto-seed -->
+            <!-- Daily auto-seed (single task; the server decides what to seed) -->
             <Grid Margin="0,2,0,0">
                 <StackPanel>
-                    <TextBlock Text="NA daily seed" />
-                    <TextBlock x:Name="AutoseedNaStatus" Text="Not scheduled" FontSize="12" Opacity="0.5" />
+                    <TextBlock Text="Daily auto-seed" />
+                    <TextBlock x:Name="AutoseedStatus" Text="Not scheduled" FontSize="12" Opacity="0.5" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
-                    <Button x:Name="AutoseedNaSetup" Content="Set up" Click="AutoseedNaSetup_Click" />
-                    <Button x:Name="AutoseedNaView" Content="View" Visibility="Collapsed" Click="AutoseedNaView_Click" />
-                    <Button x:Name="AutoseedNaRemove" Content="Remove" Visibility="Collapsed" Click="AutoseedNaRemove_Click" />
+                    <Button x:Name="AutoseedSetup" Content="Set up" Click="AutoseedSetup_Click" />
+                    <Button x:Name="AutoseedRemove" Content="Remove" Visibility="Collapsed" Click="AutoseedRemove_Click" />
                 </StackPanel>
             </Grid>
 
-            <!-- EU auto-seed -->
-            <Grid Margin="0,2,0,0">
-                <StackPanel>
-                    <TextBlock Text="EU daily seed" />
-                    <TextBlock x:Name="AutoseedEuStatus" Text="Not scheduled" FontSize="12" Opacity="0.5" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
-                    <Button x:Name="AutoseedEuSetup" Content="Set up" Click="AutoseedEuSetup_Click" />
-                    <Button x:Name="AutoseedEuView" Content="View" Visibility="Collapsed" Click="AutoseedEuView_Click" />
-                    <Button x:Name="AutoseedEuRemove" Content="Remove" Visibility="Collapsed" Click="AutoseedEuRemove_Click" />
-                </StackPanel>
-            </Grid>
-
-            <!-- ── Updates ──────────────────────────────────────────────── -->
+            <!-- ── Updates ─────────────────────────────────────────────── -->
             <TextBlock Text="Updates" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
 
             <Grid>
                 <StackPanel>
-                    <TextBlock Text="Check for updates" />
-                    <TextBlock x:Name="VersionText" Text="" FontSize="12" Opacity="0.5" />
+                    <TextBlock Text="App Updates" />
+                    <TextBlock x:Name="UpdateStatus" Text="Check for the latest version" FontSize="12" Opacity="0.5" />
                 </StackPanel>
-                <Button x:Name="CheckUpdatesButton" Content="Check for Updates" HorizontalAlignment="Right" Click="CheckUpdates_Click" />
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <ProgressRing x:Name="UpdateSpinner" Width="16" Height="16" IsActive="True" Visibility="Collapsed" />
+                    <Button x:Name="CheckUpdatesButton" Content="Check for Updates" Click="CheckUpdates_Click" />
+                </StackPanel>
             </Grid>
-            <ToggleSwitch x:Name="BetaUpdatesToggle" Header="Beta Updates" Toggled="BetaUpdatesToggle_Toggled" />
+            <ToggleSwitch
+                x:Name="BetaToggle"
+                Header="Beta Updates"
+                OffContent="Stable releases only"
+                OnContent="Include beta (pre-release) updates"
+                Toggled="BetaToggle_Toggled" />
         </StackPanel>
     </ScrollViewer>
 </Page>

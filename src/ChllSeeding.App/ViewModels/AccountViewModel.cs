@@ -72,6 +72,10 @@ public sealed partial class AccountViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(DisplayName))]
     [NotifyPropertyChangedFor(nameof(HasAccountName))]
     [NotifyPropertyChangedFor(nameof(ShowOnLeaderboard))]
+    [NotifyPropertyChangedFor(nameof(SteamLinked))]
+    [NotifyPropertyChangedFor(nameof(DiscordLinked))]
+    [NotifyPropertyChangedFor(nameof(IsSteamSignedIn))]
+    [NotifyPropertyChangedFor(nameof(IsDiscordSignedIn))]
     private UserInfo? user;
 
     [ObservableProperty]
@@ -113,6 +117,18 @@ public sealed partial class AccountViewModel : ObservableObject
 
     /// <summary>The "Show on Leaderboard" toggle reflects the inverse of the opt-out flag.</summary>
     public bool ShowOnLeaderboard => IsLoggedIn && User is not null && !User.LeaderboardOptOut;
+
+    /// <summary>True when a Steam account is linked (mirrors Rust <c>u.steam_id.is_some()</c>).</summary>
+    public bool SteamLinked => User?.SteamId is { Length: > 0 };
+
+    /// <summary>True when a Discord account is linked (mirrors Rust <c>u.discord_id.is_some()</c>).</summary>
+    public bool DiscordLinked => User?.DiscordId is { Length: > 0 };
+
+    /// <summary>True when the active sign-in provider is Steam (drives the "signed in" badge).</summary>
+    public bool IsSteamSignedIn => User?.AuthProvider == AuthProvider.Steam;
+
+    /// <summary>True when the active sign-in provider is Discord (drives the "signed in" badge).</summary>
+    public bool IsDiscordSignedIn => User?.AuthProvider == AuthProvider.Discord;
 
     // ── Session restore (port of app.rs init_auth) ──────────────────────────────
 

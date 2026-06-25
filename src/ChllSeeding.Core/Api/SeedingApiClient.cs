@@ -23,42 +23,42 @@ public sealed class SeedingApiClient(HttpClient http)
     public Task<SeedingStatusResponse> GetSeedingStatusAsync(CancellationToken ct = default) =>
         SendAsync<SeedingStatusResponse>(HttpMethod.Get, "/api/seeding/status", null, ct);
 
+    /// <summary>Fetch the server-decided directive: what to do next (seed/switch/stay/stop), the
+    /// target server, stagger/countdown timings, when to poll again, and the current config. The
+    /// client identifies its current server by index in the game's rotation; null = "not seeding".</summary>
+    public Task<SeedingDirective> GetDirectiveAsync(
+        string game, int? currentIndex, string? sessionId = null, CancellationToken ct = default)
+    {
+        var path = $"/api/seeding/directive?game={Uri.EscapeDataString(game)}";
+        if (currentIndex is not null)
+        {
+            path += $"&current_index={currentIndex.Value}";
+        }
+        if (sessionId is not null)
+        {
+            path += $"&session_id={Uri.EscapeDataString(sessionId)}";
+        }
+        return SendAsync<SeedingDirective>(HttpMethod.Get, path, null, ct);
+    }
+
+    /// <summary>Fetch the current seeding timing config (public, no session). Used to prime the
+    /// peripheral services with server values at startup and on the poll loop.</summary>
+    public Task<SeedingConfig> GetSeedingConfigAsync(CancellationToken ct = default) =>
+        SendAsync<SeedingConfig>(HttpMethod.Get, "/api/seeding/config", null, ct);
+
     /// <summary>Register a guest account (unauthenticated).</summary>
     public Task<RegisterResponse> RegisterGuestAsync(CancellationToken ct = default) =>
         SendAsync<RegisterResponse>(HttpMethod.Post, "/api/auth/register", new Dictionary<string, object?>(), ct);
 
-    /// <summary>Get the next seeding candidate (auth required).</summary>
-    public Task<NextServerResponse> GetNextServerAsync(
-        string game, string currentRegion, int currentIndex, bool euEnabled, string reason,
-        Platform platform, string? steamId = null, CancellationToken ct = default)
-    {
-        var body = new Dictionary<string, object?>
-        {
-            ["game"] = game,
-            ["current_region"] = currentRegion,
-            ["current_index"] = currentIndex,
-            ["eu_enabled"] = euEnabled,
-            ["reason"] = reason,
-            ["platform"] = platform.ToWireString(),
-        };
-        if (steamId is not null)
-        {
-            body["steam_id"] = steamId;
-        }
-        return SendAsync<NextServerResponse>(HttpMethod.Post, "/api/seeding/next-server", body, ct);
-    }
-
     /// <summary>Create a seeding session after a successful game launch (auth required).</summary>
     public Task<StartSessionResponse> StartSessionAsync(
-        string game, string region, int index, Platform platform,
+        string game, int index,
         string? steamId = null, SessionStartAnalytics? analytics = null, CancellationToken ct = default)
     {
         var body = new Dictionary<string, object?>
         {
             ["game"] = game,
-            ["region"] = region,
             ["index"] = index,
-            ["platform"] = platform.ToWireString(),
         };
         if (steamId is not null)
         {

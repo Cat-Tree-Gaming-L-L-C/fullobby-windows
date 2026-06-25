@@ -1,134 +1,143 @@
-using System.Reflection;
+using System.Diagnostics;
 using System.Text.Json;
 using ChllSeeding.Core.Api;
-using ChllSeeding.Core.Config;
 using Microsoft.Extensions.Logging;
 
 namespace ChllSeeding.Core.Update;
 
-/// <summary>Metadata for an available update (port of the Rust <c>UpdateInfo</c> struct).</summary>
-public sealed record UpdateInfo(string Version, string DownloadUrl, string Notes, string? Sha256, string? Signature);
-
 /// <summary>
-/// Self-updater — port of <c>src-rust/src/platform/updater.rs</c>. Checks the
-/// <c>/api/releases/latest</c> endpoint (honoring the stable/beta <c>update_channel</c> config
-/// key), and downloads + verifies (HTTPS, trusted host, SHA-256, ≤500 MB, safe extension) the Inno
-/// <c>setup.exe</c> before launching it. The caller is responsible for shutting the app down once
-/// the installer has started (the installer must replace the running exe).
+/// Self-updater: checks the <c>/api/releases/latest</c> manifest, downloads the installer to a
+/// temp directory with HTTPS + trusted-domain + size + SHA-256 validation, and launches it.
+/// Port of <c>src-rust/src/platform/updater.rs</c>. The security-critical checks live in
+/// <see cref="UpdateValidation"/> (unit-tested); this class owns the network + filesystem I/O.
+///
+/// The post-launch app shutdown (flush config, stop heartbeat, exit so the installer can replace
+/// the running exe) is deliberately left to the App layer — Core stays UI-/lifecycle-free.
 /// </summary>
-public sealed class UpdaterService(
-    IHttpClientFactory httpFactory,
-    ConfigService config,
-    ILogger<UpdaterService> log)
+public sealed class UpdaterService
 {
-    /// <summary>Named <see cref="HttpClient"/> with a long timeout (installer downloads can be large)
-    /// and resilience, but no auth handler — release endpoints are public.</summary>
-    public const string ClientName = "updater";
+    /// <summary>Named HttpClient for update checks + installer downloads (generous timeout, no auth).</summary>
+    public const string HttpClientName = "updater";
 
-    /// <summary>HTTPS hosts permitted for installer downloads: the configured API host plus GitHub's
-    /// release-asset CDNs. Derived from <see cref="ApiConfig.BaseUrl"/> so the env override is honored.</summary>
-    public static IReadOnlyList<string> TrustedDownloadDomains
+    private readonly ILogger<UpdaterService> _log;
+    private readonly IHttpClientFactory _httpFactory;
+
+    public UpdaterService(ILogger<UpdaterService> log, IHttpClientFactory httpFactory)
     {
-        get
-        {
-            var domains = new List<string>();
-            if (Uri.TryCreate(ApiConfig.BaseUrl, UriKind.Absolute, out var apiUri) && apiUri.Host.Length > 0)
-            {
-                domains.Add(apiUri.Host);
-            }
-            domains.AddRange(UpdateValidation.GitHubDownloadDomains);
-            return domains;
-        }
+        _log = log;
+        _httpFactory = httpFactory;
     }
 
-    /// <summary>The currently-running app version, formatted like the Rust <c>CARGO_PKG_VERSION</c>
-    /// (major.minor.patch). Read from the entry assembly, falling back to this assembly.</summary>
-    public static string CurrentVersion =>
-        (Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly())
-            .GetName().Version?.ToString(3) ?? "0.0.0";
-
-    /// <summary>Check for an available update on the configured channel. Returns <c>null</c> when
-    /// already up to date. Throws on network/HTTP failure (port of <c>check_for_updates</c>).</summary>
-    public async Task<UpdateInfo?> CheckForUpdatesAsync(CancellationToken ct = default)
+    /// <summary>Hosts an installer download may come from: the configured API host plus GitHub's
+    /// release CDNs. Derived from <see cref="ApiConfig.BaseUrl"/> so a staging override still works.</summary>
+    public static IReadOnlyCollection<string> TrustedDownloadHosts()
     {
-        var channel = config.GetString("update_channel") ?? "";
-        var url = channel == "beta"
+        var hosts = new List<string> { "github.com", "objects.githubusercontent.com" };
+        if (Uri.TryCreate(ApiConfig.BaseUrl, UriKind.Absolute, out var api) && api.Host.Length > 0)
+        {
+            hosts.Add(api.Host);
+        }
+        return hosts;
+    }
+
+    /// <summary>
+    /// Check for an available update on the given channel. <paramref name="channel"/> is the stored
+    /// <c>update_channel</c> config value — "beta" hits the beta feed, anything else the stable feed.
+    /// Returns <c>null</c> when already current. Throws on a network/HTTP failure.
+    /// </summary>
+    public async Task<UpdateInfo?> CheckForUpdatesAsync(
+        string currentVersion, string? channel, CancellationToken ct = default)
+    {
+        var url = string.Equals(channel, "beta", StringComparison.OrdinalIgnoreCase)
             ? $"{ApiConfig.BaseUrl}/api/releases/latest?channel=beta"
             : $"{ApiConfig.BaseUrl}/api/releases/latest";
 
-        var client = httpFactory.CreateClient(ClientName);
+        var client = _httpFactory.CreateClient(HttpClientName);
         using var response = await client.GetAsync(url, ct).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
-            throw new HttpRequestException($"Update check failed: {(int)response.StatusCode}");
+            throw new InvalidOperationException($"Update check failed: {(int)response.StatusCode} {response.ReasonPhrase}");
         }
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
-        var release = doc.RootElement;
+        var root = doc.RootElement;
 
-        var latestVersion = GetStr(release, "version") ?? "";
-        var current = CurrentVersion;
-
-        if (!UpdateValidation.IsUpdateAvailable(current, latestVersion))
+        var latest = GetString(root, "version") ?? "";
+        if (!UpdateValidation.IsUpdateAvailable(currentVersion, latest))
         {
-            log.LogInformation("No updates available (current: {Version})", current);
+            _log.LogInformation("No updates available (current: {Current})", currentVersion);
             return null;
         }
 
-        log.LogInformation("Update available: {Current} -> {Latest}", current, latestVersion);
-        return new UpdateInfo(
-            Version: latestVersion,
-            DownloadUrl: GetStr(release, "download_url") ?? GetStr(release, "url") ?? "",
-            Notes: GetStr(release, "notes") ?? "",
-            Sha256: GetStr(release, "sha256"),
-            Signature: GetStr(release, "signature"));
+        _log.LogInformation("Update available: {Current} -> {Latest}", currentVersion, latest);
+        return new UpdateInfo
+        {
+            Version = latest,
+            DownloadUrl = GetString(root, "download_url") ?? GetString(root, "url") ?? "",
+            Notes = GetString(root, "notes") ?? "",
+            Sha256 = GetString(root, "sha256"),
+            Signature = GetString(root, "signature"),
+        };
     }
 
-    /// <summary>Download the installer, verify it (HTTPS + trusted host + SHA-256 + size + extension),
-    /// write it to a temp dir, and launch it. Returns the launched installer path. The caller must
-    /// then shut the app down so the installer can replace the running exe (port of
-    /// <c>download_and_install</c> minus the in-process shutdown, which the App layer owns).</summary>
-    public async Task<string> DownloadAndInstallAsync(UpdateInfo update, CancellationToken ct = default)
+    /// <summary>
+    /// Download the installer to a temp directory and validate it: HTTPS + trusted host, ≤500 MB,
+    /// and a matching SHA-256 (a missing checksum is a hard failure). Returns the written path.
+    /// Throws on any validation or I/O failure — the caller must not launch on a throw.
+    /// </summary>
+    public async Task<string> DownloadAndVerifyAsync(UpdateInfo update, CancellationToken ct = default)
     {
-        if (string.IsNullOrEmpty(update.DownloadUrl))
+        if (update.DownloadUrl.Length == 0)
         {
             throw new InvalidOperationException("No download URL available");
         }
 
-        if (UpdateValidation.ValidateDownloadUrl(update.DownloadUrl, TrustedDownloadDomains) is { } urlError)
+        var urlError = UpdateValidation.ValidateDownloadUrl(update.DownloadUrl, TrustedDownloadHosts());
+        if (urlError is not null)
         {
             throw new InvalidOperationException(urlError);
         }
 
-        log.LogInformation("Downloading update from: {Url}", update.DownloadUrl);
+        _log.LogInformation("Downloading update from: {Url}", update.DownloadUrl);
 
-        var client = httpFactory.CreateClient(ClientName);
-        using var response = await client.GetAsync(update.DownloadUrl, ct).ConfigureAwait(false);
+        var client = _httpFactory.CreateClient(HttpClientName);
+        using var response = await client.GetAsync(
+            update.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
-            throw new HttpRequestException($"Download failed: {(int)response.StatusCode}");
+            throw new InvalidOperationException($"Download failed: {(int)response.StatusCode} {response.ReasonPhrase}");
         }
 
-        var rawName = update.DownloadUrl.Split('/').LastOrDefault() ?? UpdateValidation.DefaultInstallerName;
+        // Cheap early reject before buffering a multi-hundred-MB body.
+        var declared = response.Content.Headers.ContentLength;
+        if (declared is { } len && UpdateValidation.ValidateInstallerSize(len) is { } sizeErr)
+        {
+            throw new InvalidOperationException(sizeErr);
+        }
+
+        var rawName = update.DownloadUrl.Split('/').LastOrDefault() ?? "";
         var fileName = UpdateValidation.SanitizeInstallerFilename(rawName);
+
+        var tempDir = Path.Combine(Path.GetTempPath(), "chll-seeding-update");
+        Directory.CreateDirectory(tempDir);
+        var downloadPath = Path.Combine(tempDir, fileName);
 
         var bytes = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
 
-        // Enforce the size limit to prevent disk exhaustion.
-        if (UpdateValidation.ValidateInstallerSize(bytes.LongLength) is { } sizeError)
+        if (UpdateValidation.ValidateInstallerSize(bytes.Length) is { } actualSizeErr)
         {
-            throw new InvalidOperationException(sizeError);
+            throw new InvalidOperationException(actualSizeErr);
         }
 
-        // Require a SHA-256 checksum — refuse to install unverified binaries.
-        if (update.Sha256 is { } expectedHash)
+        // Require a SHA-256 — refuse to install an unverified binary.
+        if (update.Sha256 is { Length: > 0 } expected)
         {
-            if (UpdateValidation.VerifySha256(bytes, expectedHash) is { } hashError)
+            if (UpdateValidation.VerifySha256(bytes, expected) is { } hashErr)
             {
-                throw new InvalidOperationException(hashError);
+                throw new InvalidOperationException(hashErr);
             }
-            log.LogInformation("Installer checksum verified (SHA-256: {Hash})", expectedHash);
+            _log.LogInformation("Installer checksum verified (SHA-256: {Hash})", expected);
         }
         else
         {
@@ -137,25 +146,22 @@ public sealed class UpdaterService(
 
         if (update.Signature is null)
         {
-            log.LogWarning(
-                "Update manifest has no signature — integrity relies on SHA-256 + HTTPS. " +
+            _log.LogWarning(
+                "Update manifest has no Ed25519 signature — integrity relies on SHA-256 + HTTPS. " +
                 "Configure release signing for defense-in-depth against server compromise.");
         }
 
-        var tempDir = Path.Combine(Path.GetTempPath(), "chll-seeding-update");
-        Directory.CreateDirectory(tempDir);
-        var downloadPath = Path.Combine(tempDir, fileName);
         await File.WriteAllBytesAsync(downloadPath, bytes, ct).ConfigureAwait(false);
-
-        log.LogInformation("Update downloaded to: {Path} ({Bytes} bytes)", downloadPath, bytes.LongLength);
-
-        LaunchInstaller(downloadPath);
+        _log.LogInformation("Update downloaded to: {Path} ({Bytes} bytes)", downloadPath, bytes.Length);
         return downloadPath;
     }
 
-    /// <summary>Launch the downloaded installer, allowing only <c>.exe</c>/<c>.msi</c>
-    /// (port of <c>launch_installer</c>; process shutdown is left to the caller).</summary>
-    private void LaunchInstaller(string path)
+    /// <summary>
+    /// Launch the downloaded installer (only <c>.exe</c>/<c>.msi</c> are allowed). Returns once the
+    /// process is spawned; the caller is responsible for shutting the app down afterwards so the
+    /// installer can replace the running exe. Port of <c>launch_installer</c> (minus the shutdown).
+    /// </summary>
+    public void LaunchInstaller(string path)
     {
         var extension = Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
         if (UpdateValidation.ValidateInstallerExtension(extension) is { } extError)
@@ -163,14 +169,14 @@ public sealed class UpdaterService(
             throw new InvalidOperationException(extError);
         }
 
-        log.LogInformation("Launching installer: {Path}", path);
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+        _log.LogInformation("Launching installer: {Path}", path);
+        // UseShellExecute so both .exe and .msi launch via their shell association.
+        Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        _log.LogInformation("Update installer launched, app should exit for the update to apply");
     }
 
-    private static string? GetStr(JsonElement obj, string name) =>
-        obj.ValueKind == JsonValueKind.Object
-        && obj.TryGetProperty(name, out var v)
-        && v.ValueKind == JsonValueKind.String
-            ? v.GetString()
+    private static string? GetString(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.String
+            ? el.GetString()
             : null;
 }
