@@ -92,7 +92,7 @@ public static class ServiceCollectionExtensions
 
         // Updater client: long timeout (installer downloads can be large), resilience but NO auth
         // (release endpoints are public). Port of the Rust 300s download timeout.
-        services.AddHttpClient(UpdaterService.ClientName, client =>
+        services.AddHttpClient(UpdaterService.HttpClientName, client =>
             {
                 client.Timeout = TimeSpan.FromSeconds(300);
                 client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);

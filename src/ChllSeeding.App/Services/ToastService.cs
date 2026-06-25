@@ -73,24 +73,21 @@ public sealed class ToastService
         }
     }
 
-    /// <summary>Desktop toast at the start of an auto-seed countdown so the user notices it even when
-    /// the window is hidden/in the tray (the in-window overlay alone is invisible then). Port of the
-    /// show_notification call at the top of run_autoseed. Deviation: Rust only raised this for NA
-    /// (EU passed show_notification=false — an apparent oversight); we show it for both regions.</summary>
-    public void ShowAutoseedStarting()
+    /// <summary>Show a plain title/body desktop toast (no sound). Port of the generic
+    /// <c>platform::notification::show_notification</c> used by, e.g., the auto-seed countdown.</summary>
+    public void Show(string title, string body)
     {
         try
         {
             var notification = new AppNotificationBuilder()
-                .AddText(Branding.ProductName)
-                .AddText("Auto-seed starting in 60 seconds. Open the app to cancel.")
+                .AddText(title)
+                .AddText(body)
                 .BuildNotification();
             AppNotificationManager.Default.Show(notification);
-            _log.LogInformation("Auto-seed countdown notification shown");
         }
         catch (Exception e)
         {
-            _log.LogWarning(e, "Failed to show auto-seed notification");
+            _log.LogWarning(e, "Failed to show notification");
         }
     }
 
