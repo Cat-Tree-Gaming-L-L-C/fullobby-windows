@@ -16,7 +16,7 @@ namespace ChllSeeding.Core.Api;
 /// events into the <see cref="SeedingStatusCache"/>, and wakes the seeding monitor on
 /// (re)connect. Reconnects with exponential backoff + jitter, honors <c>Retry-After</c>
 /// on 429, applies a 60s keepalive timeout (with wake-from-sleep handling), and refreshes
-/// auth on 401. Port of <c>src-rust/src/api/sse.rs</c>. Runs as an <see cref="IHostedService"/>.
+/// auth on 401. Runs as an <see cref="IHostedService"/>.
 /// </summary>
 public sealed class SseStreamClient : IHostedService
 {
@@ -278,10 +278,10 @@ public sealed class SseStreamClient : IHostedService
             if (parser.Feed(line) is { } frame)
             {
                 // A dispatched event (incl. server "heartbeat") is proof of life — reset the
-                // keepalive window here, NOT on every raw line. Mirrors the Rust client, which
-                // resets keepalive_started only on Event::Message/Open: ":keepalive" comment
-                // lines and partial field lines must NOT reset it, otherwise the wake-from-sleep
-                // elapsed measurement below can never accumulate past the wake threshold.
+                // keepalive window here, NOT on every raw line. Only dispatched message/open
+                // events reset it: ":keepalive" comment lines and partial field lines must NOT
+                // reset it, otherwise the wake-from-sleep elapsed measurement below can never
+                // accumulate past the wake threshold.
                 lastActivity.Restart();
                 kaCts.CancelAfter(TimeSpan.FromSeconds(keepaliveSecs));
                 Dispatch(frame);

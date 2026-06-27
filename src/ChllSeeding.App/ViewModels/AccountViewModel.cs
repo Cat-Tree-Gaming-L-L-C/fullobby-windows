@@ -15,8 +15,7 @@ namespace ChllSeeding.App.ViewModels;
 /// Shared (singleton) view model behind the account section of Settings and the
 /// onboarding wizard. Owns the authentication lifecycle — session restore, OAuth
 /// login + deep-link callbacks, provider/Steam linking, display-name + API-key
-/// management, account deletion — mirroring the Rust <c>state::auth</c> signals and
-/// the <c>components/settings.rs</c> / <c>onboarding.rs</c> action helpers.
+/// management, account deletion.
 /// </summary>
 public sealed partial class AccountViewModel : ObservableObject
 {
@@ -28,8 +27,8 @@ public sealed partial class AccountViewModel : ObservableObject
     private readonly InAppToastService _toast;
     private readonly DispatcherQueue _dispatcher;
 
-    // Simple per-action cooldowns (ms since boot of the next allowed call). Mirrors the
-    // Rust state::cooldown guard that throttles rapid account mutations.
+    // Simple per-action cooldowns (ms since boot of the next allowed call). Throttles
+    // rapid account mutations.
     private readonly Dictionary<string, long> _cooldowns = new(StringComparer.Ordinal);
 
     public AccountViewModel(
@@ -54,7 +53,7 @@ public sealed partial class AccountViewModel : ObservableObject
         isGuest = _config.GetBool("guest_mode");
     }
 
-    // ── Observable state (mirrors state::auth signals) ──────────────────────────
+    // ── Observable state (auth signals) ──────────────────────────
 
     [ObservableProperty]
     private bool authLoading;
@@ -118,10 +117,10 @@ public sealed partial class AccountViewModel : ObservableObject
     /// <summary>The "Show on Leaderboard" toggle reflects the inverse of the opt-out flag.</summary>
     public bool ShowOnLeaderboard => IsLoggedIn && User is not null && !User.LeaderboardOptOut;
 
-    /// <summary>True when a Steam account is linked (mirrors Rust <c>u.steam_id.is_some()</c>).</summary>
+    /// <summary>True when a Steam account is linked.</summary>
     public bool SteamLinked => User?.SteamId is { Length: > 0 };
 
-    /// <summary>True when a Discord account is linked (mirrors Rust <c>u.discord_id.is_some()</c>).</summary>
+    /// <summary>True when a Discord account is linked.</summary>
     public bool DiscordLinked => User?.DiscordId is { Length: > 0 };
 
     /// <summary>True when the active sign-in provider is Steam (drives the "signed in" badge).</summary>
@@ -130,7 +129,7 @@ public sealed partial class AccountViewModel : ObservableObject
     /// <summary>True when the active sign-in provider is Discord (drives the "signed in" badge).</summary>
     public bool IsDiscordSignedIn => User?.AuthProvider == AuthProvider.Discord;
 
-    // ── Session restore (port of app.rs init_auth) ──────────────────────────────
+    // ── Session restore ──────────────────────────────
 
     /// <summary>
     /// Restore auth from stored credentials on startup: try the JWT (skipping the
@@ -209,7 +208,7 @@ public sealed partial class AccountViewModel : ObservableObject
         }
     }
 
-    // ── Login / guest (port of onboarding.rs StepSignIn) ────────────────────────
+    // ── Login / guest ────────────────────────
 
     /// <summary>Begin OAuth login: store a fresh CSRF state and open the system browser.</summary>
     [RelayCommand]
@@ -279,7 +278,7 @@ public sealed partial class AccountViewModel : ObservableObject
     // ── Deep-link callbacks (invoked from App.HandleActivation, on the UI thread) ─
 
     /// <summary>Handle <c>chllseeding://auth/callback</c>: validate CSRF state, store the JWT,
-    /// load the user, and finish onboarding. Port of the Rust auth-callback handler.</summary>
+    /// load the user, and finish onboarding.</summary>
     public async Task HandleAuthCallbackAsync(string? state, string token, string refreshToken)
     {
         if (state is not null && !_oauthState.Validate(state))
@@ -327,8 +326,8 @@ public sealed partial class AccountViewModel : ObservableObject
         {
             var me = await _api.GetMeAsync().ConfigureAwait(false);
             // Linking can upgrade a guest to a permanent account — re-derive guest status so the UI
-            // (API-key rotation, name button, onboarding) reflects it without a restart. Port of the
-            // guest→permanent transition in state/events.rs LinkCallback.
+            // (API-key rotation, name button, onboarding) reflects it without a restart, matching the
+            // guest→permanent transition on link callback.
             var guest = me.AuthProvider == AuthProvider.Guest;
             upgraded = wasGuest && !guest;
             RunOnUi(() =>
@@ -347,7 +346,7 @@ public sealed partial class AccountViewModel : ObservableObject
             : $"{Capitalize(provider)} linked");
     }
 
-    // ── Account actions (port of components/settings.rs AuthAccountSection) ──────
+    // ── Account actions ──────
 
     /// <summary>Guest: randomize an anonymous name. Used by the name button + onboarding.</summary>
     [RelayCommand]
@@ -565,7 +564,7 @@ public sealed partial class AccountViewModel : ObservableObject
             var entries = await _api.GetSteamIdsAsync().ConfigureAwait(false);
             var ids = entries.Select(e => e.SteamId).ToList();
             // Persist for the seeding backend's start-session analytics (the engine/VM has no account
-            // context), mirroring Rust's stored "linked_steam_ids" session key.
+            // context).
             _config.Set("linked_steam_ids", ids);
             RunOnUi(() =>
             {

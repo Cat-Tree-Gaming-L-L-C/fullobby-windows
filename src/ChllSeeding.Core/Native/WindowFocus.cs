@@ -8,8 +8,7 @@ namespace ChllSeeding.Core.Native;
 
 /// <summary>
 /// Finds the HLL game window and silently injects splash-bypass keys via PostMessage,
-/// with an optional focus-stealing fallback. Port of
-/// <c>src-rust/src/backend/window_focus.rs</c>. DI singleton, thread-safe.
+/// with an optional focus-stealing fallback. DI singleton, thread-safe.
 /// </summary>
 /// <remarks>
 /// F13 (0x7C) is a real virtual key UE4 registers as "any button pressed" but that no

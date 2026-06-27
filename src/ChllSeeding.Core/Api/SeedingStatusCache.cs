@@ -3,8 +3,7 @@ namespace ChllSeeding.Core.Api;
 /// <summary>
 /// SSE-derived seeding-status cache: written by the SSE loop (Phase 2), read by
 /// the seeding monitor loop. Returns the cached value only while fresh, so a
-/// stale or missing entry transparently falls back to HTTP polling. Port of the
-/// cache in <c>src-rust/src/backend/api_client.rs</c>. DI singleton, thread-safe.
+/// stale or missing entry transparently falls back to HTTP polling. DI singleton, thread-safe.
 /// </summary>
 public sealed class SeedingStatusCache(SeedingConfigProvider configProvider)
 {

@@ -3,7 +3,7 @@ using System.Net;
 namespace ChllSeeding.Core.Api;
 
 /// <summary>
-/// Transient-failure retry rules, ported from <c>src-rust/src/backend/retry.rs</c>.
+/// Transient-failure retry rules.
 /// Pure predicates so they can be unit-tested; the actual retrying happens in
 /// <see cref="ResilienceHandler"/>.
 /// </summary>

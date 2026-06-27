@@ -6,9 +6,7 @@ namespace ChllSeeding.Core.Tools;
 /// <summary>
 /// Backs up and restores HLL's <c>GameUserSettings.ini</c> around "efficiency mode"
 /// (low-graphics seeding), with a persistent crash-recovery flag so a crash mid-seed
-/// is detected and the user's real settings restored on next startup. Port of
-/// <c>src-rust/src/backend/backup_restore_hll_config.rs</c> (process-global statics →
-/// DI-singleton instance state). Thread-safe.
+/// is detected and the user's real settings restored on next startup. Thread-safe.
 /// </summary>
 public sealed class HllConfigBackupService
 {
@@ -33,7 +31,7 @@ public sealed class HllConfigBackupService
 
     /// <summary>Testable constructor — points config + backup at arbitrary paths.
     /// <paramref name="backupBaseDir"/> is the "HLL" backup folder; the auto-backup lives in its
-    /// "auto" subfolder and the flag file directly inside it (matching the Rust layout).</summary>
+    /// "auto" subfolder and the flag file directly inside it.</summary>
     public HllConfigBackupService(ILogger<HllConfigBackupService> log, string configPath, string backupBaseDir)
     {
         _log = log;
@@ -475,7 +473,7 @@ public sealed class HllConfigBackupService
         return result.ToString();
     }
 
-    /// <summary>Equivalent of Rust's <c>str::lines()</c>: split on \n, strip a trailing \r,
+    /// <summary>Split text into lines: split on \n, strip a trailing \r,
     /// and drop a final empty segment from a trailing newline.</summary>
     private static IEnumerable<string> SplitLines(string content)
     {

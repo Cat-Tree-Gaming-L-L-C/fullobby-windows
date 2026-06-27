@@ -4,9 +4,8 @@ using Microsoft.Win32;
 namespace ChllSeeding.Core.Platform;
 
 /// <summary>
-/// "Start with Windows" via the HKCU Run key. Port of
-/// <c>src-rust/src/platform/startup.rs</c> (winreg → <see cref="Microsoft.Win32.Registry"/>).
-/// The value name is <see cref="Branding.StartupRunValueName"/> (was "EspritSeeder");
+/// "Start with Windows" via the HKCU Run key, using <see cref="Microsoft.Win32.Registry"/>.
+/// The value name is <see cref="Branding.StartupRunValueName"/>;
 /// the data is the quoted current-exe path. Registered as a DI singleton.
 /// </summary>
 public sealed class StartupRegistry

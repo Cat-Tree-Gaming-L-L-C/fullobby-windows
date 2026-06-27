@@ -2,8 +2,7 @@ using ChllSeeding.Core.Api;
 
 namespace ChllSeeding.Core.Tests;
 
-/// <summary>Tests for the SSE reconnect backoff + wake-from-sleep math (port of the
-/// backoff logic in <c>src-rust/src/api/sse.rs</c>).</summary>
+/// <summary>Tests for the SSE reconnect backoff + wake-from-sleep math.</summary>
 public class SseBackoffTests
 {
     [Fact]

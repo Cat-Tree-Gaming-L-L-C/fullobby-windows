@@ -9,8 +9,7 @@ namespace ChllSeeding.Core.Scheduling;
 /// High-level auto-seed orchestration: create/remove the single daily scheduled task and report its
 /// status. The wake time is no longer user-picked per region — it's derived from the server's first
 /// active window (UTC), so the PC wakes when seeding actually starts. We persist that UTC string (for
-/// the missed-task monitor) and register the task at the equivalent local time. Port of the public
-/// surface of <c>backend/autoseed.rs</c>, collapsed to one slot.
+/// the missed-task monitor) and register the task at the equivalent local time. Collapsed to one slot.
 /// </summary>
 public sealed class AutoSeedService
 {
@@ -57,7 +56,7 @@ public sealed class AutoSeedService
         }
 
         // Re-query to confirm the task actually registered — schtasks can report success on /create
-        // yet leave nothing queryable. Port of the post-create verification in autoseed.rs:40-54.
+        // yet leave nothing queryable.
         if (!await _tasks.IsInstalledAsync(slot.TaskName, ct).ConfigureAwait(false))
         {
             throw new InvalidOperationException(

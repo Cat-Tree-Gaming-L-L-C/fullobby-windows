@@ -7,7 +7,7 @@ namespace ChllSeeding.Core.Servers;
 /// <c>stats</c> stream (primary) and the HTTP polling fallback. Pushes fresh
 /// counts/offline flags into the <see cref="ServerStore"/> (so the seeding
 /// engine's fill-based stagger sees live data) and raises <see cref="StatsUpdated"/>
-/// for the UI banner. Port of <c>app::apply_stats_update</c> in the Rust app.
+/// for the UI banner.
 /// DI singleton; <see cref="Apply"/> runs on background threads, so subscribers
 /// must marshal to the UI thread themselves.
 /// </summary>
@@ -17,8 +17,7 @@ public sealed class LiveStats(ServerStore servers)
     public event Action<IReadOnlyList<BatchStatsResult>>? StatsUpdated;
 
     /// <summary>UTC time of the most recent applied stats batch, or <c>null</c> before the first
-    /// update. Drives the "Updated Ns ago" / stale indicator (port of the Rust
-    /// <c>LAST_STATS_UPDATE</c> signal).</summary>
+    /// update. Drives the "Updated Ns ago" / stale indicator.</summary>
     public DateTime? LastUpdateUtc { get; private set; }
 
     /// <summary>Apply a stats batch to the store and notify subscribers.</summary>

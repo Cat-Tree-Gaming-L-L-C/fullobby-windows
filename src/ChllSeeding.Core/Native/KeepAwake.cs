@@ -6,8 +6,8 @@ namespace ChllSeeding.Core.Native;
 
 /// <summary>
 /// Prevents the system (and display) from sleeping while seeding is active, so an
-/// unattended seed isn't cut short by power management. This is a <b>new</b> feature with
-/// no Rust counterpart; implemented via <c>SetThreadExecutionState</c>.
+/// unattended seed isn't cut short by power management. This is a <b>new</b> feature,
+/// implemented via <c>SetThreadExecutionState</c>.
 /// </summary>
 /// <remarks>
 /// The execution-state request is owned by the calling thread and is released when that

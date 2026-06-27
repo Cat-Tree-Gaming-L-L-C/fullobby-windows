@@ -7,8 +7,7 @@ namespace ChllSeeding.Core.Api;
 /// Applies auth to outgoing requests (JWT bearer when available, else
 /// <c>x-api-key</c>) and transparently refreshes the JWT on a 401, retrying the
 /// request once. The refresh itself (and the single-flight dedup of concurrent
-/// 401s) lives in <see cref="AuthRefresher"/>, shared with the SSE client. Port of
-/// the auth/refresh logic in <c>api/client.rs</c> (<c>api_fetch</c> + <c>refresh_auth</c>).
+/// 401s) lives in <see cref="AuthRefresher"/>, shared with the SSE client.
 /// </summary>
 public sealed class AuthHandler(AuthSession session, AuthRefresher refresher, ILogger<AuthHandler> log)
     : DelegatingHandler
@@ -29,7 +28,7 @@ public sealed class AuthHandler(AuthSession session, AuthRefresher refresher, IL
             if (!refreshed)
             {
                 // Refresh failed (tokens cleared) — surface the original 401 instead of firing a
-                // second, now-unauthenticated request. Mirrors client.rs, which only retries on Ok.
+                // second, now-unauthenticated request: only retry once the refresh succeeds.
                 return response;
             }
 

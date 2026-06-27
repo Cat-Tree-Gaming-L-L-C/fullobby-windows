@@ -9,8 +9,7 @@ namespace ChllSeeding.Core.Seeding;
 /// 30s (with exponential backoff on consecutive failures, capped at 5 min, and a
 /// wake-from-sleep settle), and on stop it notifies the API the session ended.
 /// At most one loop runs at a time — starting a new session stops the previous one.
-/// Port of <c>src-rust/src/backend/heartbeat.rs</c> (the AtomicBool/Notify globals
-/// become per-instance state). DI singleton; the loop runs off the UI thread.
+/// DI singleton; the loop runs off the UI thread.
 /// </summary>
 public sealed class HeartbeatService(SeedingApiClient api, SeedingConfigProvider configProvider, ILogger<HeartbeatService> log)
 {
@@ -153,7 +152,7 @@ public sealed class HeartbeatService(SeedingApiClient api, SeedingConfigProvider
     /// <summary>Heartbeat send interval: the base interval normally, else
     /// <c>min(interval * 2^min(failures,4), 300)</c> seconds of exponential backoff. The no-interval
     /// overload uses the baked-in default (30s) so the unit tests stay stable; the loop passes the
-    /// server-configured <c>HeartbeatSecs</c>. Port of the backoff math in <c>heartbeat.rs</c>.</summary>
+    /// server-configured <c>HeartbeatSecs</c>.</summary>
     public static long BackoffIntervalSecs(int consecutiveFailures) =>
         BackoffIntervalSecs(consecutiveFailures, HeartbeatIntervalSecs);
 

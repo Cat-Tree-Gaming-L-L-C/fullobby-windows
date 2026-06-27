@@ -2,14 +2,12 @@ namespace ChllSeeding.Core.Api;
 
 /// <summary>
 /// Shared coordination state between the SSE stream (<see cref="SseStreamClient"/>),
-/// the HTTP polling fallback (<c>AppBootstrapper</c>), and the UI. Replaces the Rust
-/// globals <c>SSE_CONNECTED</c> / <c>SSE_FAILURE_COUNT</c> and the <c>POLL_NOTIFY</c> /
-/// <c>RECONNECT_NOTIFY</c> handles in <c>src-rust/src/api/sse.rs</c>. DI singleton, thread-safe.
+/// the HTTP polling fallback (<c>AppBootstrapper</c>), and the UI. DI singleton, thread-safe.
 /// </summary>
 public sealed class SseConnectionState
 {
-    // Edge-triggered wakes (capacity 1): a pending signal while not waiting coalesces to one,
-    // matching tokio's notify_one. Release-on-full is swallowed.
+    // Edge-triggered wakes (capacity 1): a pending signal while not waiting coalesces to one.
+    // Wake-one signaling; a release when already signaled is swallowed.
     private readonly SemaphoreSlim _pollWake = new(0, 1);
     private readonly SemaphoreSlim _reconnectWake = new(0, 1);
 
@@ -37,7 +35,7 @@ public sealed class SseConnectionState
 
     /// <summary>Wait for a poll request or until <paramref name="interval"/> elapses, whichever is
     /// first. Returns true if woken by a poll request, false if the interval elapsed. The caller
-    /// polls in either case (mirrors the Rust poll loop's <c>select!</c>).</summary>
+    /// polls in either case.</summary>
     public async Task<bool> WaitForPollOrInterval(TimeSpan interval, CancellationToken ct) =>
         await _pollWake.WaitAsync(interval, ct).ConfigureAwait(false);
 

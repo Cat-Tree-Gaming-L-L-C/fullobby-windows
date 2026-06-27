@@ -67,7 +67,7 @@ public partial class App : Application
         // Register the chllseeding:// protocol for this exe (refreshes the
         // installer's bootstrap registration with the WAS activation marker so
         // GetActivatedEventArgs reports ExtendedActivationKind.Protocol).
-        // Mirrors the Rust app's register_deep_link_protocol() on every start.
+        // Re-registered on every start.
         try
         {
             ActivationRegistrationManager.RegisterForProtocolActivation(
@@ -271,7 +271,7 @@ public partial class App : Application
         var logsDir = Branding.LogsDir;
         Directory.CreateDirectory(logsDir);
 
-        // Rolling daily file logs, 7-file retention (matches the Rust app)
+        // Rolling daily file logs, 7-file retention
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Information()
             .Enrich.FromLogContext()

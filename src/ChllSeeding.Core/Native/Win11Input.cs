@@ -10,8 +10,8 @@ namespace ChllSeeding.Core.Native;
 
 /// <summary>
 /// Alternative input paths for Windows 11 locked-screen scenarios, where PostMessage to a
-/// background window can be blocked. Port of <c>src-rust/src/backend/win11_input.rs</c>:
-/// hardware-level <c>SendInput</c> plus a UI Automation focus attempt. DI singleton.
+/// background window can be blocked. Uses hardware-level <c>SendInput</c> plus a UI
+/// Automation focus attempt. DI singleton.
 /// </summary>
 public sealed class Win11Input
 {

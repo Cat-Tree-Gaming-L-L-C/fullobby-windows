@@ -2,8 +2,7 @@ using ChllSeeding.Core.Api;
 
 namespace ChllSeeding.Core.Tests;
 
-/// <summary>Tests for the hand-rolled SSE frame parser that replaces the Rust
-/// <c>reqwest_eventsource</c> dependency.</summary>
+/// <summary>Tests for the hand-rolled SSE frame parser.</summary>
 public class SseFrameParserTests
 {
     [Fact]

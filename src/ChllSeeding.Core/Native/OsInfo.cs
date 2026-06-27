@@ -3,9 +3,9 @@ using System.Runtime.InteropServices;
 namespace ChllSeeding.Core.Native;
 
 /// <summary>
-/// Non-PII OS facts for session analytics. Port of <c>src-rust/src/backend/os_info.rs</c>:
+/// Non-PII OS facts for session analytics:
 /// <see cref="OsVersion"/> is the <c>major.minor.build</c> string (e.g. "10.0.22631"),
-/// <see cref="OsArch"/> the Rust-style arch name (e.g. "x86_64", "aarch64").
+/// <see cref="OsArch"/> the arch name (e.g. "x86_64", "aarch64", "x86", "arm").
 /// </summary>
 public static class OsInfo
 {
@@ -26,7 +26,7 @@ public static class OsInfo
         }
     }
 
-    /// <summary>CPU architecture in Rust's naming ("x86_64", "aarch64", "x86", "arm").</summary>
+    /// <summary>CPU architecture name ("x86_64", "aarch64", "x86", "arm").</summary>
     public static string OsArch => RuntimeInformation.OSArchitecture switch
     {
         Architecture.X64 => "x86_64",

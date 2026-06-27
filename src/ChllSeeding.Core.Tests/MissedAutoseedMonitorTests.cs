@@ -22,7 +22,7 @@ public class MissedAutoseedMonitorTests
     [Fact]
     public void WithinWindow_ExactlyAtWindowEdge_DoesNotFire()
     {
-        // Exactly 4h past is the exclusive upper bound (Rust: num_hours() >= 4 excludes it).
+        // Exactly 4h past is the exclusive upper bound (>= 4h is excluded).
         Assert.False(MissedAutoseedMonitor.IsWithinMissedWindow(Utc(13, 0), new TimeOnly(9, 0), 4));
     }
 

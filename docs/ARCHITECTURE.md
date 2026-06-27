@@ -1,10 +1,7 @@
 # CHLL Seeding — Architecture
 
 C# + WinUI 3 (Windows App SDK) desktop app for Hell Let Loose server seeding.
-Originally "Esprit Seeder" (Rust + Dioxus); rewritten to native C#/WinUI 3 with full
-feature parity. This document is the durable architecture reference — the historical
-phase-by-phase rewrite plan lives in git history (see the `rust-final` tag for the last
-Rust commit, and commits up to `480c36e` for the rewrite).
+This document is the durable architecture reference.
 
 ## Solution layout
 
@@ -35,26 +32,26 @@ Rust commit, and commits up to `480c36e` for the rewrite).
   **Serilog** (rolling daily logs, 7-file retention), `schtasks.exe` shell-out for Task
   Scheduler, `Microsoft.Windows.CsWin32` for P/Invoke.
 
-## Subsystem map (original Rust → shipped C#)
+## Subsystem map
 
-| Rust | C# |
+| Subsystem | Implementation |
 |---|---|
-| `backend/seeding.rs` (core state machine) | `Core.Seeding.SeedingEngine` (+ `SeedingState`, `SeedingEvent`) |
-| `api/client.rs` + `types.rs` + `retry.rs` | `Core.Api.SeedingApiClient`, `Models`/`ApiJson`, `RetryPolicy`/`ResilienceHandler`, `AuthHandler` + `AuthRefresher` + `AuthHeaders` |
-| `api/sse.rs` | `Core.Api.SseStreamClient : IHostedService` + `SseFrameParser`, `SseConnectionState`, `SeedingStatusCache`, `Core.Servers.LiveStats` |
-| `config.rs` | `Core.Config.ConfigService` (STJ store, atomic temp+rename, 500ms throttle, DPAPI secrets, `icacls` hardening; no legacy-dir migration) + `Core.Security.DpapiProtector`, `Core.Config.AtomicFile` |
-| `backend/steam.rs`, `process.rs` | `Core.Native.SteamLauncher`, `ProcessMonitor`, `SteamPaths` |
-| `backend/window_focus.rs`, `win11_input.rs` | `Core.Native.WindowFocus` (HLL window find/cache, PostMessage Esc/F13 splash bypass, AttachThreadInput force-focus), `Win11Input` (SendInput + UIA fallback) |
-| `backend/autoseed.rs`, `task_scheduler.rs` | `Core.Scheduling.AutoSeedService`, `ScheduledTaskService` (schtasks `/create /xml`), `AutoSeedSlot`/`AutoSeedTime`/`AutoSeedState`, `MissedAutoseedMonitor : IHostedService` |
-| `backend/backup*.rs` | `Core.Tools.HllConfigBackupService` (efficiency-INI swap + crash-recovery flag), `ManualBackupService` (hardlink-dedup backups) |
-| `backend/game.rs` | `Core.Games.GameDefinition` + `GameCatalog` (plain data record — no per-game interface) |
-| `platform/tray.rs`, `notification.rs` | `App` `H.NotifyIcon` `TaskbarIcon` (in `MainWindow.xaml`), `App.Services.ToastService` (AppNotificationManager + `MessageBeep`), `App.Services.InAppToastService` |
-| `platform/deep_link.rs`, `single_instance.rs` | `Core.Activation.DeepLinkParser` + `AppInstance` redirection, `Core.Activation.OAuthStateStore` |
-| `platform/startup.rs` | `Core.Platform.StartupRegistry` (HKCU Run `CHLLSeeding`) |
-| `platform/updater.rs` | `Core.Update.UpdaterService` + `UpdateValidation` + `UpdateInfo` (HTTPS + trusted-domain + ext + ≤500MB + SHA-256; launches Inno setup.exe; stable/beta `update_channel`) |
-| `platform/power.rs` | `Core.Native.PowerStatus` (powercfg modern-standby/wake-timer warnings) |
-| `components/*` + `state/*` | `App.Views.*Page` + `App.ViewModels.*` (frameless 5-tab shell) |
-| *(new, no Rust source)* | `Core.Native.KeepAwake` (`SetThreadExecutionState` re-asserting thread; held while seeding) |
+| Seeding state machine | `Core.Seeding.SeedingEngine` (+ `SeedingState`, `SeedingEvent`) |
+| API client | `Core.Api.SeedingApiClient`, `Models`/`ApiJson`, `RetryPolicy`/`ResilienceHandler`, `AuthHandler` + `AuthRefresher` + `AuthHeaders` |
+| Live stats / SSE | `Core.Api.SseStreamClient : IHostedService` + `SseFrameParser`, `SseConnectionState`, `SeedingStatusCache`, `Core.Servers.LiveStats` |
+| Config | `Core.Config.ConfigService` (STJ store, atomic temp+rename, 500ms throttle, DPAPI secrets, `icacls` hardening; no legacy-dir migration) + `Core.Security.DpapiProtector`, `Core.Config.AtomicFile` |
+| Steam / process | `Core.Native.SteamLauncher`, `ProcessMonitor`, `SteamPaths` |
+| Window focus / input | `Core.Native.WindowFocus` (HLL window find/cache, PostMessage Esc/F13 splash bypass, AttachThreadInput force-focus), `Win11Input` (SendInput + UIA fallback) |
+| Auto-seed / scheduling | `Core.Scheduling.AutoSeedService`, `ScheduledTaskService` (schtasks `/create /xml`), `AutoSeedSlot`/`AutoSeedTime`/`AutoSeedState`, `MissedAutoseedMonitor : IHostedService` |
+| Backup / restore | `Core.Tools.HllConfigBackupService` (efficiency-INI swap + crash-recovery flag), `ManualBackupService` (hardlink-dedup backups) |
+| Game catalog | `Core.Games.GameDefinition` + `GameCatalog` (plain data record — no per-game interface) |
+| Tray / notifications | `App` `H.NotifyIcon` `TaskbarIcon` (in `MainWindow.xaml`), `App.Services.ToastService` (AppNotificationManager + `MessageBeep`), `App.Services.InAppToastService` |
+| Deep link / single instance | `Core.Activation.DeepLinkParser` + `AppInstance` redirection, `Core.Activation.OAuthStateStore` |
+| Startup | `Core.Platform.StartupRegistry` (HKCU Run `CHLLSeeding`) |
+| Updater | `Core.Update.UpdaterService` + `UpdateValidation` + `UpdateInfo` (HTTPS + trusted-domain + ext + ≤500MB + SHA-256; launches Inno setup.exe; stable/beta `update_channel`) |
+| Power | `Core.Native.PowerStatus` (powercfg modern-standby/wake-timer warnings) |
+| UI | `App.Views.*Page` + `App.ViewModels.*` (frameless 5-tab shell) |
+| Keep-awake | `Core.Native.KeepAwake` (`SetThreadExecutionState` re-asserting thread; held while seeding) |
 
 ## WinUI 3 gotchas (load-bearing)
 

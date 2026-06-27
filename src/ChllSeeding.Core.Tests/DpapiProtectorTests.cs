@@ -2,7 +2,7 @@ using ChllSeeding.Core.Security;
 
 namespace ChllSeeding.Core.Tests;
 
-/// <summary>Port of the <c>crypto.rs</c> #[test] coverage. DPAPI runs against the real
+/// <summary>Tests for the DPAPI protector. DPAPI runs against the real
 /// current-user keystore (Windows test host).</summary>
 public class DpapiProtectorTests
 {

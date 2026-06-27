@@ -12,9 +12,7 @@ namespace ChllSeeding.Core.Seeding;
 
 /// <summary>
 /// Drives a full seeding session: launch the game through Steam, bypass the splash/EAC,
-/// then monitor server population and rotate/stop as needed. Port of the core state machine
-/// in <c>src-rust/src/backend/seeding.rs</c> (process-global atomics/tokio-tasks →
-/// DI-singleton instance state + Task-based background work). Runs entirely off the UI thread;
+/// then monitor server population and rotate/stop as needed. Runs entirely off the UI thread;
 /// the UI subscribes to <see cref="Event"/> for countdowns, banners, and switch prompts.
 /// </summary>
 public sealed class SeedingEngine : IDisposable
@@ -111,7 +109,7 @@ public sealed class SeedingEngine : IDisposable
 
     private void Emit(SeedingEvent e) => Event?.Invoke(e);
 
-    // ── Public command surface (port of the pub fns in seeding.rs) ─────────────
+    // ── Public command surface ─────────────
 
     /// <summary>Start seeding the server at index <paramref name="serverNumber"/> in the current
     /// game's rotation: launch the game and run the splash bypass. Returns the server index. On
@@ -136,7 +134,7 @@ public sealed class SeedingEngine : IDisposable
 
     /// <summary>Kill the current game and wait (up to <paramref name="maxWaitSecs"/>) for it to exit.
     /// Used by the UI when the user confirms closing a running game before seeding/launching;
-    /// mirrors the kill-and-poll loop in the Rust seed/launch components.</summary>
+    /// uses a kill-and-poll loop.</summary>
     public async Task KillGameAndWaitAsync(int maxWaitSecs = 20, CancellationToken ct = default)
     {
         var game = _currentGame;
@@ -318,11 +316,11 @@ public sealed class SeedingEngine : IDisposable
         _window.InvalidateCache();
     }
 
-    // ── Launch / open (port of open_game + the steam.rs orchestration) ─────────
+    // ── Launch / open ─────────
 
     /// <summary>Launch the game through Steam and connect, applying efficiency mode first when
-    /// requested+enabled. The mouse-nudge and config-backup that lived in <c>steam.rs::open_game</c>
-    /// are orchestrated here (SteamLauncher does launch mechanics only).</summary>
+    /// requested+enabled. The mouse-nudge and config-backup are orchestrated here
+    /// (SteamLauncher does launch mechanics only).</summary>
     private async Task OpenGameAsync(ServerInfo server, bool applyEfficiency, CancellationToken ct)
     {
         CheckAndRestoreConfig();
@@ -337,8 +335,8 @@ public sealed class SeedingEngine : IDisposable
         await _steam.OpenGameAsync(_currentGame, server.Ip, ct).ConfigureAwait(false);
     }
 
-    /// <summary>Move the cursor away before launch, mirroring the enigo mouse-move in
-    /// <c>steam.rs::open_game</c> (best-effort; some launch overlays only take focus after a move).</summary>
+    /// <summary>Move the cursor away before launch
+    /// (best-effort; some launch overlays only take focus after a move).</summary>
     private void MouseNudge()
     {
         try
@@ -663,8 +661,8 @@ public sealed class SeedingEngine : IDisposable
         finally
         {
             // Always restore the user's real settings (also resets the efficiency-applied flag) and
-            // drop the keep-awake hold. Both idempotent. Deliberate divergence from Rust (which defers
-            // restore to the caller): every monitor return is terminal with the game killed or closing.
+            // drop the keep-awake hold. Both idempotent. Restore happens here deliberately (rather than
+            // being deferred to the caller): every monitor return is terminal with the game killed or closing.
             _backup.RestoreAfterSeeding();
             _keepAwake.Release();
         }

@@ -3,7 +3,7 @@ using ChllSeeding.Core.Servers;
 
 namespace ChllSeeding.Core.Tests;
 
-/// <summary>Port of the server.rs #[test] coverage. Instance-based here, so no
+/// <summary>Tests for the server store. Instance-based here, so no
 /// global-state cleanup is needed. Region removed — one ordered rotation per game.</summary>
 public class ServerStoreTests
 {

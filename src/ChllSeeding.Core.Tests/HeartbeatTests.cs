@@ -2,8 +2,7 @@ using ChllSeeding.Core.Seeding;
 
 namespace ChllSeeding.Core.Tests;
 
-/// <summary>Tests for the heartbeat backoff math + constants (port of the
-/// <c>#[cfg(test)]</c> block in <c>src-rust/src/backend/heartbeat.rs</c>).</summary>
+/// <summary>Tests for the heartbeat backoff math + constants.</summary>
 public class HeartbeatTests
 {
     [Fact] // test_heartbeat_constants

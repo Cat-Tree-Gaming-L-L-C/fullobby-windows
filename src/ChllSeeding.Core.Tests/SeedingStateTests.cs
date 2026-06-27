@@ -2,7 +2,7 @@ using ChllSeeding.Core.Seeding;
 
 namespace ChllSeeding.Core.Tests;
 
-/// <summary>Port of the stop/snooze/switch-now lifecycle tests in <c>backend/seeding.rs</c>.
+/// <summary>Tests for the stop/snooze/switch-now lifecycle.
 /// Instance-based here, so no global-state cleanup between tests is needed.</summary>
 public class SeedingStateTests
 {

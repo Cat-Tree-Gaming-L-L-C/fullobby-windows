@@ -19,7 +19,7 @@ namespace ChllSeeding.App;
 
 public sealed partial class MainWindow : Window
 {
-    // Same footprint as the Rust app (500x520 content + titlebar/nav chrome)
+    // Window footprint (500x520 content + titlebar/nav chrome)
     private const double LogicalWidth = 500;
     private const double LogicalHeight = 600;
 
@@ -44,8 +44,7 @@ public sealed partial class MainWindow : Window
         Title = Branding.ProductName;
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "icon.ico"));
 
-        // Titlebar version string + debug-build badge (port of titlebar.rs version + the seed_banner
-        // DEV BUILD badge under debug_assertions).
+        // Titlebar version string + a DEV BUILD badge shown only in debug builds.
         VersionText.Text = $"v{typeof(App).Assembly.GetName().Version?.ToString(3)}";
 #if DEBUG
         DevBadge.Visibility = Visibility.Visible;
@@ -115,8 +114,7 @@ public sealed partial class MainWindow : Window
     private void UpdateOnboardingVisibility() =>
         Onboarding.Visibility = Account.ShowOnboarding ? Visibility.Visible : Visibility.Collapsed;
 
-    /// <summary>Set the app theme (dark/light) on the window root and persist it.
-    /// Mirrors the Rust data-theme toggle in Settings.</summary>
+    /// <summary>Set the app theme (dark/light) on the window root and persist it.</summary>
     public void SetTheme(bool dark)
     {
         RootGrid.RequestedTheme = dark ? ElementTheme.Dark : ElementTheme.Light;
@@ -210,7 +208,7 @@ public sealed partial class MainWindow : Window
         {
             _config.FlushPendingSaves();
 
-            // End any open seeding session BEFORE relaunch, like the Rust stop_heartbeat_sync — so
+            // End any open seeding session BEFORE relaunch — so
             // the new instance doesn't briefly overlap an old, still-open session. The window-close
             // path also stops it, but doing it here gives the stop the full 2s relaunch delay to land.
             try

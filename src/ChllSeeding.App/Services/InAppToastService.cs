@@ -5,11 +5,10 @@ using Microsoft.UI.Xaml.Controls;
 namespace ChllSeeding.App.Services;
 
 /// <summary>Owns the in-app toast stack shown in the shell. Toasts auto-dismiss after a duration
-/// and can be closed manually. The shell binds <see cref="Toasts"/>; subsystems call <see cref="Show"/>.
-/// Port of the Rust <c>state::toast::add_toast</c> queue.</summary>
+/// and can be closed manually. The shell binds <see cref="Toasts"/>; subsystems call <see cref="Show"/>.</summary>
 public sealed class InAppToastService
 {
-    // Durations mirror the Rust add_toast defaults: 3s for info/success/warning, 10s for errors.
+    // Default durations: 3s for info/success/warning, 10s for errors.
     private const int DefaultDurationMs = 3000;
     private const int ErrorDurationMs = 10000;
 

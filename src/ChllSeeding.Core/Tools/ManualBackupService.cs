@@ -9,7 +9,7 @@ namespace ChllSeeding.Core.Tools;
 /// User-driven game-config backup/restore for the Tools tab — distinct from the automatic
 /// efficiency-mode backup in <see cref="HllConfigBackupService"/>. Manual backups go to timestamped
 /// folders under <c>%USERPROFILE%\chllseeding-backup\HLL\manual\</c> and are incremental (unchanged
-/// files are hard-linked to the previous backup to save disk). Port of <c>backend/backup.rs</c>.
+/// files are hard-linked to the previous backup to save disk).
 /// </summary>
 public sealed class ManualBackupService
 {
@@ -171,7 +171,7 @@ public sealed class ManualBackupService
         {
             ct.ThrowIfCancellationRequested();
 
-            // Containment + symlink guards (TOCTOU mitigation, mirrors the Rust restore).
+            // Containment + symlink guards (TOCTOU mitigation).
             if (!IsWithin(filePath, backupFull))
             {
                 continue;
@@ -207,12 +207,12 @@ public sealed class ManualBackupService
     /// Validate a user-picked path before any backup/restore I/O: rejects over-long paths, null-byte
     /// injection, and non-existent paths, then canonicalizes (resolving a leaf symlink and any
     /// <c>..</c> segments) and re-checks for residual traversal. Returns the canonical absolute path.
-    /// Port of <c>session.rs validate_user_path</c>. Throws <see cref="ArgumentException"/> for an
+    /// Throws <see cref="ArgumentException"/> for an
     /// invalid path and <see cref="DirectoryNotFoundException"/> when it doesn't exist.
     /// </summary>
     public static string ValidateUserPath(string pathStr)
     {
-        const int maxPathLength = 260; // Windows MAX_PATH, matching the Rust limit.
+        const int maxPathLength = 260; // Windows MAX_PATH.
         if (pathStr.Length > maxPathLength)
         {
             throw new ArgumentException("Path too long", nameof(pathStr));

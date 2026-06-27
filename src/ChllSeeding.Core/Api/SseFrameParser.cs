@@ -11,7 +11,7 @@ public readonly record struct SseFrame(string EventType, string Data);
 /// <c>data:</c> accumulation, comment/keepalive lines (leading <c>:</c>), and
 /// blank-line dispatch. Default event type is <c>message</c>. Stateful: feed it
 /// one line at a time as they arrive off the wire. Pure (no I/O) so it unit-tests
-/// directly. Replaces the <c>reqwest_eventsource</c> dependency used by the Rust client.
+/// directly. Hand-rolled, so there's no external SSE-client dependency.
 /// </summary>
 public sealed class SseFrameParser
 {

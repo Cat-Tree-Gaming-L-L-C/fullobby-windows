@@ -2,7 +2,7 @@ namespace ChllSeeding.Core.Update;
 
 /// <summary>
 /// A pending application update parsed from the <c>/api/releases/latest</c> manifest.
-/// Port of the Rust <c>platform::updater::UpdateInfo</c>.
+/// Metadata for an available update (version, download URL, checksum, signature, notes).
 /// </summary>
 public sealed record UpdateInfo
 {

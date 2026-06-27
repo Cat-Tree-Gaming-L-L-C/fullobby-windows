@@ -8,10 +8,9 @@ namespace ChllSeeding.Core.Config;
 
 /// <summary>
 /// In-memory config store backed by an atomically-written JSON file under
-/// <c>%APPDATA%\org.comphll.chllseeding\config.json</c>. Port of
-/// <c>src-rust/src/config.rs</c>.
+/// <c>%APPDATA%\org.comphll.chllseeding\config.json</c>.
 ///
-/// Differences from the Rust original (deliberate, per the rewrite plan):
+/// Deliberate design choices:
 /// <list type="bullet">
 /// <item>The old-directory migration (<c>migrate_v1_paths</c>) is dropped — clean break.</item>
 /// <item>Sensitive keys are encrypted/decrypted transparently here rather than at call sites.</item>
@@ -337,7 +336,7 @@ public sealed class ConfigService
         }
     }
 
-    // ── Validation (ported from config.rs; public for unit coverage) ──────
+    // ── Validation (public for unit coverage) ──────
 
     /// <summary>A config key must be non-empty, ≤255 chars, and free of null bytes.</summary>
     public static bool IsValidKey(string key) =>

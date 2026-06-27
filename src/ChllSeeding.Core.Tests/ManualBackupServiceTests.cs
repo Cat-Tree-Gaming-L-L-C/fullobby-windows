@@ -4,7 +4,7 @@ namespace ChllSeeding.Core.Tests;
 
 public class ManualBackupServiceTests
 {
-    // ── IsTimestampFolder (port of the Rust is_timestamp_folder tests) ──────────
+    // ── IsTimestampFolder tests ─────────────────────────────────────────────────
 
     [Theory]
     [InlineData("2024-01-15_08-30-00")]
@@ -93,7 +93,7 @@ public class ManualBackupServiceTests
         Assert.False(ManualBackupService.IsFileUnchanged(source, cache, "file.ini"));
     }
 
-    // ── ValidateUserPath (port of session.rs validate_user_path tests) ──────────
+    // ── ValidateUserPath ──────────
 
     [Fact]
     public void ValidateUserPath_TooLong_Throws()

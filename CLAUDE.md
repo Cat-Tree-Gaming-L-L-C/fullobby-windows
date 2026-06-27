@@ -1,9 +1,8 @@
 # CHLL Seeding Windows
 
 C# + WinUI 3 (Windows App SDK) desktop app for Hell Let Loose server seeding.
-Formerly "Esprit Seeder" (Rust/Dioxus); rewritten to native C#/WinUI 3.
 
-**Read `docs/ARCHITECTURE.md` first** — solution layout, Rust→C# subsystem map,
+**Read `docs/ARCHITECTURE.md` first** — solution layout, subsystem map,
 WinUI 3 gotchas, and the open cross-repo coordination items.
 
 ## Layout
@@ -23,5 +22,5 @@ WinUI 3 gotchas, and the open cross-repo coordination items.
 
 - Target: .NET 9, Windows App SDK 1.8.x, min Windows 10.0.19041
 - Deep-link protocol: `chllseeding://` (OAuth callbacks)
-- API base: `https://seeding-api.comp-hll.org` (configurable, TBD)
-- Clean break from Esprit-branded identifiers — no config migration
+- API base: `https://seeding.comp-hll.org` (hardbaked in Release; `CHLL_SEEDING_API_URL` overrides in Debug only)
+- No legacy config migration — app identifiers are fresh throughout

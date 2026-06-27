@@ -2,7 +2,7 @@
 
 Windows desktop app for [Hell Let Loose](https://store.steampowered.com/app/686810/Hell_Let_Loose/) server seeding. One click to launch, seed, and keep your community servers populated.
 
-Built by [Comp HLL](https://github.com/catalloc/chll-seeding-windows). Formerly "Esprit Seeder"; rewritten in C# + WinUI 3 — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Built by [Comp HLL](https://github.com/catalloc/chll-seeding-windows). Native C# + WinUI 3 — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Download
 
@@ -20,9 +20,6 @@ Grab the latest installer (`CHLL-Seeding-Setup-<ver>.exe`) from [GitHub Releases
 - **System tray** — runs in the background with close-to-tray support
 - **In-app updates** — notifies you when a new version is available
 - **Discord & Steam sign-in** — track seeding stats and appear on the leaderboard
-
-> During the WinUI 3 rewrite, features ship in phases; the feature list above
-> describes full parity (Phase 5). See the rewrite plan for what's live now.
 
 ## How the App Interacts with Steam and Hell Let Loose
 
@@ -80,7 +77,7 @@ Server seeding is a well-established practice in the HLL community. Multiple ope
 
 **Process safety.** Before terminating any process, the app verifies the process path is inside the expected Steam game installation directory. User-provided file paths are canonicalized and checked for traversal attempts.
 
-**HTTPS enforcement.** In release builds, the API base URL is hardcoded to HTTPS and cannot be overridden. Update download URLs are explicitly checked for the `https` scheme.
+**HTTPS enforcement.** In release builds the API base URL is hardbaked to the production HTTPS host and cannot be overridden — the `CHLL_SEEDING_API_URL` environment override is compiled out of release builds entirely (it exists only in debug builds for local development). Update download URLs are explicitly checked for the `https` scheme.
 
 **Data sent to the API.** The app sends only what is needed for seeding coordination: session IDs, game/region/server index, Steam ID (if linked), display name changes, and heartbeats. It never sends hardware fingerprints, machine names, installed software lists, file system contents, or any data beyond what is listed in the privacy policy.
 
@@ -99,8 +96,6 @@ The client communicates with a closed-source API server over HTTPS. All traffic 
 - **Logging:** Serilog (rolling daily files)
 - **Installer:** Inno Setup
 - **API:** Closed-source backend (HTTPS)
-
-The original Rust/Dioxus implementation lives in [`src-rust/`](src-rust/) as a read-only porting reference until parity sign-off.
 
 ### Prerequisites
 

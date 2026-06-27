@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace ChllSeeding.Core.Api;
 
 /// <summary>
-/// Typed client for the CHLL seeding API. Port of <c>src-rust/src/api/client.rs</c>.
+/// Typed client for the CHLL seeding API.
 /// Auth headers and 401-refresh are applied by <see cref="AuthHandler"/>; transient
 /// retries by <see cref="ResilienceHandler"/>. Uses the named HttpClient configured
 /// in <c>ServiceCollectionExtensions.AddChllSeedingCore</c>.

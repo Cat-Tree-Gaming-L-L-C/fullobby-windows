@@ -19,8 +19,7 @@ namespace ChllSeeding.App.ViewModels;
 /// <summary>
 /// Shared (singleton) view model behind the Seed and Launch tabs. Drives the
 /// <see cref="SeedingEngine"/>, mirrors its events into observable UI state, and owns the
-/// server-list/stats banner fed by <see cref="AppBootstrapper"/>. Port of the action helpers
-/// + signal state in src-rust/src/components/seed.rs and launch.rs.
+/// server-list/stats banner fed by <see cref="AppBootstrapper"/>.
 /// </summary>
 public sealed partial class SeedingViewModel : ObservableObject
 {
@@ -44,7 +43,7 @@ public sealed partial class SeedingViewModel : ObservableObject
     /// when no session is open. Analytics only — non-fatal if session creation failed.</summary>
     private string? _sessionId;
 
-    // Anti-spam cooldowns (port of state::cooldown + SEED_ALL_COOLDOWN_SECS / SEED_COOLDOWN_SECS):
+    // Anti-spam cooldowns:
     // The "no-op" path (all seeded / error, where IsBusy is already back to Idle so it wouldn't
     // otherwise block a rapid re-click) gets a 30s cooldown; the Seed button gets a 5s anti-spam cooldown.
     private const int SeedAllCooldownSecs = 30;
@@ -120,7 +119,7 @@ public sealed partial class SeedingViewModel : ObservableObject
     private SeedingStatus status = SeedingStatus.Idle;
 
     /// <summary>True for the seeding flow (Seed tab), false for a bare launch (Launch tab).
-    /// Mirrors the Rust IS_SEEDING signal that picks the one-vs-two stop-button layout.</summary>
+    /// Picks the one-vs-two stop-button layout.</summary>
     [ObservableProperty]
     private bool isSeeding;
 
@@ -129,7 +128,7 @@ public sealed partial class SeedingViewModel : ObservableObject
     private bool efficiencyMode;
 
     /// <summary>Whether "Stop Seeding (keep game)" is offered. Disabled in efficiency mode, where
-    /// the game window is minimized and the user should fully stop instead (matches the Rust UI).</summary>
+    /// the game window is minimized and the user should fully stop instead.</summary>
     public bool CanStopSeedingOnly => !EfficiencyMode;
 
     [ObservableProperty]
@@ -191,8 +190,7 @@ public sealed partial class SeedingViewModel : ObservableObject
     private string serverSwitchTitle = "";
 
     /// <summary>Overlay heading: the snoozed state gets its own title ("Server Switch Snoozed"),
-    /// otherwise the reason-derived <see cref="ServerSwitchTitle"/>. Mirrors the Rust seed.rs overlay,
-    /// which swaps to a distinct snoozed layout/heading.</summary>
+    /// otherwise the reason-derived <see cref="ServerSwitchTitle"/>.</summary>
     public string ServerSwitchHeading => ServerSwitchSnoozed ? "Server Switch Snoozed" : ServerSwitchTitle;
 
     [ObservableProperty]
@@ -205,7 +203,7 @@ public sealed partial class SeedingViewModel : ObservableObject
     private long _switchSnoozeRemaining;
 
     // Auto-seed countdown overlay (a scheduled or missed auto-seed shows a 60s cancellable countdown
-    // before launching). Port of the AutoseedCountdown* AppEvents in setup.rs run_autoseed.
+    // before launching).
     [ObservableProperty]
     private bool autoseedCountdownActive;
 
@@ -235,8 +233,8 @@ public sealed partial class SeedingViewModel : ObservableObject
         ? "Live"
         : (ConnectionFailures > 0 ? "Reconnecting…" : "Connecting…");
 
-    // Seed All cooldown (reactive remaining seconds, ticked by the 1s timer). Mirrors the Rust
-    // SEED_ALL_COOLDOWN_REMAINING signal driving the "Retry in {n}s" button label.
+    // Seed All cooldown (reactive remaining seconds, ticked by the 1s timer). Drives the
+    // "Retry in {n}s" button label.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanSeedAll))]
     [NotifyPropertyChangedFor(nameof(SeedAllButtonText))]
@@ -326,8 +324,7 @@ public sealed partial class SeedingViewModel : ObservableObject
         SetStatus(SeedingStatus.Idle);
     }
 
-    /// <summary>Recompute the banner text and which button group is visible. Mirrors the
-    /// show_* derivations in seed.rs and the status_config map in seed_banner.rs.</summary>
+    /// <summary>Recompute the banner text and which button group is visible.</summary>
     private void RefreshDerived()
     {
         // Gate the seed buttons on a definite, successful server-list response: while the list is
@@ -572,7 +569,7 @@ public sealed partial class SeedingViewModel : ObservableObject
     // ── Seeding session + heartbeat (analytics; non-fatal) ─────────────────────
 
     /// <summary>Create a seeding session after a successful launch and start its heartbeat.
-    /// Guest/auth required; failures are logged and swallowed (mirrors the Rust seed flow).</summary>
+    /// Guest/auth required; failures are logged and swallowed.</summary>
     private async Task StartSessionAsync(int index, bool autoSeed = false)
     {
         if (!_auth.IsAuthenticated)
@@ -803,7 +800,7 @@ public sealed partial class SeedingViewModel : ObservableObject
     private void ShowSwitchOverlay(SeedingEvent.ServerSwitchPending p)
     {
         ServerSwitchServerName = p.ServerName;
-        // Title-by-reason mirrors the Rust seed.rs mapping exactly: candidate_changed → "Server
+        // Title-by-reason mapping: candidate_changed → "Server
         // Switching", server_full → "Server is Full", anything else (incl. time_limit) → "Time
         // Limit Reached". (The engine currently emits only candidate_changed/time_limit, but the
         // full mapping keeps parity if server_full is ever emitted.)

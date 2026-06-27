@@ -1,8 +1,7 @@
 namespace ChllSeeding.Core.Config;
 
 /// <summary>
-/// Crash-safe file writes. Port of <c>write_file_safe</c> in
-/// <c>src-rust/src/config.rs</c>: write to a per-process temp file, flush to
+/// Crash-safe file writes: write to a per-process temp file, flush to
 /// disk, then atomically rename over the target so an interrupted write
 /// (disk full, crash, power loss) never leaves a truncated file.
 /// </summary>

@@ -2,8 +2,7 @@ using ChllSeeding.Core.Api;
 
 namespace ChllSeeding.Core.Tests;
 
-/// <summary>Tests for the SSE/poll coordination primitive (port of the Rust
-/// <c>SSE_CONNECTED</c> flag + <c>POLL_NOTIFY</c> handle).</summary>
+/// <summary>Tests for the SSE/poll coordination primitive.</summary>
 public class SseConnectionStateTests
 {
     [Fact]

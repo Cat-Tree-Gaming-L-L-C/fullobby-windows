@@ -8,8 +8,7 @@ namespace ChllSeeding.App.Converters;
 /// <summary>
 /// Maps a leaderboard rank to its medal text colour: 1 → gold, 2 → silver, 3 → bronze.
 /// Any other rank returns <see cref="DependencyProperty.UnsetValue"/> so the binding falls
-/// back to the default text brush. Port of the <c>rank_class</c> match in
-/// <c>src-rust/src/components/leaderboard.rs</c> (warning / secondary / accent).
+/// back to the default text brush.
 /// </summary>
 public sealed class RankToBrushConverter : IValueConverter
 {

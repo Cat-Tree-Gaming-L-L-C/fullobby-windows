@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace ChllSeeding.Core.Api;
 
 /// <summary>Shared System.Text.Json options for the seeding API: snake_case
-/// property names and lowercase string enums, matching the Rust serde wire format.</summary>
+/// property names and lowercase string enums, matching the server's JSON wire format.</summary>
 public static class ApiJson
 {
     public static readonly JsonSerializerOptions Options = Build();

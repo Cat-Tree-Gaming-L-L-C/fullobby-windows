@@ -4,8 +4,7 @@ namespace ChllSeeding.Core.Api;
 
 /// <summary>
 /// Minimal JWT helpers — just enough to decide whether a stored token is worth a
-/// network round-trip on startup. Port of <c>is_jwt_expired</c> in
-/// <c>src-rust/src/app.rs</c>. No signature verification (the server does that);
+/// network round-trip on startup. No signature verification (the server does that);
 /// this only reads the <c>exp</c> claim.
 /// </summary>
 public static class JwtUtil

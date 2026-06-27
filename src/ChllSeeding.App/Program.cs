@@ -7,7 +7,8 @@ namespace ChllSeeding.App;
 
 /// <summary>
 /// Custom entry point (DISABLE_XAML_GENERATED_MAIN) so single-instancing runs
-/// before XAML starts. Replaces the old Global\EspritSeeder named mutex + pipe.
+/// before XAML starts. Uses a single named-instance key instead of a global
+/// mutex + pipe.
 /// </summary>
 public static class Program
 {

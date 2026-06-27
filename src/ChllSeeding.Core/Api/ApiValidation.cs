@@ -5,13 +5,12 @@ namespace ChllSeeding.Core.Api;
 
 /// <summary>
 /// Pure client-side validators and the user-friendly error mapper.
-/// Port of the free functions in <c>src-rust/src/api/client.rs</c>.
 /// </summary>
 public static class ApiValidation
 {
     public static readonly string[] ValidProviders = ["steam", "discord", "epic", "xbox"];
 
-    /// <summary>Profanity blocklist mirroring the server's name_validation.rs.</summary>
+    /// <summary>Profanity blocklist mirroring the server's name validation.</summary>
     private static readonly string[] BlockedWords =
     [
         "nigger", "nigga", "faggot", "retard", "chink", "spic", "kike",
@@ -38,7 +37,7 @@ public static class ApiValidation
 
     /// <summary>
     /// Validate a display name client-side. Returns null when valid, otherwise a
-    /// user-friendly error message. Mirrors the Rust validate_display_name.
+    /// user-friendly error message.
     /// </summary>
     public static string? ValidateDisplayName(string name)
     {

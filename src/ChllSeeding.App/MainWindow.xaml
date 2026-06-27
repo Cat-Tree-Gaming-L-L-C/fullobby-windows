@@ -14,7 +14,7 @@
         </Grid.RowDefinitions>
 
         <!-- System tray icon: lives in the shell so it can hide/show this window.
-             Menu mirrors the Rust tray (Show / Restart / Quit). -->
+             Menu items: Show / Restart / Quit. -->
         <tb:TaskbarIcon
             x:Name="TrayIcon"
             ToolTipText="CHLL Seeding"

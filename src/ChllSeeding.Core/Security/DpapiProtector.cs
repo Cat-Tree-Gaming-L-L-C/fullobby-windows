@@ -5,8 +5,8 @@ namespace ChllSeeding.Core.Security;
 
 /// <summary>
 /// Encrypts sensitive config values with Windows DPAPI (current-user scope).
-/// Port of <c>src-rust/src/backend/crypto.rs</c>; preserves the on-disk
-/// <c>dpapi:&lt;base64&gt;</c> format so existing encrypted values keep working.
+/// Preserves the on-disk <c>dpapi:&lt;base64&gt;</c> format so existing encrypted values
+/// keep working.
 /// </summary>
 public static class DpapiProtector
 {
@@ -51,8 +51,8 @@ public static class DpapiProtector
     public static bool IsEncrypted(string value) => value.StartsWith(EncryptedPrefix, StringComparison.Ordinal);
 
     /// <summary>Encrypt when the key is sensitive and the value is non-empty; otherwise pass through.
-    /// On a DPAPI failure, falls back to storing plaintext rather than throwing — mirrors the Rust
-    /// <c>maybe_encrypt</c> behaviour so a transient crypto error never blocks saving a token.</summary>
+    /// On a DPAPI failure, falls back to storing plaintext rather than throwing, so a transient
+    /// crypto error never blocks saving a token.</summary>
     public static string MaybeEncrypt(string key, string value)
     {
         if (!IsSensitive(key) || value.Length == 0)
@@ -71,7 +71,7 @@ public static class DpapiProtector
 
     /// <summary>
     /// Decrypt when the key is sensitive and the value is non-empty; on failure return
-    /// the raw value (never throws) — mirrors the Rust <c>maybe_decrypt</c> behaviour.
+    /// the raw value (never throws).
     /// </summary>
     public static string MaybeDecrypt(string key, string value)
     {

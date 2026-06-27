@@ -1,9 +1,9 @@
 namespace ChllSeeding.Core.Scheduling;
 
 /// <summary>
-/// Shared coordination state for the auto-seed flow, replacing the Rust process-global atomics
-/// (<c>AUTOSEED_IN_PROGRESS</c>, <c>AUTOSEED_CANCELLED</c>, <c>LAST_AUTOSEED_TRIGGER</c>) with a
-/// DI-singleton instance. Guards against running two auto-seeds at once and firing the missed-seed
+/// Shared coordination state for the auto-seed flow, held as a DI-singleton instance (in-progress
+/// flag, cancelled flag, and last-trigger timestamp).
+/// Guards against running two auto-seeds at once and firing the missed-seed
 /// twice in one (UTC) day, and carries the countdown-cancel flag. Region removed — a single daily
 /// auto-seed means a single "triggered today" flag.
 /// </summary>

@@ -4,9 +4,8 @@ namespace ChllSeeding.Core.Native;
 
 /// <summary>
 /// Resolves and caches the Steam install location from the registry. Shared by
-/// <see cref="SteamLauncher"/> and <see cref="ProcessMonitor"/> (port of the
-/// <c>STEAM_PATH_CACHE</c> OnceCell + registry helpers in <c>steam.rs</c>), kept
-/// standalone so those two don't depend on each other.
+/// <see cref="SteamLauncher"/> and <see cref="ProcessMonitor"/> (a cached Steam
+/// path + registry helpers), kept standalone so those two don't depend on each other.
 /// </summary>
 public static class SteamPaths
 {

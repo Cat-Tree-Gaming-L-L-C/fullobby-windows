@@ -5,8 +5,7 @@ namespace ChllSeeding.Core.Api;
 /// <summary>
 /// Holds the current auth credentials — JWT + refresh token, or a programmatic
 /// API key — and persists them (DPAPI-encrypted) through <see cref="ConfigService"/>.
-/// Replaces the global token state split across <c>api/client.rs</c> and
-/// <c>backend/api_client.rs</c> in the Rust app. Thread-safe; DI singleton.
+/// Single source of truth for the session's auth/token state. Thread-safe; DI singleton.
 /// </summary>
 public sealed class AuthSession
 {

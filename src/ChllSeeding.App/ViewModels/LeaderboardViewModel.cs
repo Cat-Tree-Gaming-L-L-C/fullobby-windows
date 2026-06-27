@@ -10,7 +10,6 @@ namespace ChllSeeding.App.ViewModels;
 /// <summary>
 /// View model for the Ranks (Leaderboard) tab. Fetches the public seeding leaderboard
 /// for the selected period and, when signed in, the current user's personal stats.
-/// Port of <c>src-rust/src/components/leaderboard.rs</c>.
 /// </summary>
 public sealed partial class LeaderboardViewModel : ObservableObject
 {
@@ -19,7 +18,7 @@ public sealed partial class LeaderboardViewModel : ObservableObject
     private readonly AccountViewModel _account;
     private readonly DispatcherQueue _dispatcher;
 
-    // Per-fetch cooldowns, matching the Rust 5s guards.
+    // Per-fetch cooldowns: 5s guards.
     private long _leaderboardCooldownUntil;
     private long _myStatsCooldownUntil;
 

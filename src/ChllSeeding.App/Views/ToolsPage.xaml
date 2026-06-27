@@ -75,13 +75,13 @@
                 </StackPanel>
             </HyperlinkButton>
             <TextBlock Text="Web Resources" Style="{StaticResource SubtitleTextBlockStyle}" />
-            <Button Content="🏠  Home Page" Tag="https://comp-hll.org" HorizontalAlignment="Stretch"
+            <Button Content="🏠  Home Page" Tag="{x:Bind WebsiteUrl}" HorizontalAlignment="Stretch"
                     HorizontalContentAlignment="Left" Click="OpenLink_Click" />
-            <Button Content="❓  FAQ" Tag="https://comp-hll.org/faq" HorizontalAlignment="Stretch"
+            <Button Content="❓  FAQ" Tag="{x:Bind FaqUrl}" HorizontalAlignment="Stretch"
                     HorizontalContentAlignment="Left" Click="OpenLink_Click" />
-            <Button Content="📜  Terms and Conditions" Tag="https://comp-hll.org/terms"
+            <Button Content="📜  Terms and Conditions" Tag="{x:Bind TermsUrl}"
                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Click="OpenLink_Click" />
-            <Button Content="🔒  Privacy Policy" Tag="https://comp-hll.org/privacy"
+            <Button Content="🔒  Privacy Policy" Tag="{x:Bind PrivacyUrl}"
                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Click="OpenLink_Click" />
         </StackPanel>
     </Grid>

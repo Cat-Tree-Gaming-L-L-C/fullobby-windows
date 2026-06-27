@@ -92,8 +92,8 @@
     <Color x:Key="SystemAccentColorDark3">#FF7A6217</Color>
 
     <!-- Semantic accents for data-driven UI (leaderboard medals, session badges).
-         Theme-agnostic on purpose — these mirror the Rust daisyUI semantic colors,
-         which are constant across themes, and are tuned to read on both the near-black
+         Theme-agnostic on purpose — these are fixed semantic colors,
+         constant across themes, and are tuned to read on both the near-black
          dark surfaces and the light surfaces. Defined at the dictionary root (not in a
          theme dictionary) so value converters can resolve them via Application.Resources.
          Top-3 medal text: gold / silver / bronze. -->

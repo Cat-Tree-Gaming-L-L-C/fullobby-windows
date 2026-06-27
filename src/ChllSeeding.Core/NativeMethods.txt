@@ -2,7 +2,7 @@
 // Dependent structs and enums (PROCESSENTRY32W, INPUT, PROCESS_ACCESS_RIGHTS, etc.)
 // are pulled in automatically by the functions that reference them.
 
-// ── process.rs ──
+// ── process enumeration ──
 CreateToolhelp32Snapshot
 Process32FirstW
 Process32NextW
@@ -13,7 +13,7 @@ QueryFullProcessImageNameW
 CREATE_TOOLHELP_SNAPSHOT_FLAGS
 INVALID_HANDLE_VALUE
 
-// ── window_focus.rs ──
+// ── window focus ──
 EnumWindows
 GetWindowTextLengthW
 GetWindowTextW
@@ -29,7 +29,7 @@ GetCurrentThreadId
 WM_KEYDOWN
 WM_KEYUP
 
-// ── win11_input.rs ──
+// ── Win11 input ──
 SendInput
 VIRTUAL_KEY
 CoCreateInstance
@@ -39,8 +39,8 @@ IUIAutomation
 IUIAutomationElement
 CUIAutomation
 
-// ── steam.rs mouse-nudge (enigo replacement) ──
+// ── mouse-nudge ──
 SetCursorPos
 
-// ── keep-awake (new feature; no Rust source) ──
+// ── keep-awake (new feature) ──
 SetThreadExecutionState

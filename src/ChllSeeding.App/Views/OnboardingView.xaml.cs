@@ -8,9 +8,9 @@ namespace ChllSeeding.App.Views;
 
 /// <summary>
 /// First-run onboarding wizard overlay (sign-in → link → nickname → done), hosted in the
-/// shell and shown while <see cref="AccountViewModel.ShowOnboarding"/> is true. Port of
-/// <c>src-rust/src/components/onboarding.rs</c>. The step panels are toggled in code-behind
-/// from the VM's <c>OnboardingStep</c> so we don't need an int→visibility converter.
+/// shell and shown while <see cref="AccountViewModel.ShowOnboarding"/> is true. The step panels
+/// are toggled in code-behind from the VM's <c>OnboardingStep</c> so we don't need an
+/// int→visibility converter.
 /// </summary>
 public sealed partial class OnboardingView : UserControl
 {
@@ -61,7 +61,7 @@ public sealed partial class OnboardingView : UserControl
     }
 
     /// <summary>Reflect linked-provider state into the link step (status rows, helper copy,
-    /// button labels). Port of <c>onboarding.rs StepLinkAccounts</c>.</summary>
+    /// button labels).</summary>
     private void UpdateLinkStep()
     {
         var steam = Account.SteamLinked;
@@ -83,8 +83,7 @@ public sealed partial class OnboardingView : UserControl
         LinkLaterHint.Visibility = Vis(!anyLinked);
     }
 
-    /// <summary>Apply guest/OAuth copy and seed the leaderboard opt-out toggle. Port of
-    /// <c>onboarding.rs StepNickname</c>.</summary>
+    /// <summary>Apply guest/OAuth copy and seed the leaderboard opt-out toggle.</summary>
     private void UpdateNicknameStep()
     {
         // Guests can't set a custom name (random anonymous only); hide the text box + Save.
@@ -107,8 +106,7 @@ public sealed partial class OnboardingView : UserControl
         _loading = false;
     }
 
-    /// <summary>Summarise the account + linked providers on the final step. Port of
-    /// <c>onboarding.rs StepComplete</c>.</summary>
+    /// <summary>Summarise the account + linked providers on the final step.</summary>
     private void UpdateDoneStep()
     {
         var guest = Account.IsGuest;
@@ -125,7 +123,7 @@ public sealed partial class OnboardingView : UserControl
         }
         await Account.SetShowOnLeaderboardAsync(OnboardLeaderboardToggle.IsOn);
         // Re-seed from VM state so a failed update reverts the toggle (the API call leaves
-        // User unchanged on error), matching the Rust toggle bound directly to USER.
+        // User unchanged on error).
         _loading = true;
         OnboardLeaderboardToggle.IsOn = Account.ShowOnLeaderboard;
         _loading = false;
@@ -148,6 +146,6 @@ public sealed partial class OnboardingView : UserControl
     private void Finish_Click(object sender, RoutedEventArgs e) => Account.CompleteOnboarding();
 
     /// <summary>Escape hatch so a dead backend (guest registration failing) can't trap first-run.
-    /// Deliberate deviation from the Rust wizard, which has no step-0 skip.</summary>
+    /// Deliberate: the wizard always offers this step-0 skip.</summary>
     private void Skip_Click(object sender, RoutedEventArgs e) => Account.CompleteOnboarding();
 }

@@ -5,8 +5,7 @@ namespace ChllSeeding.Core.Native;
 
 /// <summary>
 /// Detects Windows power configuration that can defeat scheduled wake-from-sleep
-/// for auto-seeding. Port of <c>src-rust/src/backend/power.rs</c> — shells out to
-/// <c>powercfg.exe</c> and parses its text output.
+/// for auto-seeding. Shells out to <c>powercfg.exe</c> and parses its text output.
 /// </summary>
 public sealed class PowerStatus
 {
@@ -86,7 +85,7 @@ public sealed class PowerStatus
         }
     }
 
-    // ── Pure parsers (public for unit coverage; port of the private fns in power.rs) ──
+    // ── Pure parsers (public for unit coverage) ──
 
     /// <summary>True if <c>powercfg /a</c> reports an S0 Low Power Idle sleep state.</summary>
     public static bool ParseModernStandbyOutput(string output) =>

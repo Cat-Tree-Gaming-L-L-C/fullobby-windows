@@ -2,14 +2,13 @@ using System.Text.Json.Serialization;
 
 namespace ChllSeeding.Core.Api;
 
-// Port of src-rust/src/api/types.rs and the ServerInfo struct from
-// src-rust/src/backend/server.rs. Wire format is snake_case (see ApiJson).
+// Wire format is snake_case (see ApiJson).
 
 /// <summary>Server info from the API (no server_public_url — that stays server-side).</summary>
 public sealed class ServerInfo
 {
     public string Ip { get; set; } = "";
-    /// <summary>BattleMetrics server id. Required field on the Rust ServerInfo (server.rs:15);
+    /// <summary>BattleMetrics server id. Required field on the server's ServerInfo wire model;
     /// carried for wire-shape parity (no current C# consumer).</summary>
     public long BmId { get; set; }
     public string ShortName { get; set; } = "";
@@ -27,7 +26,7 @@ public sealed class BatchStatsResult
     public int? MaxPlayerCount { get; set; }
     public bool Offline { get; set; }
     /// <summary>Server requires a join password — unjoinable for seeding. The backend already
-    /// excludes passworded servers from seeding candidates (see seeding_status.rs); this flag
+    /// excludes passworded servers from seeding candidates; this flag
     /// lets the UI badge them. Sourced from CRCON get_public_info → config.password_protected.</summary>
     public bool PasswordProtected { get; set; }
     public string? Error { get; set; }
@@ -51,7 +50,7 @@ public enum AuthProvider
     Guest,
 }
 
-/// <summary>How the current session is authenticated. Port of the Rust <c>AuthMethod</c>.</summary>
+/// <summary>How the current session is authenticated.</summary>
 public enum AuthMethod
 {
     None,
@@ -60,7 +59,7 @@ public enum AuthMethod
 }
 
 /// <summary>PC crossplay storefront a seeding session belongs to. Serializes lowercase
-/// ("steam"/"epic"/"xbox") to match the API's serde format. The API intentionally has no
+/// ("steam"/"epic"/"xbox") to match the API's JSON wire format. The API intentionally has no
 /// default — the client must declare which storefront it is on. This desktop app launches
 /// Hell Let Loose exclusively through the Steam client, so it always reports
 /// <see cref="Steam"/>.</summary>
@@ -73,7 +72,7 @@ public enum Platform
 
 public static class PlatformExtensions
 {
-    /// <summary>Lowercase wire string matching the API's serde representation.</summary>
+    /// <summary>Lowercase wire string matching the API's wire representation.</summary>
     public static string ToWireString(this Platform platform) => platform switch
     {
         Platform.Steam => "steam",
@@ -85,7 +84,7 @@ public static class PlatformExtensions
 
 public static class AuthProviderExtensions
 {
-    /// <summary>Lowercase wire/display name, matching the Rust Display impl.</summary>
+    /// <summary>Lowercase wire/display name, matching the server's lowercase display form.</summary>
     public static string ToWireString(this AuthProvider provider) => provider switch
     {
         AuthProvider.Steam => "steam",
@@ -235,8 +234,7 @@ public sealed record SessionStartAnalytics(
 
 /// <summary>Admin-editable seeding timing config served by the API (embedded in each directive
 /// and at <c>GET /api/seeding/config</c>). The defaults here mirror the server's so the client
-/// still works before the first successful fetch and when the API is unreachable. Port of the
-/// Rust <c>SeedingConfig</c>.</summary>
+/// still works before the first successful fetch and when the API is unreachable.</summary>
 public sealed class SeedingConfig
 {
     // Rotation

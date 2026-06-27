@@ -7,8 +7,7 @@ namespace ChllSeeding.Core.Native;
 
 /// <summary>
 /// Launches games through the Steam client (<c>-applaunch &lt;appid&gt; -dev +connect &lt;ip&gt;</c>),
-/// cold-starting Steam first if needed. Port of the launch half of
-/// <c>src-rust/src/backend/steam.rs</c>. Efficiency-mode application and config
+/// cold-starting Steam first if needed. Efficiency-mode application and config
 /// backup/restore are orchestrated by the seeding engine, not here.
 /// </summary>
 public sealed partial class SteamLauncher

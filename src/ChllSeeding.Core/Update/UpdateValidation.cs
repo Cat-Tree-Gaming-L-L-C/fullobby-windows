@@ -6,8 +6,7 @@ namespace ChllSeeding.Core.Update;
 /// Pure validation + sanitization helpers for the self-updater. Split out from
 /// <see cref="UpdaterService"/> so the security-critical checks are unit-testable without any
 /// network or filesystem. Each <c>Validate*</c> returns <c>null</c> when the input is acceptable,
-/// otherwise a human-readable error message (mirrors the Rust <c>Result&lt;(), String&gt;</c>).
-/// Port of the validation functions in <c>src-rust/src/platform/updater.rs</c>.
+/// otherwise a human-readable error message.
 /// </summary>
 public static class UpdateValidation
 {
@@ -75,7 +74,7 @@ public static class UpdateValidation
             : null;
 
     /// <summary>An update is available when the latest version is non-empty and differs from the
-    /// current one (string inequality, matching the Rust check — the server decides ordering).</summary>
+    /// current one (string inequality — the server decides ordering).</summary>
     public static bool IsUpdateAvailable(string currentVersion, string latestVersion) =>
         latestVersion.Length > 0 && latestVersion != currentVersion;
 }

@@ -8,7 +8,7 @@ namespace ChllSeeding.Core.Update;
 /// <summary>
 /// Self-updater: checks the <c>/api/releases/latest</c> manifest, downloads the installer to a
 /// temp directory with HTTPS + trusted-domain + size + SHA-256 validation, and launches it.
-/// Port of <c>src-rust/src/platform/updater.rs</c>. The security-critical checks live in
+/// The security-critical checks live in
 /// <see cref="UpdateValidation"/> (unit-tested); this class owns the network + filesystem I/O.
 ///
 /// The post-launch app shutdown (flush config, stop heartbeat, exit so the installer can replace

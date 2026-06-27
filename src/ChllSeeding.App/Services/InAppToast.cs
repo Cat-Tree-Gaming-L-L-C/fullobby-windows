@@ -2,8 +2,8 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace ChllSeeding.App.Services;
 
-/// <summary>A single transient in-app notification rendered as an InfoBar in the shell.
-/// Port of the Rust <c>state::toast</c> surface (info/success/warning/error).</summary>
+/// <summary>A single transient in-app notification rendered as an InfoBar in the shell
+/// (info/success/warning/error).</summary>
 public sealed class InAppToast
 {
     public InAppToast(string message, InfoBarSeverity severity)

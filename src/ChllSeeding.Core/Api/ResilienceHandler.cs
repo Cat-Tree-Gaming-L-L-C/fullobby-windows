@@ -3,8 +3,8 @@ using Microsoft.Extensions.Logging;
 namespace ChllSeeding.Core.Api;
 
 /// <summary>
-/// Retries transient HTTP failures with exponential backoff, mirroring
-/// <c>send_with_retry</c> in the Rust app: up to 3 attempts, 1s/2s backoff,
+/// Retries transient HTTP failures with exponential backoff:
+/// up to 3 attempts, 1s/2s backoff,
 /// retrying on 429/503 (honoring <c>Retry-After</c> ≤ 60s) and on
 /// connect/timeout errors. The per-request <see cref="HttpClient"/> timeout
 /// (30s) supplies the timeout behaviour.

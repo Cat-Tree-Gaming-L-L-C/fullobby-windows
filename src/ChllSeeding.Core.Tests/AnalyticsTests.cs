@@ -49,7 +49,7 @@ public class AnalyticsTests : IDisposable
         var a = Analytics.Gather(_config, autoSeed: false);
         Assert.False(string.IsNullOrEmpty(a.OsVersion));
         Assert.False(string.IsNullOrEmpty(a.OsArch));
-        // os_version is "unknown" or a dotted version string (matches the Rust contract).
+        // os_version is "unknown" or a dotted version string.
         Assert.True(a.OsVersion == "unknown" || a.OsVersion.Contains('.'));
     }
 

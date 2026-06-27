@@ -8,10 +8,9 @@ namespace ChllSeeding.Core.Scheduling;
 
 /// <summary>
 /// Thin wrapper over <c>schtasks.exe</c> for creating/deleting/querying the auto-seed daily tasks.
-/// Replaces the Rust <c>planif</c> COM path with a generated Task XML registered via
-/// <c>schtasks /create /xml</c> (the XML lets us set WakeToRun + StartWhenAvailable, which the
-/// plain command line can't). Port of <c>backend/task_scheduler.rs</c> + the schtasks shell-outs in
-/// <c>backend/autoseed.rs</c>. The XML builder and next-run parser are pure + unit-tested.
+/// Builds a Task XML document and registers it via <c>schtasks /create /xml</c> (the XML lets us
+/// set WakeToRun + StartWhenAvailable, which the plain command line can't). The XML builder and
+/// next-run parser are pure + unit-tested.
 /// </summary>
 public sealed class ScheduledTaskService
 {
@@ -110,7 +109,7 @@ public sealed class ScheduledTaskService
     }
 
     /// <summary>The full verbose schtasks listing for a task (for the "View schedule" dialog), capped
-    /// at 2000 chars to match the Rust view_autoseed_schedule. Null when the task is absent.</summary>
+    /// at 2000 chars. Null when the task is absent.</summary>
     public async Task<string?> QueryVerboseAsync(string taskName, CancellationToken ct = default)
     {
         var (exit, stdout, _) = await RunSchtasksAsync(

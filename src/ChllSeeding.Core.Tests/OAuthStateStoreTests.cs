@@ -4,8 +4,7 @@ namespace ChllSeeding.Core.Tests;
 
 public class OAuthStateStoreTests
 {
-    // Mirrors the Rust test_oauth_state_lifecycle (state/auth.rs), but per-instance
-    // rather than sharing one global static.
+    // State lifecycle is per-instance rather than sharing one global static.
 
     [Fact]
     public void Validate_WithNoStateSet_ReturnsFalse()

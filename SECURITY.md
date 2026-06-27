@@ -1,0 +1,64 @@
+# Security Policy
+
+## Reporting a vulnerability
+
+Please report security issues **privately** — do not open a public GitHub issue
+for anything exploitable.
+
+- **Email:** privacy@comp-hll.org
+- **Discord:** the Comp HLL community Discord (DM an admin)
+
+Include enough detail to reproduce (affected component, steps, and impact). We aim
+to acknowledge within a few days and will coordinate a fix and disclosure timeline
+with you. This is a community project with no paid bug bounty, but we credit
+reporters who want it.
+
+## Supported versions
+
+Only the latest released version of the desktop client is supported. Fixes ship in
+new releases off `main`; there are no long-term support branches. The in-app updater
+can enforce a minimum client version, so keeping current is expected.
+
+## Threat model
+
+This client is open source, and **publishing it discloses no secret that protects
+the system.** Security comes from server-side verification, not from the client
+being closed or trusted.
+
+**The client is fully untrusted by the API.** All seeding credit (verified time,
+the leaderboard) is granted only when a player's *linked* platform ID is observed in
+the real server roster, which the API confirms itself. Editing and running a modified
+client gains an attacker nothing they could not do by hand. See the
+[API security policy](https://github.com/catalloc/chll-seeding-api) for the
+server-side model.
+
+What the client itself is responsible for:
+
+- **Credential storage at rest.** Auth tokens and API keys are encrypted with
+  Windows DPAPI, scoped to the current Windows user account, and stored in
+  `%APPDATA%\org.comphll.chllseeding\config.json`. No other user on the machine can
+  decrypt them.
+- **Config directory ACLs.** On startup the app strips inherited ACEs from its
+  config directory and grants access only to the current user.
+- **Atomic writes.** Config and game-settings files are written temp-then-rename to
+  avoid corruption on crash or power loss.
+- **Update integrity.** Update URLs are validated against a hardcoded domain
+  allowlist and must use HTTPS; downloaded installers are verified against a
+  server-provided SHA-256 before being run; filenames are sanitized against path
+  traversal and capped at 500 MB.
+- **Hardbaked API host.** Release builds talk only to the production HTTPS API host;
+  the `CHLL_SEEDING_API_URL` override exists only in debug builds.
+- **Input validation.** Provider names, Steam/user IDs, config keys, display names,
+  server IPs, and deep-link parameters are validated against strict whitelists or
+  format rules with length limits and null-byte rejection before use.
+- **Process safety.** Before terminating any process, the app verifies the process
+  image path is inside the expected Steam game install directory.
+
+## Scope
+
+In scope: the desktop client in this repository (credential handling, update
+verification, deep-link parsing, process targeting, input validation).
+
+Out of scope: the closed-source API backend (report those to the same contact), and
+issues that require an attacker to already have control of the user's Windows account
+(DPAPI and the config ACLs are scoped to that account by design).

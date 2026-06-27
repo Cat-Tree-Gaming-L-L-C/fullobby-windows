@@ -4,8 +4,8 @@ using ChllSeeding.Core.Update;
 namespace ChllSeeding.Core.Tests;
 
 /// <summary>
-/// Port of the <c>#[cfg(test)]</c> block in <c>src-rust/src/platform/updater.rs</c> — the
-/// security-critical validation + sanitization helpers, plus the version-availability check.
+/// Tests for the security-critical validation + sanitization helpers, plus the
+/// version-availability check.
 /// </summary>
 public class UpdateValidationTests
 {

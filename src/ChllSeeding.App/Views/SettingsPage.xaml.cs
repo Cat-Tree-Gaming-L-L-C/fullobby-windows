@@ -246,7 +246,7 @@ public sealed partial class SettingsPage : Page
         finally
         {
             // Re-seed from VM state so a failed update reverts the toggle (the API call leaves
-            // User unchanged on error), mirroring the Rust toggle bound directly to USER.
+            // User unchanged on error).
             _loading = true;
             LeaderboardToggle.IsOn = Account.ShowOnLeaderboard;
             _loading = false;

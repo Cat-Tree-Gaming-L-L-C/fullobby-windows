@@ -5,8 +5,7 @@ namespace ChllSeeding.Core.Activation;
 /// <summary>
 /// Holds the single OAuth <c>state</c> parameter used for CSRF protection across the
 /// browser round-trip. Stored when initiating OAuth and validated (single-use) on the
-/// <c>chllseeding://auth/callback</c> deep link. Port of the <c>OAUTH_STATE</c> static and
-/// <c>set_oauth_state</c>/<c>validate_oauth_state</c> in <c>src-rust/src/state/auth.rs</c>.
+/// <c>chllseeding://auth/callback</c> deep link.
 /// Thread-safe; registered as a DI singleton.
 /// </summary>
 public sealed class OAuthStateStore
@@ -38,8 +37,7 @@ public sealed class OAuthStateStore
         }
     }
 
-    /// <summary>Generate a random 128-bit state value as a 32-char lowercase hex string.
-    /// Mirrors the Rust <c>generate_state</c>/<c>generate_uuid</c> entropy.</summary>
+    /// <summary>Generate a random 128-bit state value as a 32-char lowercase hex string.</summary>
     public static string GenerateState()
     {
         Span<byte> bytes = stackalloc byte[16];

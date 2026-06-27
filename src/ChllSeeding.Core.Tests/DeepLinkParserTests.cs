@@ -2,7 +2,7 @@ using ChllSeeding.Core.Activation;
 
 namespace ChllSeeding.Core.Tests;
 
-/// <summary>Port of the deep_link.rs test suite, rebranded to chllseeding://.</summary>
+/// <summary>Tests for <c>chllseeding://</c> deep-link parsing.</summary>
 public class DeepLinkParserTests
 {
     [Fact]

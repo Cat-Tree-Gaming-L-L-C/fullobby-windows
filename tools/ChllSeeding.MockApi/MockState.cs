@@ -71,7 +71,7 @@ public sealed class MockState
         {
             _servers.Clear();
             _servers.Add(new ServerState { Index = 0, MapName = "Foy",
-                Info = new ServerInfo("10.0.0.1:28015", 1001, "Esprit", "Esprit de Corps Gaming", 50, "hll"), PlayerCount = 32 });
+                Info = new ServerInfo("10.0.0.1:28015", 1001, "CompHLL", "Comp HLL Main", 50, "hll"), PlayerCount = 32 });
             _servers.Add(new ServerState { Index = 1, MapName = "Carentan",
                 Info = new ServerInfo("10.0.0.2:28015", 1002, "Pathfinders", "Pathfinders Chicago", 50, "hll"), PlayerCount = 14 });
             _servers.Add(new ServerState { Index = 2, MapName = "Omaha",

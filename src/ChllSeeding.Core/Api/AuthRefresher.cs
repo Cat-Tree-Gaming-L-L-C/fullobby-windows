@@ -9,8 +9,7 @@ namespace ChllSeeding.Core.Api;
 /// already refreshed (the token changed since the one observed before the 401),
 /// this returns immediately. Extracted from <c>AuthHandler</c> so both the typed
 /// client (via <see cref="AuthHandler"/>) and the SSE stream (which uses a separate
-/// handler-less client) share a single global refresh gate. Port of <c>refresh_auth</c>
-/// in <c>src-rust/src/api/client.rs</c>.
+/// handler-less client) share a single global refresh gate.
 /// </summary>
 /// <remarks>Uses the named <c>"auth"</c> client (resilience only, no <see cref="AuthHandler"/>)
 /// so a refresh never recurses back through auth and never rides the infinite-timeout SSE client.</remarks>

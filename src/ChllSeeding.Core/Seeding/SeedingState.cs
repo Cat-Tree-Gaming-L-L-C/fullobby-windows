@@ -3,14 +3,12 @@ namespace ChllSeeding.Core.Seeding;
 /// <summary>
 /// Thread-safe coordination flags shared between the seeding command surface and the
 /// running monitor loop: the global stop request, the server-switch snooze, and the
-/// "switch now" confirmation. Port of the atomic statics + stop/snooze helpers in
-/// <c>src-rust/src/backend/seeding.rs</c> (process-global atomics → DI-singleton state).
-/// Kept dependency-free so the lifecycle logic is unit-testable in isolation, mirroring
-/// that file's <c>#[cfg(test)]</c> block (stop / snooze / switch-now).
+/// "switch now" confirmation. Kept dependency-free so the lifecycle logic is unit-testable
+/// in isolation (stop / snooze / switch-now).
 /// </summary>
 public sealed class SeedingState
 {
-    // Snooze clamp bounds (seconds) — matches snooze_server_switch in seeding.rs.
+    // Snooze clamp bounds (seconds).
     public const long SnoozeMinSecs = 60;
     public const long SnoozeMaxSecs = 1800;
 
@@ -26,9 +24,8 @@ public sealed class SeedingState
 
     public void RequestStop() => _stopRequested = true;
 
-    /// <summary>Clear the stop flag for a new seeding session. (The Rust counterpart also resets
-    /// the once-per-session config-backup flag; that flag lives on the engine, which clears it
-    /// alongside this call.)</summary>
+    /// <summary>Clear the stop flag for a new seeding session. (The once-per-session config-backup
+    /// flag is reset separately: it lives on the engine, which clears it alongside this call.)</summary>
     public void ClearStop() => _stopRequested = false;
 
     // ── Server-switch snooze ──────────────────────────────────────────────────

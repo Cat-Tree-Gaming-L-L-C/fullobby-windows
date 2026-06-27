@@ -2,8 +2,7 @@ namespace ChllSeeding.Core.Seeding;
 
 /// <summary>
 /// Events raised by the <see cref="SeedingEngine"/> as it drives a seeding session.
-/// These are the subset of the Rust <c>AppEvent</c> enum (see <c>src-rust/src/events.rs</c>)
-/// that the seeding state machine emits. The UI layer subscribes via
+/// These are the events the seeding state machine emits. The UI layer subscribes via
 /// <see cref="SeedingEngine.Event"/> to drive countdowns, banners, toasts, and switch prompts.
 /// </summary>
 public abstract record SeedingEvent

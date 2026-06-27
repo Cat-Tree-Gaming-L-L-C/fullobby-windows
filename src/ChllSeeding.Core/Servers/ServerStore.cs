@@ -4,8 +4,7 @@ namespace ChllSeeding.Core.Servers;
 
 /// <summary>
 /// In-memory store of the seeding server lists, offline flags, and live player
-/// counts. Port of <c>src-rust/src/backend/server.rs</c> (global statics →
-/// instance state). DI singleton, thread-safe.
+/// counts. DI singleton, thread-safe.
 /// </summary>
 public sealed class ServerStore
 {

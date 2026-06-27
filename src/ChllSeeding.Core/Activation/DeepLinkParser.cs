@@ -2,7 +2,6 @@ namespace ChllSeeding.Core.Activation;
 
 /// <summary>
 /// Parses <c>chllseeding://</c> URLs into <see cref="DeepLinkAction"/>s.
-/// Port of <c>src-rust/src/platform/deep_link.rs</c> (rebranded scheme).
 /// Expected format: <c>chllseeding://auth/callback?token=...&amp;refresh_token=...</c>
 /// </summary>
 public static class DeepLinkParser

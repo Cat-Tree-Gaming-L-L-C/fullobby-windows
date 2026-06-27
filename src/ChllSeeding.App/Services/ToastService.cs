@@ -7,7 +7,7 @@ using Microsoft.Windows.AppNotifications.Builder;
 namespace ChllSeeding.App.Services;
 
 /// <summary>Desktop (Windows) toast notifications + the attention sound played before a server
-/// switch. Port of src-rust/src/platform/notification.rs (notify-rust + MessageBeep).
+/// switch.
 ///
 /// Lives in the App project because <see cref="AppNotificationManager"/> is a Windows App SDK type;
 /// Core stays UI/platform-free and testable.</summary>
@@ -51,9 +51,8 @@ public sealed class ToastService
         }
     }
 
-    /// <summary>Show the "switching servers" toast and play the attention sound. Mirrors the Rust
-    /// flow: play_notification_sound() + show_notification(). Caller has already confirmed
-    /// switch_notification is enabled (the engine only emits the switch event when it is).</summary>
+    /// <summary>Show the "switching servers" toast and play the attention sound. Caller has already
+    /// confirmed switch_notification is enabled (the engine only emits the switch event when it is).</summary>
     public void ShowServerSwitch(string serverName, long countdownSecs)
     {
         PlayAttentionSound();
@@ -91,7 +90,7 @@ public sealed class ToastService
         }
     }
 
-    /// <summary>Windows "exclamation" chime — exact parity with the Rust MessageBeep call.</summary>
+    /// <summary>Windows "exclamation" chime via MessageBeep.</summary>
     public void PlayAttentionSound()
     {
         try

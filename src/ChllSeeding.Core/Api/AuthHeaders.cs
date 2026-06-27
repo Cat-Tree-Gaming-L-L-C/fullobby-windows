@@ -7,7 +7,6 @@ namespace ChllSeeding.Core.Api;
 /// available, else the guest <c>x-api-key</c>. Shared by <see cref="AuthHandler"/>
 /// (the typed-client delegating handler) and <see cref="SseStreamClient"/>, which
 /// builds its own requests on a handler-less client and so can't rely on the handler.
-/// Port of the auth-header logic in <c>src-rust/src/api/client.rs</c>.
 /// </summary>
 public static class AuthHeaders
 {

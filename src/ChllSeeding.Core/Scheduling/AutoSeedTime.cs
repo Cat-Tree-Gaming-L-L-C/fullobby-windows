@@ -7,12 +7,11 @@ namespace ChllSeeding.Core.Scheduling;
 /// Auto-seed time parsing + UTC↔local conversion. The user enters the daily seed time in
 /// <b>UTC</b> (HH:MM); we store that UTC string and create the Windows scheduled task at the
 /// equivalent <b>local</b> time (schtasks triggers run in local time). The missed-task monitor
-/// compares the stored UTC time against the current UTC clock. Port of the time helpers in
-/// <c>components/settings.rs</c> + <c>validate_start_time</c> in <c>task_scheduler.rs</c>.
+/// compares the stored UTC time against the current UTC clock.
 /// </summary>
 public static partial class AutoSeedTime
 {
-    // HH:MM or HH:MM:SS, single-digit hours allowed (mirrors task_scheduler.rs TIME_REGEX).
+    // HH:MM or HH:MM:SS, single-digit hours allowed.
     [GeneratedRegex(@"^([01]?[0-9]|2[0-3]):([0-5][0-9])(?::([0-5][0-9]))?$")]
     private static partial Regex TimeRegex();
 
@@ -72,8 +71,8 @@ public static partial class AutoSeedTime
 
     /// <summary>
     /// Convert a UTC time to the equivalent local time, formatted "HH:MM:SS" for the scheduled-task
-    /// StartBoundary. Mirrors Rust's <c>utc_to_local</c>: today's local date is combined with the UTC
-    /// time, interpreted as UTC, then converted to local.
+    /// StartBoundary: today's local date is combined with the UTC time, interpreted as UTC, then
+    /// converted to local.
     /// </summary>
     public static string UtcToLocalHms(int utcHours, int utcMinutes)
     {

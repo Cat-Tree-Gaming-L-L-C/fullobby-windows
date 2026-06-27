@@ -4,7 +4,7 @@ using ChllSeeding.Core.Api;
 namespace ChllSeeding.Core.Tests;
 
 /// <summary>Verifies the STJ snake_case / lowercase-enum mapping and optional-field
-/// defaults match the Rust serde wire format. A representative subset of types.rs.</summary>
+/// defaults match the server's JSON wire format. A representative subset of the API models.</summary>
 public class ApiModelsTests
 {
     private static T Roundtrip<T>(T value) =>

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using ChllSeeding.Core;
 using ChllSeeding.Core.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -10,14 +11,19 @@ namespace ChllSeeding.App.Views;
 
 /// <summary>
 /// Tools tab: manual game-config backup/restore, restore from the automatic pre-seeding backup,
-/// open the app logs, and web resource links. Port of <c>src-rust/src/components/tools.rs</c>
-/// (handler-driven, not MVVM, matching the original).
+/// open the app logs, and web resource links. Handler-driven, not MVVM.
 /// </summary>
 public sealed partial class ToolsPage : Page
 {
     private readonly ManualBackupService _backup;
     private readonly MainWindow _window;
     private readonly ILogger<ToolsPage> _log;
+
+    // Web-resource links (single source of truth: Branding).
+    public string WebsiteUrl => Branding.WebsiteUrl;
+    public string FaqUrl => Branding.FaqUrl;
+    public string TermsUrl => Branding.TermsUrl;
+    public string PrivacyUrl => Branding.PrivacyUrl;
 
     public ToolsPage()
     {

@@ -12,8 +12,7 @@ namespace ChllSeeding.Core.Scheduling;
 /// machine woke from Modern Standby past the scheduled time. Polls every 60s; if the task is
 /// installed, its stored UTC time has passed within the last (config-driven) missed window, and it
 /// hasn't already fired today (and nothing is in progress / HLL isn't running), it raises
-/// <see cref="AutoseedDue"/>. Port of <c>check_missed_autoseed</c> + the 60s poll in <c>app.rs</c>,
-/// collapsed to one slot.
+/// <see cref="AutoseedDue"/> on a 60s poll, collapsed to one slot.
 /// </summary>
 public sealed class MissedAutoseedMonitor : IHostedService, IDisposable
 {
@@ -137,8 +136,8 @@ public sealed class MissedAutoseedMonitor : IHostedService, IDisposable
     /// <summary>
     /// True when <paramref name="nowUtc"/> is at or after today's <paramref name="scheduledUtc"/> and
     /// strictly less than <paramref name="windowHours"/> past it — i.e. the window is [0, windowHours).
-    /// The upper bound is exclusive to match Rust's <c>diff.num_hours() &gt;= MISSED_AUTOSEED_WINDOW_HOURS</c>
-    /// skip (autoseed.rs:335), which drops anything at or beyond the whole-hour mark. Pure; unit-tested.
+    /// The upper bound is exclusive: a diff of exactly <paramref name="windowHours"/> is treated as
+    /// out of window, dropping anything at or beyond the whole-hour mark. Pure; unit-tested.
     /// </summary>
     public static bool IsWithinMissedWindow(DateTime nowUtc, TimeOnly scheduledUtc, int windowHours)
     {

@@ -9,8 +9,7 @@ using Windows.Win32.System.Threading;
 namespace ChllSeeding.Core.Native;
 
 /// <summary>
-/// Detects and terminates game/Steam processes via Toolhelp32 snapshots. Port of
-/// <c>src-rust/src/backend/process.rs</c> (process-global caches → instance state).
+/// Detects and terminates game/Steam processes via Toolhelp32 snapshots.
 /// DI singleton, thread-safe.
 /// </summary>
 public sealed class ProcessMonitor
@@ -135,7 +134,7 @@ public sealed class ProcessMonitor
         }
     }
 
-    // ── Path verification (pure; public for unit coverage — port of process.rs tests) ──
+    // ── Path verification (pure; public for unit coverage) ──
 
     /// <summary>Strict fallback check that a path is the HLL Steam install (used when the cached
     /// Steam dir is unavailable).</summary>
@@ -155,8 +154,7 @@ public sealed class ProcessMonitor
     {
         if (SteamPaths.CachedExePath is { } steamExe)
         {
-            // Two levels up from steam.exe (…\Steam\steam.exe → the folder containing Steam),
-            // mirroring steam_path.parent().parent() in process.rs.
+            // Two levels up from steam.exe (…\Steam\steam.exe → the folder containing Steam).
             var steamDir = Path.GetDirectoryName(Path.GetDirectoryName(steamExe));
             if (steamDir is not null)
             {

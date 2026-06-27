@@ -1,8 +1,7 @@
 namespace ChllSeeding.App.ViewModels;
 
 /// <summary>
-/// UI-facing seeding lifecycle state. Mirrors the Rust <c>SeedingStatus</c> enum
-/// (src-rust/src/state/seeding.rs) that drove the Dioxus seed/launch components.
+/// UI-facing seeding lifecycle state.
 /// </summary>
 public enum SeedingStatus
 {

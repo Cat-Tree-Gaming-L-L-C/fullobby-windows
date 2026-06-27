@@ -1,7 +1,7 @@
 namespace ChllSeeding.Core.Games;
 
 /// <summary>
-/// Static definition of a supported game. Port of <c>src-rust/src/backend/game.rs</c>.
+/// Static definition of a supported game.
 /// Each game (HLL, HLLV) has its own Steam App ID, executable names, install folder,
 /// and feature flags so the rest of the codebase can be game-agnostic.
 /// </summary>
@@ -33,7 +33,7 @@ public sealed record GameDefinition
     public bool SupportsEfficiencyMode { get; init; }
 }
 
-/// <summary>The catalog of supported games. Port of the statics in <c>game.rs</c>.</summary>
+/// <summary>The catalog of supported games.</summary>
 public static class GameCatalog
 {
     public static readonly GameDefinition Hll = new()

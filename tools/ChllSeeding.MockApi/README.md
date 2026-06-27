@@ -44,7 +44,7 @@ Two NA + one EU HLL server, all seedable:
 
 | region/index | name | threshold | players |
 |---|---|---|---|
-| na/0 | Esprit de Corps Gaming | 50 | 32 |
+| na/0 | Comp HLL Main | 50 | 32 |
 | na/1 | Pathfinders Chicago | 50 | 14 |
 | eu/0 | EU Seed Server One | 50 | 8 |
 

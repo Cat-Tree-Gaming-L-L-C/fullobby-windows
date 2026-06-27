@@ -1,6 +1,6 @@
 namespace ChllSeeding.Core.Activation;
 
-/// <summary>Parsed <c>chllseeding://</c> deep-link actions (port of platform/deep_link.rs).</summary>
+/// <summary>Parsed <c>chllseeding://</c> deep-link actions.</summary>
 public abstract record DeepLinkAction
 {
     /// <summary>OAuth callback with JWT tokens (login flow).</summary>
