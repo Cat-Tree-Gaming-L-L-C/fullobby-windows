@@ -23,7 +23,7 @@
     Build the solution first (also auto-builds if the exe is missing).
 
 .EXAMPLE
-    ./scripts/run-local.ps1 -ApiUrl http://192.168.1.50:3000
+    ./scripts/run-local.ps1 -ApiUrl http://<your-lan-ip>:3000
 
 .EXAMPLE
     ./scripts/run-local.ps1 -Build        # rebuild, then run against localhost:3000

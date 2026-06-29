@@ -17,7 +17,7 @@
 #define AppPublisher "Comp HLL"
 #define ExeName "CHLLSeeding.exe"
 #define Scheme "chllseeding"
-#define RepoUrl "https://github.com/catalloc/chll-seeding-windows"
+#define RepoUrl "https://github.com/Cat-Tree-Gaming-L-L-C/chll-seeding-windows"
 
 [Setup]
 AppId={{8BECA68D-1736-425B-8E80-8DDB63709B4E}

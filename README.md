@@ -2,11 +2,11 @@
 
 Windows desktop app for [Hell Let Loose](https://store.steampowered.com/app/686810/Hell_Let_Loose/) server seeding. One click to launch, seed, and keep your community servers populated.
 
-Built by [Comp HLL](https://github.com/catalloc/chll-seeding-windows). Native C# + WinUI 3 — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Built by [Comp HLL](https://github.com/Cat-Tree-Gaming-L-L-C/chll-seeding-windows). Native C# + WinUI 3 — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Download
 
-Grab the latest installer (`CHLL-Seeding-Setup-<ver>.exe`) from [GitHub Releases](https://github.com/catalloc/chll-seeding-windows/releases).
+Grab the latest installer (`CHLL-Seeding-Setup-<ver>.exe`) from [GitHub Releases](https://github.com/Cat-Tree-Gaming-L-L-C/chll-seeding-windows/releases).
 
 **Requirements:** Windows 10 (19041) / Windows 11, Steam with Hell Let Loose installed.
 
@@ -107,7 +107,7 @@ The client communicates with a closed-source API server over HTTPS. All traffic 
 
 ```powershell
 # Clone
-git clone git@github.com:catalloc/chll-seeding-windows.git
+git clone git@github.com:Cat-Tree-Gaming-L-L-C/chll-seeding-windows.git
 cd chll-seeding-windows
 
 # Build
@@ -147,7 +147,7 @@ Contributions are welcome! Please open an issue to discuss your idea before subm
 
 ## Contact
 
-For questions, feedback, or support: [GitHub Issues](https://github.com/catalloc/chll-seeding-windows/issues)
+For questions, feedback, or support: [GitHub Issues](https://github.com/Cat-Tree-Gaming-L-L-C/chll-seeding-windows/issues)
 
 ## License
 

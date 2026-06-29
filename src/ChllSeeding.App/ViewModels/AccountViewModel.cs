@@ -281,9 +281,9 @@ public sealed partial class AccountViewModel : ObservableObject
     /// load the user, and finish onboarding.</summary>
     public async Task HandleAuthCallbackAsync(string? state, string token, string refreshToken)
     {
-        if (state is not null && !_oauthState.Validate(state))
+        if (state is null || !_oauthState.Validate(state))
         {
-            _log.LogWarning("OAuth state mismatch — ignoring auth callback");
+            _log.LogWarning("OAuth state missing or mismatched — ignoring auth callback");
             _toast.Error("Login could not be verified. Please try again.");
             return;
         }

@@ -28,9 +28,9 @@ being closed or trusted.
 **The client is fully untrusted by the API.** All seeding credit (verified time,
 the leaderboard) is granted only when a player's *linked* platform ID is observed in
 the real server roster, which the API confirms itself. Editing and running a modified
-client gains an attacker nothing they could not do by hand. See the
-[API security policy](https://github.com/catalloc/chll-seeding-api) for the
-server-side model.
+client gains an attacker nothing they could not do by hand. The server-side
+verification model is maintained separately; report API/server security
+concerns to the contact below.
 
 What the client itself is responsible for:
 

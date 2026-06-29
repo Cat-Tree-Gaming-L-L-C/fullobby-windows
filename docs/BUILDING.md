@@ -33,9 +33,8 @@ process only (no global env changes), then launches the exe.
 # rebuild, then run against localhost:3000
 ./scripts/run-local.ps1 -Build
 
-# run against a LAN / WSL backend (use the IP, not a .home.arpa name —
-# VPN breaks home.arpa DNS)
-./scripts/run-local.ps1 -ApiUrl http://192.168.1.194:3000
+# run against a LAN / WSL backend (use the backend's IP address)
+./scripts/run-local.ps1 -ApiUrl http://<your-lan-ip>:3000
 ```
 
 Options:
@@ -109,7 +108,7 @@ that shape as a release asset — `latest.json` (stable) / `latest-beta.json` (p
 ```json
 {
   "version": "1.2.3",
-  "download_url": "https://github.com/catalloc/chll-seeding-windows/releases/download/v1.2.3/CHLL-Seeding-Setup-1.2.3.exe",
+  "download_url": "https://github.com/Cat-Tree-Gaming-L-L-C/chll-seeding-windows/releases/download/v1.2.3/CHLL-Seeding-Setup-1.2.3.exe",
   "notes": "…annotated tag message…",
   "sha256": "<lowercase hex>",
   "signature": null

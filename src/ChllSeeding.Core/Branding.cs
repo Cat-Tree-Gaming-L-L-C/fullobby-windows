@@ -47,9 +47,8 @@ public static class Branding
     public const string DiscordUrl = "https://comp-hll.org/discord";
     /// <summary>Comp HLL community website.</summary>
     public const string WebsiteUrl = "https://comp-hll.org";
-    /// <summary>Source / issue tracker. Placeholder under a personal account until the
-    /// repo moves to its public org — tracked, do not treat as final.</summary>
-    public const string GitHubUrl = "https://github.com/catalloc/chll-seeding-windows";
+    /// <summary>Source / issue tracker (public repo under the Cat Tree Gaming LLC org).</summary>
+    public const string GitHubUrl = "https://github.com/Cat-Tree-Gaming-L-L-C/chll-seeding-windows";
     /// <summary>Seeding FAQ / "how it works" page (served by the API).</summary>
     public const string FaqUrl = DefaultApiBaseUrl + "/faq";
     /// <summary>Terms of service (served by the API).</summary>
