@@ -41,8 +41,8 @@ public static class Branding
     public const string DefaultApiBaseUrl = "https://seeding.comp-hll.org";
 
     // ── Community / About links ──────────────────────────────────────────────
-    // FAQ/Terms/Privacy are served by the seeding API itself (Rust axum app,
-    // routes/legal.rs) so they live under DefaultApiBaseUrl.
+    // FAQ/Terms/Privacy are served by the seeding API itself, so they live under
+    // DefaultApiBaseUrl.
     /// <summary>Community Discord invite (permanent redirect to the current invite).</summary>
     public const string DiscordUrl = "https://comp-hll.org/discord";
     /// <summary>Comp HLL community website.</summary>
