@@ -127,7 +127,14 @@ public sealed class ConfigService
         JsonElement element;
         if (value is string s && DpapiProtector.IsSensitive(key))
         {
-            element = JsonSerializer.SerializeToElement(DpapiProtector.MaybeEncrypt(key, s));
+            var protectedValue = DpapiProtector.MaybeEncrypt(key, s);
+            if (s.Length > 0 && !DpapiProtector.IsEncrypted(protectedValue))
+            {
+                _log.LogWarning(
+                    "DPAPI encryption failed for sensitive key '{Key}' — storing it as plaintext in " +
+                    "config.json. The value stays usable but is no longer protected at rest.", key);
+            }
+            element = JsonSerializer.SerializeToElement(protectedValue);
         }
         else
         {

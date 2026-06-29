@@ -119,7 +119,9 @@ public sealed class UpdaterService
         var rawName = update.DownloadUrl.Split('/').LastOrDefault() ?? "";
         var fileName = UpdateValidation.SanitizeInstallerFilename(rawName);
 
-        var tempDir = Path.Combine(Path.GetTempPath(), "chll-seeding-update");
+        // Fresh randomized subdirectory per download so the installer path is unpredictable —
+        // a same-user process can't pre-plant a file at a known location for us to launch.
+        var tempDir = Path.Combine(Path.GetTempPath(), "chll-seeding-update", Path.GetRandomFileName());
         Directory.CreateDirectory(tempDir);
         var downloadPath = Path.Combine(tempDir, fileName);
 
@@ -157,16 +159,26 @@ public sealed class UpdaterService
     }
 
     /// <summary>
-    /// Launch the downloaded installer (only <c>.exe</c>/<c>.msi</c> are allowed). Returns once the
-    /// process is spawned; the caller is responsible for shutting the app down afterwards so the
-    /// installer can replace the running exe. Port of <c>launch_installer</c> (minus the shutdown).
+    /// Launch the downloaded installer (only <c>.exe</c>/<c>.msi</c> are allowed). The on-disk bytes
+    /// are re-verified against <paramref name="expectedSha256"/> immediately before launch to close the
+    /// TOCTOU gap between download and execution. Returns once the process is spawned; the caller is
+    /// responsible for shutting the app down afterwards so the installer can replace the running exe.
     /// </summary>
-    public void LaunchInstaller(string path)
+    public void LaunchInstaller(string path, string expectedSha256)
     {
         var extension = Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
         if (UpdateValidation.ValidateInstallerExtension(extension) is { } extError)
         {
             throw new InvalidOperationException(extError);
+        }
+
+        // Re-hash what's actually on disk now. DownloadAndVerifyAsync verified the in-memory buffer it
+        // wrote, but a same-user process could have swapped the file in the interim — never launch
+        // bytes we haven't just verified.
+        var onDisk = File.ReadAllBytes(path);
+        if (UpdateValidation.VerifySha256(onDisk, expectedSha256) is { } hashErr)
+        {
+            throw new InvalidOperationException($"Installer failed re-verification before launch: {hashErr}");
         }
 
         _log.LogInformation("Launching installer: {Path}", path);

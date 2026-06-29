@@ -380,7 +380,8 @@ public sealed partial class SettingsPage : Page
             try
             {
                 installerPath = await _updater.DownloadAndVerifyAsync(info);
-                _updater.LaunchInstaller(installerPath);
+                // info.Sha256 is guaranteed non-null here — DownloadAndVerifyAsync throws without it.
+                _updater.LaunchInstaller(installerPath, info.Sha256!);
             }
             catch (Exception)
             {

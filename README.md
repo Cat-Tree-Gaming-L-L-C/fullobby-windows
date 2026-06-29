@@ -107,7 +107,7 @@ The client communicates with a closed-source API server over HTTPS. All traffic 
 
 ```powershell
 # Clone
-git clone git@github.com:Cat-Tree-Gaming-L-L-C/chll-seeding-windows.git
+git clone https://github.com/Cat-Tree-Gaming-L-L-C/chll-seeding-windows.git
 cd chll-seeding-windows
 
 # Build
