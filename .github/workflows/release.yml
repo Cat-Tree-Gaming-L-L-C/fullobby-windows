@@ -10,6 +10,15 @@ name: Release
 # sha256, signature }. The backend serves these — point the stable feed at latest.json
 # and `?channel=beta` at latest-beta.json. download_url is the GitHub release asset on
 # github.com, which is in the updater's trusted-domain allowlist.
+#
+# RELEASE SIGNING (`signature`): the in-app updater MANDATES a pinned-key ECDSA P-256
+# signature over (version, sha256). The signing private key is held OFFLINE (air-gapped
+# Pi) and intentionally never reaches CI, so this workflow emits the manifest with
+# `signature: null` plus a `<manifest>.payload.txt` asset (the exact bytes to sign).
+# A maintainer signs it offline and finalizes the manifest using the runbook + scripts in
+# the private chll-seeding-api repo, then replaces the published manifest the backend
+# serves. Until that happens the unsigned manifest is REFUSED by clients — the failure
+# mode is "no auto-update", never "unverified update".
 
 on:
   push:
@@ -109,6 +118,10 @@ jobs:
           $notes = (git tag -l --format='%(contents)' "${{ github.ref_name }}") -join "`n"
           if (-not $notes) { $notes = "" }
 
+          # signature stays null here — the release-signing private key is held OFFLINE and never
+          # touches CI. An enforcing client REFUSES a null-signature manifest, so until the operator
+          # signs it offline and finalizes the manifest (runbook + scripts in the private
+          # chll-seeding-api repo) this release simply will not auto-update anyone. Safe failure mode.
           $manifest = [ordered]@{
             version      = $env:APP_VERSION
             download_url = $download
@@ -119,8 +132,21 @@ jobs:
           New-Item -ItemType Directory -Force dist | Out-Null
           $manifest | ConvertTo-Json | Out-File -Encoding utf8 "dist/$env:MANIFEST_NAME"
 
+          # Canonical payload the offline signer must sign — must match UpdateSignature.BuildSignedPayload
+          # (LF separators, lowercase sha256, no trailing newline). Emitted as a release asset + job
+          # summary so the operator can copy it to the air-gapped Pi.
+          $payload = "chll-seeding-update.v1`nversion=$env:APP_VERSION`nsha256=$hash"
+          [System.IO.File]::WriteAllText(
+            (Join-Path (Get-Location) "dist/$env:MANIFEST_NAME.payload.txt"), $payload)
+
           Write-Host "SHA-256: $hash"
           Get-Content "dist/$env:MANIFEST_NAME"
+          "## Release signing payload" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          "Sign this on the offline Pi — ``sign-release.sh $env:APP_VERSION $hash`` (chll-seeding-api repo):" |
+            Out-File -Append $env:GITHUB_STEP_SUMMARY
+          '```'    | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          $payload | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          '```'    | Out-File -Append $env:GITHUB_STEP_SUMMARY
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -133,3 +159,4 @@ jobs:
             installer/Output/${{ env.INSTALLER }}
             installer/Output/${{ env.INSTALLER }}.sha256
             dist/${{ env.MANIFEST_NAME }}
+            dist/${{ env.MANIFEST_NAME }}.payload.txt

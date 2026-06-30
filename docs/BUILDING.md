@@ -94,10 +94,19 @@ matches the release. The numeric `X.Y.Z` (prerelease suffix stripped) is what
 `Assembly.GetName().Version.ToString(3)` reports and what the updater compares against —
 so the manifest's `version` field uses the numeric form.
 
-**Code signing** is optional and runs only when the repo secrets `WINDOWS_CERT_BASE64`
-(base64 of the `.pfx`) and `WINDOWS_CERT_PASSWORD` are set; `scripts/sign.ps1` signs the
-published exe and the installer via `signtool`. Until a cert is configured, releases are
-unsigned (SmartScreen will warn) and the manifest `signature` is `null`.
+**Authenticode code signing** (SmartScreen/publisher trust) is optional and runs only when the
+repo secrets `WINDOWS_CERT_BASE64` (base64 of the `.pfx`) and `WINDOWS_CERT_PASSWORD` are set;
+`scripts/sign.ps1` signs the published exe and the installer via `signtool`. Until a cert is
+configured, releases trigger a SmartScreen warning. This is independent from update-feed signing
+below.
+
+**Update-feed signing** (the manifest `signature`, mandatory) is *not* done by CI — the
+release-signing private key is held offline. After CI builds, a maintainer signs the release's
+`(version, sha256)` on the offline device, finalizes the manifest, and publishes it. The in-app
+updater **refuses** any update whose `signature` is missing or doesn't verify against the client's
+hardbaked public key. The maintainer-only runbook + signing scripts live in the **private
+`chll-seeding-api` repo** (`docs/RELEASE-SIGNING.md`), kept out of this public repo so the release
+procedure and its attack surface aren't advertised.
 
 ### Update-feed contract (backend)
 
@@ -111,12 +120,14 @@ that shape as a release asset — `latest.json` (stable) / `latest-beta.json` (p
   "download_url": "https://github.com/Cat-Tree-Gaming-L-L-C/chll-seeding-windows/releases/download/v1.2.3/CHLL-Seeding-Setup-1.2.3.exe",
   "notes": "…annotated tag message…",
   "sha256": "<lowercase hex>",
-  "signature": null
+  "signature": "<base64 ECDSA P-256 signature over (version, sha256)>"
 }
 ```
 
-The backend should serve the latest stable manifest at `/api/releases/latest` and the
-latest prerelease at `/api/releases/latest?channel=beta`. `download_url` points at the
-GitHub release asset (`github.com`), which is in the updater's trusted-domain allowlist
-(alongside `objects.githubusercontent.com` and the configured API host). A missing
-`sha256` makes the client **refuse** the download.
+CI emits this with `signature: null`; a maintainer fills it in offline before publishing
+(see **Update-feed signing** above). The backend should serve
+the latest stable manifest at `/api/releases/latest` and the latest prerelease at
+`/api/releases/latest?channel=beta`. `download_url` points at the GitHub release asset
+(`github.com`), which is in the updater's trusted-domain allowlist (alongside
+`objects.githubusercontent.com` and the configured API host). A missing `sha256` **or a
+missing/invalid `signature`** makes the client **refuse** the update.

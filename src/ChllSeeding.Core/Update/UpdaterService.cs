@@ -82,9 +82,10 @@ public sealed class UpdaterService
     }
 
     /// <summary>
-    /// Download the installer to a temp directory and validate it: HTTPS + trusted host, ≤500 MB,
-    /// and a matching SHA-256 (a missing checksum is a hard failure). Returns the written path.
-    /// Throws on any validation or I/O failure — the caller must not launch on a throw.
+    /// Download the installer to a temp directory and validate it: a trusted pinned-key signature
+    /// over <c>(version, sha256)</c>, HTTPS + trusted host, ≤500 MB, and a matching SHA-256 (a missing
+    /// signature or checksum is a hard failure). Returns the written path. Throws on any validation or
+    /// I/O failure — the caller must not launch on a throw.
     /// </summary>
     public async Task<string> DownloadAndVerifyAsync(UpdateInfo update, CancellationToken ct = default)
     {
@@ -92,6 +93,16 @@ public sealed class UpdaterService
         {
             throw new InvalidOperationException("No download URL available");
         }
+
+        // Authenticate the (version, sha256) binding against the hardbaked release-signing key BEFORE
+        // spending bandwidth on the installer. The private key is held offline, so a compromised
+        // server/API cannot forge this — without a valid signature we refuse the update entirely. The
+        // SHA-256 check further down then ties this authenticated hash to the actual installer bytes.
+        if (UpdateSignature.VerifySignature(update.Version, update.Sha256 ?? "", update.Signature) is { } sigErr)
+        {
+            throw new InvalidOperationException($"Update signature verification failed: {sigErr}");
+        }
+        _log.LogInformation("Update signature verified for v{Version}", update.Version);
 
         var urlError = UpdateValidation.ValidateDownloadUrl(update.DownloadUrl, TrustedDownloadHosts());
         if (urlError is not null)
@@ -144,13 +155,6 @@ public sealed class UpdaterService
         else
         {
             throw new InvalidOperationException("Server did not provide SHA-256 checksum — refusing download");
-        }
-
-        if (update.Signature is null)
-        {
-            _log.LogWarning(
-                "Update manifest has no Ed25519 signature — integrity relies on SHA-256 + HTTPS. " +
-                "Configure release signing for defense-in-depth against server compromise.");
         }
 
         await File.WriteAllBytesAsync(downloadPath, bytes, ct).ConfigureAwait(false);

@@ -42,10 +42,15 @@ What the client itself is responsible for:
   config directory and grants access only to the current user.
 - **Atomic writes.** Config and game-settings files are written temp-then-rename to
   avoid corruption on crash or power loss.
-- **Update integrity.** Update URLs are validated against a hardcoded domain
-  allowlist and must use HTTPS; downloaded installers are verified against a
-  server-provided SHA-256 before being run; filenames are sanitized against path
-  traversal and capped at 500 MB.
+- **Update integrity & authenticity.** Every update must carry a valid **ECDSA P-256
+  signature over its `(version, sha256)`**, verified against a public key hardbaked into
+  the client; the matching private key is held offline and never touches CI or the
+  server, so a **compromised update origin cannot push a release it can't sign** (a
+  missing/invalid signature is refused). On top of that, update URLs are validated
+  against a hardcoded domain allowlist and must use HTTPS; the downloaded installer is
+  verified against the signed SHA-256 before being run (and re-verified immediately
+  before launch); filenames are sanitized against path traversal and capped at 500 MB.
+  (The maintainer-only signing procedure lives in the private `chll-seeding-api` repo.)
 - **Hardbaked API host.** Release builds talk only to the production HTTPS API host;
   the `CHLL_SEEDING_API_URL` override exists only in debug builds.
 - **Input validation.** Provider names, Steam/user IDs, config keys, display names,

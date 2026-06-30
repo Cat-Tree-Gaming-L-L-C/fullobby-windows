@@ -48,7 +48,7 @@ This document is the durable architecture reference.
 | Tray / notifications | `App` `H.NotifyIcon` `TaskbarIcon` (in `MainWindow.xaml`), `App.Services.ToastService` (AppNotificationManager + `MessageBeep`), `App.Services.InAppToastService` |
 | Deep link / single instance | `Core.Activation.DeepLinkParser` + `AppInstance` redirection, `Core.Activation.OAuthStateStore` |
 | Startup | `Core.Platform.StartupRegistry` (HKCU Run `CHLLSeeding`) |
-| Updater | `Core.Update.UpdaterService` + `UpdateValidation` + `UpdateInfo` (HTTPS + trusted-domain + ext + ≤500MB + SHA-256; launches Inno setup.exe; stable/beta `update_channel`) |
+| Updater | `Core.Update.UpdaterService` + `UpdateValidation` + `UpdateSignature` + `UpdateInfo` (mandatory pinned-key ECDSA P-256 signature over `(version, sha256)` — private key offline, signing runbook in the private `chll-seeding-api` repo; HTTPS + trusted-domain + ext + ≤500MB + SHA-256; launches Inno setup.exe; stable/beta `update_channel`) |
 | Power | `Core.Native.PowerStatus` (powercfg modern-standby/wake-timer warnings) |
 | UI | `App.Views.*Page` + `App.ViewModels.*` (frameless 5-tab shell) |
 | Keep-awake | `Core.Native.KeepAwake` (`SetThreadExecutionState` re-asserting thread; held while seeding) |
@@ -79,7 +79,10 @@ These depend on the `seeding-api` backend / release infra and can't be verified 
 - OAuth redirect target must be `chllseeding://` (auth + provider-link callbacks).
 - API base host `https://seeding.comp-hll.org` (configurable via the `api_host` config key).
 - `releases/latest` must point at the new installer names (`CHLL-Seeding-Setup-<ver>.exe`) with
-  matching SHA-256 for the self-updater.
+  matching SHA-256 **and a populated `signature`** for the self-updater — the client refuses any
+  manifest whose pinned-key signature is missing/invalid (signing runbook + tooling live in the
+  private `chll-seeding-api` repo). The backend serves the manifest the maintainer finalizes offline;
+  it cannot generate the signature itself.
 - Provider linking/sign-in for **Epic Games** and **Xbox** is stubbed (disabled) in Settings until
   the backend supports those providers and they're added to `ApiValidation.ValidProviders`.
 

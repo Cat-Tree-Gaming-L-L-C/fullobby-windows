@@ -14,7 +14,10 @@ public sealed record UpdateInfo
     /// checksum is refused (the download path treats a missing hash as a hard error).</summary>
     public string? Sha256 { get; init; }
 
-    /// <summary>Optional Ed25519 signature of the manifest for authenticity (defense-in-depth
-    /// beyond SHA-256 + HTTPS). A missing signature only warns; it does not block.</summary>
+    /// <summary>Base64 ECDSA P-256 / SHA-256 signature over the canonical <c>(version, sha256)</c>
+    /// payload (see <see cref="UpdateSignature"/>), produced offline by the release-signing key.
+    /// <b>Mandatory</b>: the updater refuses any update whose signature is missing or does not verify
+    /// against the client's hardbaked public key — this is what defends against a compromised
+    /// update origin, which SHA-256 + HTTPS alone cannot.</summary>
     public string? Signature { get; init; }
 }
