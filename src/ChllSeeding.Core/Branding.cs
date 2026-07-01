@@ -40,6 +40,14 @@ public static class Branding
     /// <see cref="Api.ApiConfig"/>).</summary>
     public const string DefaultApiBaseUrl = "https://seeding.comp-hll.org";
 
+    /// <summary>Default (production) self-update feed base URL — a static, GitHub Pages-hosted origin
+    /// serving the signed <c>latest.json</c> / <c>latest-beta.json</c> manifests. Kept separate from the
+    /// API so updates don't depend on the backend and the signed manifest is served verbatim (the API
+    /// must never be in a position to strip the pinned-key signature). Hardbaked into Release builds; the
+    /// <c>CHLL_SEEDING_UPDATE_FEED_URL</c> override only applies to Debug builds (see
+    /// <see cref="Update.UpdateConfig"/>).</summary>
+    public const string DefaultUpdateFeedBaseUrl = "https://updates.comp-hll.org";
+
     // ── Community / About links ──────────────────────────────────────────────
     // FAQ/Terms/Privacy are served by the seeding API itself, so they live under
     // DefaultApiBaseUrl.

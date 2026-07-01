@@ -6,7 +6,8 @@ using Microsoft.Extensions.Logging;
 namespace ChllSeeding.Core.Update;
 
 /// <summary>
-/// Self-updater: checks the <c>/api/releases/latest</c> manifest, downloads the installer to a
+/// Self-updater: fetches the signed release manifest from the static update feed
+/// (<see cref="UpdateConfig.FeedBaseUrl"/> — GitHub Pages, not the API), downloads the installer to a
 /// temp directory with HTTPS + trusted-domain + size + SHA-256 validation, and launches it.
 /// The security-critical checks live in
 /// <see cref="UpdateValidation"/> (unit-tested); this class owns the network + filesystem I/O.
@@ -40,17 +41,23 @@ public sealed class UpdaterService
         return hosts;
     }
 
+    /// <summary>Static manifest filenames on the update feed, per channel.</summary>
+    private const string StableManifest = "latest.json";
+    private const string BetaManifest = "latest-beta.json";
+
     /// <summary>
     /// Check for an available update on the given channel. <paramref name="channel"/> is the stored
-    /// <c>update_channel</c> config value — "beta" hits the beta feed, anything else the stable feed.
-    /// Returns <c>null</c> when already current. Throws on a network/HTTP failure.
+    /// <c>update_channel</c> config value — "beta" fetches <c>latest-beta.json</c>, anything else
+    /// <c>latest.json</c>, from the static update feed. Returns <c>null</c> when already current.
+    /// Throws on a network/HTTP failure.
     /// </summary>
     public async Task<UpdateInfo?> CheckForUpdatesAsync(
         string currentVersion, string? channel, CancellationToken ct = default)
     {
-        var url = string.Equals(channel, "beta", StringComparison.OrdinalIgnoreCase)
-            ? $"{ApiConfig.BaseUrl}/api/releases/latest?channel=beta"
-            : $"{ApiConfig.BaseUrl}/api/releases/latest";
+        var manifest = string.Equals(channel, "beta", StringComparison.OrdinalIgnoreCase)
+            ? BetaManifest
+            : StableManifest;
+        var url = $"{UpdateConfig.FeedBaseUrl}/{manifest}";
 
         var client = _httpFactory.CreateClient(HttpClientName);
         using var response = await client.GetAsync(url, ct).ConfigureAwait(false);

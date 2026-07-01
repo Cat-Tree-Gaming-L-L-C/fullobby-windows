@@ -115,11 +115,13 @@ hardbaked public key. The maintainer-only runbook + signing scripts live in the 
 `chll-seeding-api` repo** (`docs/RELEASE-SIGNING.md`), kept out of this public repo so the release
 procedure and its attack surface aren't advertised.
 
-### Update-feed contract (backend)
+### Update-feed contract (static feed)
 
-The in-app updater (`Core.Update.UpdaterService`) reads `GET /api/releases/latest`
-(`?channel=beta` for the beta channel). The release workflow emits a manifest in exactly
-that shape as a release asset — `latest.json` (stable) / `latest-beta.json` (prerelease):
+The in-app updater (`Core.Update.UpdaterService`) fetches a static manifest from the update
+feed — `UpdateConfig.FeedBaseUrl`, **`https://updates.comp-hll.org`** (a GitHub Pages site,
+deliberately *not* the API, so the backend is never in a position to strip the signature).
+Stable reads `latest.json`; the beta channel reads `latest-beta.json`. The release workflow
+emits a manifest in exactly this shape as a release asset:
 
 ```json
 {
@@ -131,10 +133,14 @@ that shape as a release asset — `latest.json` (stable) / `latest-beta.json` (p
 }
 ```
 
-CI emits this with `signature: null`; a maintainer fills it in offline before publishing
-(see **Update-feed signing** above). The backend should serve
-the latest stable manifest at `/api/releases/latest` and the latest prerelease at
-`/api/releases/latest?channel=beta`. `download_url` points at the GitHub release asset
-(`github.com`), which is in the updater's trusted-domain allowlist (alongside
-`objects.githubusercontent.com` and the configured API host). A missing `sha256` **or a
+`version` is the **full SemVer** — for a prerelease it's `1.2.4-beta.2`, not `1.2.4` — so the
+beta channel orders correctly (and the signed payload matches). CI emits the manifest with
+`signature: null`; a maintainer fills it in offline and **publishes the signed manifest to the
+Pages feed** (`latest.json` / `latest-beta.json`), see **Update-feed signing** above.
+`download_url` points at the GitHub release asset (`github.com`), which is in the updater's
+trusted-domain allowlist (alongside `objects.githubusercontent.com`). A missing `sha256` **or a
 missing/invalid `signature`** makes the client **refuse** the update.
+
+> Debug builds can point the updater elsewhere with the `CHLL_SEEDING_UPDATE_FEED_URL`
+> environment override (compiled out of Release); handy for testing against a locally-served,
+> locally-signed manifest.

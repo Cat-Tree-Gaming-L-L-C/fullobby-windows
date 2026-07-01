@@ -78,11 +78,14 @@ These depend on the `seeding-api` backend / release infra and can't be verified 
 
 - OAuth redirect target must be `chllseeding://` (auth + provider-link callbacks).
 - API base host `https://seeding.comp-hll.org` (configurable via the `api_host` config key).
-- `releases/latest` must point at the new installer names (`CHLL-Seeding-Setup-<ver>.exe`) with
-  matching SHA-256 **and a populated `signature`** for the self-updater — the client refuses any
-  manifest whose pinned-key signature is missing/invalid (signing runbook + tooling live in the
-  private `chll-seeding-api` repo). The backend serves the manifest the maintainer finalizes offline;
-  it cannot generate the signature itself.
+- **Update feed** is a static GitHub Pages site at `https://updates.comp-hll.org`
+  (`UpdateConfig.FeedBaseUrl`), **not** the API — so the backend is never in a position to strip the
+  pinned-key signature. It serves `latest.json` (stable) / `latest-beta.json` (beta), each with the
+  installer's `download_url` (`CHLL-Seeding-Setup-<ver>.exe`), matching SHA-256, the full-SemVer
+  `version`, **and a populated `signature`**. The client refuses any manifest whose signature is
+  missing/invalid. CI emits the manifest with `signature: null`; the maintainer signs `(version,
+  sha256)` offline and publishes the finalized manifest to the feed (signing runbook + tooling live in
+  the private `chll-seeding-api` repo).
 - Provider linking/sign-in for **Epic Games** and **Xbox** is stubbed (disabled) in Settings until
   the backend supports those providers and they're added to `ApiValidation.ValidProviders`.
 - **Provider-link CSRF is enforced server-side.** `link-init` (auth required) mints a single-use,

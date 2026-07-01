@@ -6,19 +6,21 @@ name: Release
 # GitHub Release with the installer, its checksum, and an update manifest.
 #
 # The manifest (latest.json / latest-beta.json) matches the shape the in-app updater
-# reads from `/api/releases/latest` (UpdaterService): { version, download_url, notes,
-# sha256, signature }. The backend serves these — point the stable feed at latest.json
-# and `?channel=beta` at latest-beta.json. download_url is the GitHub release asset on
-# github.com, which is in the updater's trusted-domain allowlist.
+# reads from the static update feed (UpdaterService → UpdateConfig.FeedBaseUrl,
+# https://updates.comp-hll.org): { version, download_url, notes, sha256, signature }.
+# The feed is a GitHub Pages site — deliberately NOT the API, so the backend is never in a
+# position to strip the pinned-key signature. `version` is the full SemVer (incl. any
+# `-beta.N`) so beta→beta updates order correctly. download_url is the GitHub release asset
+# on github.com, which is in the updater's trusted-domain allowlist.
 #
 # RELEASE SIGNING (`signature`): the in-app updater MANDATES a pinned-key ECDSA P-256
 # signature over (version, sha256). The signing private key is held OFFLINE (air-gapped
 # Pi) and intentionally never reaches CI, so this workflow emits the manifest with
-# `signature: null` plus a `<manifest>.payload.txt` asset (the exact bytes to sign).
-# A maintainer signs it offline and finalizes the manifest using the runbook + scripts in
-# the private chll-seeding-api repo, then replaces the published manifest the backend
-# serves. Until that happens the unsigned manifest is REFUSED by clients — the failure
-# mode is "no auto-update", never "unverified update".
+# `signature: null` plus a `<manifest>.payload.txt` asset (the exact bytes to sign) as
+# release assets. A maintainer signs it offline, finalizes the manifest (runbook + scripts
+# in the private chll-seeding-api repo), and publishes the signed manifest to the Pages feed.
+# Until that happens the (unsigned or not-yet-published) manifest is REFUSED by clients —
+# the failure mode is "no auto-update", never "unverified update".
 
 on:
   push:
@@ -49,16 +51,14 @@ jobs:
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
-          $ver = $tag -replace '^v',''            # 1.2.3  or  1.2.3-beta.1
-          $numeric = $ver.Split('-')[0]           # 1.2.3  (matches the runtime AssemblyVersion)
+          $ver = $tag -replace '^v',''            # 1.2.3  or  1.2.3-beta.1 (full SemVer)
           $pre = if ($ver.Contains('-')) { 'true' } else { 'false' }
           $manifest = if ($pre -eq 'true') { 'latest-beta.json' } else { 'latest.json' }
           "VERSION=$ver"                          >> $env:GITHUB_ENV
-          "APP_VERSION=$numeric"                  >> $env:GITHUB_ENV
           "IS_PRERELEASE=$pre"                    >> $env:GITHUB_ENV
           "MANIFEST_NAME=$manifest"               >> $env:GITHUB_ENV
           "INSTALLER=CHLL-Seeding-Setup-$ver.exe" >> $env:GITHUB_ENV
-          Write-Host "Releasing $tag -> app version $numeric (prerelease: $pre)"
+          Write-Host "Releasing $tag -> version $ver (prerelease: $pre)"
 
       - name: Configure signing
         shell: pwsh
@@ -120,10 +120,11 @@ jobs:
 
           # signature stays null here — the release-signing private key is held OFFLINE and never
           # touches CI. An enforcing client REFUSES a null-signature manifest, so until the operator
-          # signs it offline and finalizes the manifest (runbook + scripts in the private
-          # chll-seeding-api repo) this release simply will not auto-update anyone. Safe failure mode.
+          # signs it offline, finalizes the manifest (runbook + scripts in the private chll-seeding-api
+          # repo), and publishes it to the Pages feed, this release simply will not auto-update anyone.
+          # Safe failure mode. (version is the full SemVer, so the signed payload matches the manifest.)
           $manifest = [ordered]@{
-            version      = $env:APP_VERSION
+            version      = $env:VERSION
             download_url = $download
             notes        = $notes.Trim()
             sha256       = $hash
@@ -135,14 +136,14 @@ jobs:
           # Canonical payload the offline signer must sign — must match UpdateSignature.BuildSignedPayload
           # (LF separators, lowercase sha256, no trailing newline). Emitted as a release asset + job
           # summary so the operator can copy it to the air-gapped Pi.
-          $payload = "chll-seeding-update.v1`nversion=$env:APP_VERSION`nsha256=$hash"
+          $payload = "chll-seeding-update.v1`nversion=$env:VERSION`nsha256=$hash"
           [System.IO.File]::WriteAllText(
             (Join-Path (Get-Location) "dist/$env:MANIFEST_NAME.payload.txt"), $payload)
 
           Write-Host "SHA-256: $hash"
           Get-Content "dist/$env:MANIFEST_NAME"
           "## Release signing payload" | Out-File -Append $env:GITHUB_STEP_SUMMARY
-          "Sign this on the offline Pi — ``sign-release.sh $env:APP_VERSION $hash`` (chll-seeding-api repo):" |
+          "Sign this on the offline Pi — ``sign-release.sh $env:VERSION $hash`` (chll-seeding-api repo):" |
             Out-File -Append $env:GITHUB_STEP_SUMMARY
           '```'    | Out-File -Append $env:GITHUB_STEP_SUMMARY
           $payload | Out-File -Append $env:GITHUB_STEP_SUMMARY
