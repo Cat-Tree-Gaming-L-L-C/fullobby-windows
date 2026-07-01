@@ -342,7 +342,9 @@ public sealed partial class SettingsPage : Page
 
     private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
     {
-        var current = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+        // Use the informational version so a beta build's pre-release suffix (e.g. "-beta.1") is kept —
+        // the numeric AssemblyVersion alone would make the next beta look like a downgrade. See AppVersion.
+        var current = AppVersion.ForUpdateCheck(typeof(App).Assembly);
 
         UpdateSpinner.Visibility = Visibility.Visible;
         CheckUpdatesButton.IsEnabled = false;

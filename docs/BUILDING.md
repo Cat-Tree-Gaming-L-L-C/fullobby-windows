@@ -90,9 +90,16 @@ git push origin v1.2.3-beta.1
 ```
 
 The tag version is injected into the build (`-p:Version`) so the app's runtime version
-matches the release. The numeric `X.Y.Z` (prerelease suffix stripped) is what
-`Assembly.GetName().Version.ToString(3)` reports and what the updater compares against —
-so the manifest's `version` field uses the numeric form.
+matches the release. Two forms are derived from it:
+
+- The **numeric** `X.Y.Z` (prerelease suffix stripped) is the `AssemblyVersion`, which
+  `Assembly.GetName().Version.ToString(3)` reports; it's sent as the `x-client-version`
+  header (the API version-gate parses `X.Y.Z` only).
+- The **full** SemVer including any `-beta.N` suffix is the `AssemblyInformationalVersion`.
+  The self-updater compares on this (via `AppVersion.ForUpdateCheck`), because the manifest's
+  `version` field carries the full tag (`v1.2.4-beta.2` → `1.2.4-beta.2`). Comparing on the
+  numeric core alone would make the next beta look like a downgrade — a bare `1.2.4` outranks
+  `1.2.4-beta.*` by SemVer precedence — so beta→beta updates would never be offered.
 
 **Authenticode code signing** (SmartScreen/publisher trust) is optional and runs only when the
 repo secrets `WINDOWS_CERT_BASE64` (base64 of the `.pfx`) and `WINDOWS_CERT_PASSWORD` are set;
