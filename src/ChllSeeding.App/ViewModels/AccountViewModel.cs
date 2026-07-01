@@ -319,6 +319,12 @@ public sealed partial class AccountViewModel : ObservableObject
     /// and the user record (linking can change account fields).</summary>
     public async Task HandleLinkCallbackAsync(string provider)
     {
+        if (!_oauthState.ConsumePendingLink(provider))
+        {
+            _log.LogWarning("Link callback for {Provider} did not match a pending link — ignoring", provider);
+            return;
+        }
+
         await RefreshLinkedDataAsync().ConfigureAwait(false);
         var wasGuest = IsGuest;
         var upgraded = false;
@@ -479,6 +485,9 @@ public sealed partial class AccountViewModel : ObservableObject
         try
         {
             var resp = await _api.GetLinkRedirectUrlAsync(provider).ConfigureAwait(false);
+            // Mark the link as pending only once we're about to hand off to the browser, so a forged
+            // link-callback the user never initiated is rejected (see HandleLinkCallbackAsync).
+            _oauthState.SetPendingLink(provider);
             OpenBrowser(resp.RedirectUrl, $"{provider} linking");
         }
         catch (Exception e)

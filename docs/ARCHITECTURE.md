@@ -85,6 +85,11 @@ These depend on the `seeding-api` backend / release infra and can't be verified 
   it cannot generate the signature itself.
 - Provider linking/sign-in for **Epic Games** and **Xbox** is stubbed (disabled) in Settings until
   the backend supports those providers and they're added to `ApiValidation.ValidProviders`.
+- **Provider-link CSRF:** the login flow round-trips a client-generated `state` on `auth/callback`,
+  but the link flow's redirect URL is server-signed, so the client can't inject/round-trip a state on
+  `auth/link-callback`. The client currently guards it with a single-use *pending-link* marker
+  (`OAuthStateStore.SetPendingLink`/`ConsumePendingLink`). A stronger cryptographic state check
+  requires the API to accept a client `state` on `link-init` and echo it on the callback.
 
 ## Build & test
 

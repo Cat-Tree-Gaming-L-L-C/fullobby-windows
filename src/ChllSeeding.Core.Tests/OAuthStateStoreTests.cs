@@ -72,6 +72,54 @@ public class OAuthStateStoreTests
         Assert.True(store.Validate(special));
     }
 
+    // ── Pending-link guard (auth/link-callback CSRF) ─────────────────
+
+    [Fact]
+    public void ConsumePendingLink_WithNothingPending_ReturnsFalse()
+    {
+        var store = new OAuthStateStore();
+        Assert.False(store.ConsumePendingLink("steam"));
+    }
+
+    [Fact]
+    public void ConsumePendingLink_MatchingProvider_ReturnsTrue()
+    {
+        var store = new OAuthStateStore();
+        store.SetPendingLink("discord");
+        Assert.True(store.ConsumePendingLink("discord"));
+    }
+
+    [Fact]
+    public void ConsumePendingLink_IsSingleUse()
+    {
+        var store = new OAuthStateStore();
+        store.SetPendingLink("steam");
+        Assert.True(store.ConsumePendingLink("steam"));
+        // A replayed callback after the first consume is rejected.
+        Assert.False(store.ConsumePendingLink("steam"));
+    }
+
+    [Fact]
+    public void ConsumePendingLink_WrongProvider_ConsumesAndRejects()
+    {
+        var store = new OAuthStateStore();
+        store.SetPendingLink("steam");
+        Assert.False(store.ConsumePendingLink("discord"));
+        // The mismatch still consumed the marker.
+        Assert.False(store.ConsumePendingLink("steam"));
+    }
+
+    [Fact]
+    public void PendingLink_And_State_AreIndependent()
+    {
+        var store = new OAuthStateStore();
+        store.Set("login_state");
+        store.SetPendingLink("steam");
+        // Consuming one must not disturb the other.
+        Assert.True(store.ConsumePendingLink("steam"));
+        Assert.True(store.Validate("login_state"));
+    }
+
     [Fact]
     public void GenerateState_Is32HexChars_AndUnique()
     {

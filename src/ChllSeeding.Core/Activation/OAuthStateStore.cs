@@ -6,12 +6,20 @@ namespace ChllSeeding.Core.Activation;
 /// Holds the single OAuth <c>state</c> parameter used for CSRF protection across the
 /// browser round-trip. Stored when initiating OAuth and validated (single-use) on the
 /// <c>chllseeding://auth/callback</c> deep link.
+///
+/// Provider linking uses a server-signed redirect URL whose parameters we cannot control, so the
+/// login flow's round-tripped <c>state</c> is not available there (a cryptographic state check on
+/// link is a cross-repo item — see docs/ARCHITECTURE.md). Instead this also tracks a single-use
+/// "pending link" marker set when the client initiates a link and consumed on the
+/// <c>chllseeding://auth/link-callback</c> deep link, so a forged callback the client never
+/// initiated is ignored.
 /// Thread-safe; registered as a DI singleton.
 /// </summary>
 public sealed class OAuthStateStore
 {
     private readonly object _gate = new();
     private string? _state;
+    private string? _pendingLinkProvider;
 
     /// <summary>Store the state before redirecting to the provider (overwrites any prior value).</summary>
     public void Set(string state)
@@ -34,6 +42,29 @@ public sealed class OAuthStateStore
             var stored = _state;
             _state = null;
             return stored is not null && stored == state;
+        }
+    }
+
+    /// <summary>Record that a provider link was initiated, before opening the browser (overwrites any
+    /// prior pending link — only the most recent link flow can complete).</summary>
+    public void SetPendingLink(string provider)
+    {
+        lock (_gate)
+        {
+            _pendingLinkProvider = provider;
+        }
+    }
+
+    /// <summary>Validate and consume the pending link. Returns <c>true</c> only when a link for
+    /// <paramref name="provider"/> was initiated by this client. Always consumes the marker
+    /// (single-use), so a replayed or forged link callback returns <c>false</c>.</summary>
+    public bool ConsumePendingLink(string provider)
+    {
+        lock (_gate)
+        {
+            var pending = _pendingLinkProvider;
+            _pendingLinkProvider = null;
+            return pending is not null && pending == provider;
         }
     }
 
