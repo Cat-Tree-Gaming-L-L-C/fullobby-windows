@@ -35,9 +35,22 @@ concerns to the contact below.
 What the client itself is responsible for:
 
 - **Credential storage at rest.** Auth tokens and API keys are encrypted with
-  Windows DPAPI, scoped to the current Windows user account, and stored in
+  Windows DPAPI, scoped to the current Windows user account and mixed with an
+  app-specific entropy value, and stored in
   `%APPDATA%\org.comphll.chllseeding\config.json`. No other user on the machine can
-  decrypt them.
+  decrypt them, and the entropy binds the ciphertext to this application so another
+  process running as the same user cannot decrypt our secrets by replaying the blob to
+  DPAPI. The entropy ships in the binary — it is a domain separator, not a secret key,
+  so it does not defend against a same-user attacker who reads it out of the executable
+  (that attacker is out of scope; see below).
+  - **Plaintext fallback.** If a DPAPI *encrypt* call fails (a rare, typically
+    transient crypto error), the token is written to `config.json` as plaintext rather
+    than dropped, and a warning is logged. This trades confidentiality for availability
+    so a momentary crypto failure never signs the user out or loses their credential;
+    the value is re-encrypted on the next successful save. The file is still protected
+    by the current-user config-directory ACLs, so exposure is limited to the same
+    Windows account (already out of scope). Decryption failures likewise fall back to
+    treating the stored value as plaintext, never throwing.
 - **Config directory ACLs.** On startup the app strips inherited ACEs from its
   config directory and grants access only to the current user.
 - **Atomic writes.** Config and game-settings files are written temp-then-rename to
