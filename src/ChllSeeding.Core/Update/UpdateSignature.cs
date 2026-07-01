@@ -31,10 +31,11 @@ public static class UpdateSignature
     /// then retire the old one in a later release. A signature is accepted if <em>any</em> listed key
     /// validates it.</para>
     ///
-    /// <para><b>Placeholder until the real key is generated on the offline signing device.</b> While
-    /// every entry is a placeholder, verification fails closed — updates are refused rather than
-    /// accepted unverified. The maintainer-only key-generation/signing runbook lives in the private
-    /// <c>chll-seeding-api</c> repo (<c>docs/RELEASE-SIGNING.md</c>).</para>
+    /// <para>The production P-256 key below is real (private half held offline on the air-gapped
+    /// signing device). If every entry were ever a placeholder/malformed, verification would still
+    /// fail closed — updates are refused rather than accepted unverified. The maintainer-only
+    /// key-generation/signing runbook lives in the private <c>chll-seeding-api</c> repo
+    /// (<c>docs/RELEASE-SIGNING.md</c>).</para>
     /// </summary>
     private static readonly string[] TrustedSigningKeysBase64 =
     {

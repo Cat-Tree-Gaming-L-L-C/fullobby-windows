@@ -46,11 +46,16 @@ public static class UpdateValidation
             _ => $"Refusing to launch installer with unexpected extension: '{extension}'",
         };
 
-    /// <summary>Strip path separators and parent-directory references from a download filename,
-    /// falling back to a safe default when nothing usable remains.</summary>
+    /// <summary>Strip every OS-invalid filename character (path separators, <c>:</c>, wildcards,
+    /// control chars) and parent-directory references from a download filename, falling back to a
+    /// safe default when nothing usable remains. Stripping <c>:</c> matters on Windows: a name like
+    /// <c>c:evil.exe</c> is drive-relative, so <see cref="System.IO.Path.Combine(string, string)"/>
+    /// would treat it as rooted and escape the intended temp directory.</summary>
     public static string SanitizeInstallerFilename(string rawName)
     {
-        var sanitized = rawName.Replace("/", "").Replace("\\", "").Replace("..", "");
+        var invalid = Path.GetInvalidFileNameChars();
+        var stripped = new string(rawName.Where(c => Array.IndexOf(invalid, c) < 0).ToArray());
+        var sanitized = stripped.Replace("..", "");
         return sanitized.Length == 0 ? FallbackInstallerName : sanitized;
     }
 

@@ -246,7 +246,15 @@ public sealed class ConfigService
                     var val = el.GetString()!;
                     if (val.Length > 0 && !DpapiProtector.IsEncrypted(val))
                     {
-                        _config[key] = JsonSerializer.SerializeToElement(DpapiProtector.Encrypt(val));
+                        // MaybeEncrypt (not Encrypt): a transient DPAPI failure must not throw out
+                        // of the constructor and crash startup — it falls back to leaving the value
+                        // as-is, same as the normal save path.
+                        var encrypted = DpapiProtector.MaybeEncrypt(key, val);
+                        if (encrypted == val)
+                        {
+                            continue; // DPAPI unavailable — leave it for a later save attempt
+                        }
+                        _config[key] = JsonSerializer.SerializeToElement(encrypted);
                         changed = true;
                         _log.LogInformation("Re-encrypted plaintext config value for key '{Key}'", key);
                     }

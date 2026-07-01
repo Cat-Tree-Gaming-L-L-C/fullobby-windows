@@ -47,6 +47,12 @@ public class UpdateValidationTests
         Assert.Equal("setup.exe", UpdateValidation.SanitizeInstallerFilename(@"..\..\setup.exe"));
 
     [Fact]
+    public void Sanitize_StripsColon_DriveRelativeEscape() =>
+        // `c:evil.exe` is drive-relative on Windows; Path.Combine would treat it as rooted and
+        // escape the temp dir. The colon must be stripped.
+        Assert.Equal("cevil.exe", UpdateValidation.SanitizeInstallerFilename("c:evil.exe"));
+
+    [Fact]
     public void Sanitize_DotsAndSlashesOnly_FallsBack() =>
         Assert.Equal("chll-seeding-update.exe", UpdateValidation.SanitizeInstallerFilename("../\\"));
 
