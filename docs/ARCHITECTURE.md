@@ -85,11 +85,14 @@ These depend on the `seeding-api` backend / release infra and can't be verified 
   it cannot generate the signature itself.
 - Provider linking/sign-in for **Epic Games** and **Xbox** is stubbed (disabled) in Settings until
   the backend supports those providers and they're added to `ApiValidation.ValidProviders`.
-- **Provider-link CSRF:** the login flow round-trips a client-generated `state` on `auth/callback`,
-  but the link flow's redirect URL is server-signed, so the client can't inject/round-trip a state on
-  `auth/link-callback`. The client currently guards it with a single-use *pending-link* marker
-  (`OAuthStateStore.SetPendingLink`/`ConsumePendingLink`). A stronger cryptographic state check
-  requires the API to accept a client `state` on `link-init` and echo it on the callback.
+- **Provider-link CSRF is enforced server-side.** `link-init` (auth required) mints a single-use,
+  HMAC-signed, user-bound link `state` (`link:{user_id}:{ts}:{sig}`, 2-min expiry) that the OAuth
+  callback validates and *atomically consumes* — so the linking itself cannot be forged or replayed.
+  Unlike `auth/callback`, the `auth/link-callback` deep link carries no token or state (only
+  `provider`/`provider_id`/`linked=true`): the sensitive action already happened server-side, leaving
+  the client nothing to authorize. The client adds a single-use *pending-link* marker
+  (`OAuthStateStore.SetPendingLink`/`ConsumePendingLink`) as defense-in-depth so a forged deep link it
+  never initiated is ignored. No client-side cryptographic round-trip is needed.
 
 ## Build & test
 

@@ -7,12 +7,13 @@ namespace ChllSeeding.Core.Activation;
 /// browser round-trip. Stored when initiating OAuth and validated (single-use) on the
 /// <c>chllseeding://auth/callback</c> deep link.
 ///
-/// Provider linking uses a server-signed redirect URL whose parameters we cannot control, so the
-/// login flow's round-tripped <c>state</c> is not available there (a cryptographic state check on
-/// link is a cross-repo item — see docs/ARCHITECTURE.md). Instead this also tracks a single-use
-/// "pending link" marker set when the client initiates a link and consumed on the
-/// <c>chllseeding://auth/link-callback</c> deep link, so a forged callback the client never
-/// initiated is ignored.
+/// Provider linking is CSRF-protected server-side (link-init mints a single-use, HMAC-signed,
+/// user-bound state that the OAuth callback atomically consumes), and unlike the login callback the
+/// <c>auth/link-callback</c> deep link carries no token or state — the sensitive action already
+/// happened server-side. This tracks a single-use "pending link" marker, set when the client
+/// initiates a link and consumed on the <c>chllseeding://auth/link-callback</c> deep link, purely as
+/// client-side defense-in-depth so a forged callback the client never initiated is ignored (see
+/// docs/ARCHITECTURE.md).
 /// Thread-safe; registered as a DI singleton.
 /// </summary>
 public sealed class OAuthStateStore
