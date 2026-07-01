@@ -78,7 +78,34 @@ public class AtomicFileTests
             AtomicFile.WriteAllBytes(target, "{\"key\": \"value\"}"u8.ToArray());
 
             Assert.Equal("{\"key\": \"value\"}", File.ReadAllText(target));
-            Assert.False(File.Exists(Path.Combine(dir, $"config.json.tmp_{Environment.ProcessId}")));
+            // No temp file is left behind after a successful write.
+            Assert.Empty(Directory.GetFiles(dir, "*.tmp"));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ConcurrentWrites_ToDistinctTargetsInSameDir_AllSucceed()
+    {
+        // A process-id-only temp name collided across concurrent writes in one directory; the
+        // per-write GUID keeps them independent so no save is dropped.
+        var dir = Path.Combine(Path.GetTempPath(), "chll_test_write_safe_conc_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            Parallel.For(0, 32, i =>
+                AtomicFile.WriteAllBytes(
+                    Path.Combine(dir, $"file{i}.json"),
+                    System.Text.Encoding.UTF8.GetBytes($"content-{i}")));
+
+            for (var i = 0; i < 32; i++)
+            {
+                Assert.Equal($"content-{i}", File.ReadAllText(Path.Combine(dir, $"file{i}.json")));
+            }
+            Assert.Empty(Directory.GetFiles(dir, "*.tmp"));
         }
         finally
         {
