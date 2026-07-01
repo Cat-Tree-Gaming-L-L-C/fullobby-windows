@@ -157,10 +157,30 @@ public class UpdateValidationTests
     // ── IsUpdateAvailable ───────────────────────────────────────────
 
     [Theory]
-    [InlineData("1.0.0", "1.0.1", true)]   // newer
-    [InlineData("1.0.0", "0.9.0", true)]   // server decides ordering — any difference is "available"
-    [InlineData("1.0.0", "1.0.0", false)]  // same
-    [InlineData("1.0.0", "", false)]       // empty latest → no update
+    [InlineData("1.0.0", "1.0.1", true)]    // newer patch
+    [InlineData("1.0.0", "1.1.0", true)]    // newer minor
+    [InlineData("1.0.0", "2.0.0", true)]    // newer major
+    [InlineData("1.0.0", "0.9.0", false)]   // anti-rollback: older is NOT offered
+    [InlineData("1.2.3", "1.2.2", false)]   // anti-rollback: older patch
+    [InlineData("2.0.0", "1.9.9", false)]   // anti-rollback: older major
+    [InlineData("1.0.0", "1.0.0", false)]   // same
+    [InlineData("1.0.0", "", false)]        // empty latest → no update
+    [InlineData("", "1.0.0", false)]        // unparseable current fails closed
+    [InlineData("1.0.0", "garbage", false)] // unparseable latest fails closed
+    [InlineData("1.0.0", "1.0", false)]     // non-3-part core fails closed
+    [InlineData("v1.0.0", "v1.0.1", true)]  // leading 'v' tolerated
     public void IsUpdateAvailable_Cases(string current, string latest, bool expected) =>
+        Assert.Equal(expected, UpdateValidation.IsUpdateAvailable(current, latest));
+
+    [Theory]
+    // Pre-release precedence (semver.org §11): pre-release < release; identifiers ordered left-to-right.
+    [InlineData("1.0.0-beta.1", "1.0.0", true)]        // release supersedes its pre-release
+    [InlineData("1.0.0", "1.0.0-beta.1", false)]       // pre-release does NOT supersede release
+    [InlineData("1.0.0-beta.1", "1.0.0-beta.2", true)] // later pre-release number
+    [InlineData("1.0.0-alpha", "1.0.0-beta", true)]    // alpha < beta lexically
+    [InlineData("1.0.0-beta.2", "1.0.0-beta.1", false)]// earlier pre-release is a rollback
+    [InlineData("1.0.0-1", "1.0.0-alpha", true)]       // numeric identifier < alphanumeric
+    [InlineData("1.0.0-beta", "1.0.0-beta.1", true)]   // more identifiers on common prefix wins
+    public void IsUpdateAvailable_PreRelease(string current, string latest, bool expected) =>
         Assert.Equal(expected, UpdateValidation.IsUpdateAvailable(current, latest));
 }

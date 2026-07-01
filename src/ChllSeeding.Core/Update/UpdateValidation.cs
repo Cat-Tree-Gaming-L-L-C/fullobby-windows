@@ -78,8 +78,119 @@ public static class UpdateValidation
             ? $"Download too large: {length} bytes (max {MaxInstallerSize})"
             : null;
 
-    /// <summary>An update is available when the latest version is non-empty and differs from the
-    /// current one (string inequality — the server decides ordering).</summary>
-    public static bool IsUpdateAvailable(string currentVersion, string latestVersion) =>
-        latestVersion.Length > 0 && latestVersion != currentVersion;
+    /// <summary>An update is available only when <paramref name="latestVersion"/> is a valid semver
+    /// that is <em>strictly greater</em> than <paramref name="currentVersion"/>. This is an
+    /// anti-rollback guard: signatures authenticate that a release is genuine, but a controlled or
+    /// replayed manifest feed could still serve a real, older, signed release to force a downgrade to a
+    /// known-vulnerable build. Requiring strictly-newer ordering (rather than mere inequality) closes
+    /// that. Unparseable versions fail closed — no update is offered — so a malformed feed can never
+    /// trigger an install.</summary>
+    public static bool IsUpdateAvailable(string currentVersion, string latestVersion)
+    {
+        if (!TryParseSemVer(latestVersion, out var latest) ||
+            !TryParseSemVer(currentVersion, out var current))
+        {
+            return false;
+        }
+        return CompareSemVer(latest, current) > 0;
+    }
+
+    /// <summary>A parsed semantic version: numeric core plus optional dot-separated pre-release
+    /// identifiers. Build metadata (<c>+…</c>) is ignored — it does not affect precedence.</summary>
+    private readonly record struct SemVer(int Major, int Minor, int Patch, string[] PreRelease);
+
+    /// <summary>Parse a <c>MAJOR.MINOR.PATCH[-prerelease][+build]</c> string (a leading <c>v</c> is
+    /// tolerated). Returns <c>false</c> for anything that is not a well-formed semver core.</summary>
+    private static bool TryParseSemVer(string value, out SemVer semver)
+    {
+        semver = default;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var text = value.Trim();
+        if (text.StartsWith('v') || text.StartsWith('V'))
+        {
+            text = text[1..];
+        }
+
+        // Strip build metadata; it is not part of precedence.
+        var plus = text.IndexOf('+');
+        if (plus >= 0)
+        {
+            text = text[..plus];
+        }
+
+        string[] pre = [];
+        var dash = text.IndexOf('-');
+        if (dash >= 0)
+        {
+            var preText = text[(dash + 1)..];
+            text = text[..dash];
+            if (preText.Length == 0)
+            {
+                return false; // trailing '-' with no identifiers
+            }
+            pre = preText.Split('.');
+            if (Array.Exists(pre, p => p.Length == 0))
+            {
+                return false; // empty identifier, e.g. "1.0.0-beta..1"
+            }
+        }
+
+        var core = text.Split('.');
+        if (core.Length != 3)
+        {
+            return false;
+        }
+        if (!int.TryParse(core[0], out var major) || major < 0 ||
+            !int.TryParse(core[1], out var minor) || minor < 0 ||
+            !int.TryParse(core[2], out var patch) || patch < 0)
+        {
+            return false;
+        }
+
+        semver = new SemVer(major, minor, patch, pre);
+        return true;
+    }
+
+    /// <summary>Compare two semvers by precedence (semver.org §11): numeric core first, then a version
+    /// <em>with</em> a pre-release ranks below the same core <em>without</em> one, then pre-release
+    /// identifiers left-to-right (numeric &lt; alphanumeric; more identifiers wins on a common prefix).
+    /// Returns &lt;0, 0, or &gt;0.</summary>
+    private static int CompareSemVer(SemVer a, SemVer b)
+    {
+        var core = a.Major.CompareTo(b.Major);
+        if (core != 0) return core;
+        core = a.Minor.CompareTo(b.Minor);
+        if (core != 0) return core;
+        core = a.Patch.CompareTo(b.Patch);
+        if (core != 0) return core;
+
+        // A pre-release version has lower precedence than the associated normal release.
+        if (a.PreRelease.Length == 0 && b.PreRelease.Length == 0) return 0;
+        if (a.PreRelease.Length == 0) return 1;
+        if (b.PreRelease.Length == 0) return -1;
+
+        var shared = Math.Min(a.PreRelease.Length, b.PreRelease.Length);
+        for (var i = 0; i < shared; i++)
+        {
+            var cmp = ComparePreReleaseIdentifier(a.PreRelease[i], b.PreRelease[i]);
+            if (cmp != 0) return cmp;
+        }
+        return a.PreRelease.Length.CompareTo(b.PreRelease.Length);
+    }
+
+    /// <summary>Compare one pre-release identifier: all-numeric identifiers compare numerically and
+    /// rank below alphanumeric ones; otherwise ASCII lexical order.</summary>
+    private static int ComparePreReleaseIdentifier(string a, string b)
+    {
+        var aNum = int.TryParse(a, out var an);
+        var bNum = int.TryParse(b, out var bn);
+        if (aNum && bNum) return an.CompareTo(bn);
+        if (aNum) return -1; // numeric identifiers have lower precedence than alphanumeric
+        if (bNum) return 1;
+        return string.CompareOrdinal(a, b);
+    }
 }
