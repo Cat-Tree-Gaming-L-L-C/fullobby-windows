@@ -76,6 +76,34 @@ public class DpapiProtectorTests
     }
 
     [Fact]
+    public void Encrypt_BindsAppEntropy_NullEntropyCannotDecrypt()
+    {
+        // Prove app-specific entropy is actually applied: a same-user process that hands our blob
+        // straight to DPAPI without the entropy (the null-entropy case) must fail to decrypt.
+        var encrypted = DpapiProtector.Encrypt("bound_to_this_app");
+        var ciphertext = Convert.FromBase64String(encrypted["dpapi:".Length..]);
+        Assert.ThrowsAny<System.Security.Cryptography.CryptographicException>(() =>
+            System.Security.Cryptography.ProtectedData.Unprotect(
+                ciphertext,
+                optionalEntropy: null,
+                System.Security.Cryptography.DataProtectionScope.CurrentUser));
+    }
+
+    [Fact]
+    public void Decrypt_LegacyNullEntropyBlob_StillDecrypts()
+    {
+        // A blob written before entropy was introduced (null entropy) must still decrypt so a
+        // pre-release upgrade doesn't lose the stored token.
+        const string original = "legacy_token_value";
+        var legacy = "dpapi:" + Convert.ToBase64String(
+            System.Security.Cryptography.ProtectedData.Protect(
+                System.Text.Encoding.UTF8.GetBytes(original),
+                optionalEntropy: null,
+                System.Security.Cryptography.DataProtectionScope.CurrentUser));
+        Assert.Equal(original, DpapiProtector.Decrypt(legacy));
+    }
+
+    [Fact]
     public void Decrypt_MalformedBase64_Throws()
     {
         Assert.ThrowsAny<Exception>(() => DpapiProtector.Decrypt("dpapi:not-valid-base64!!!"));

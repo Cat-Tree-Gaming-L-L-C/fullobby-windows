@@ -17,19 +17,31 @@ public static class DpapiProtector
     private const string EncryptedPrefix = "dpapi:";
 
     /// <summary>
-    /// Encrypt a plaintext string with DPAPI (current-user scope).
+    /// App-specific secondary entropy mixed into every DPAPI operation. DPAPI's current-user scope
+    /// already stops other users decrypting the blob; this additionally binds the ciphertext to this
+    /// application, so another process running as the same user cannot decrypt our tokens by simply
+    /// handing the blob back to <c>CryptUnprotectData</c>. It is not a secret key (it ships in the
+    /// binary) — it is a domain separator, exactly the use DPAPI's optionalEntropy is designed for.
+    /// </summary>
+    private static readonly byte[] AppEntropy =
+        Encoding.UTF8.GetBytes("org.comphll.chllseeding/dpapi/v1");
+
+    /// <summary>
+    /// Encrypt a plaintext string with DPAPI (current-user scope) plus app-specific entropy.
     /// Returns a base64 ciphertext prefixed with <c>dpapi:</c>.
     /// </summary>
     public static string Encrypt(string plaintext)
     {
         var bytes = Encoding.UTF8.GetBytes(plaintext);
-        var encrypted = ProtectedData.Protect(bytes, optionalEntropy: null, DataProtectionScope.CurrentUser);
+        var encrypted = ProtectedData.Protect(bytes, AppEntropy, DataProtectionScope.CurrentUser);
         return EncryptedPrefix + Convert.ToBase64String(encrypted);
     }
 
     /// <summary>
     /// Decrypt a DPAPI value. A value without the <c>dpapi:</c> prefix is returned
     /// as-is (plaintext passthrough for migration from pre-encryption versions).
+    /// Blobs written before app-specific entropy was introduced (null entropy) are still accepted as a
+    /// fallback; they get re-encrypted with entropy on the next save.
     /// Throws <see cref="CryptographicException"/> or <see cref="FormatException"/> on failure.
     /// </summary>
     public static string Decrypt(string value)
@@ -40,7 +52,17 @@ public static class DpapiProtector
         }
 
         var ciphertext = Convert.FromBase64String(value[EncryptedPrefix.Length..]);
-        var decrypted = ProtectedData.Unprotect(ciphertext, optionalEntropy: null, DataProtectionScope.CurrentUser);
+        byte[] decrypted;
+        try
+        {
+            decrypted = ProtectedData.Unprotect(ciphertext, AppEntropy, DataProtectionScope.CurrentUser);
+        }
+        catch (CryptographicException)
+        {
+            // Legacy blob written with null entropy — decrypt so we don't lose the token; the next
+            // save re-encrypts it with AppEntropy. Any failure here propagates as before.
+            decrypted = ProtectedData.Unprotect(ciphertext, optionalEntropy: null, DataProtectionScope.CurrentUser);
+        }
         return Encoding.UTF8.GetString(decrypted);
     }
 
