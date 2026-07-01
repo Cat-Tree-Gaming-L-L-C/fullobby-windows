@@ -138,12 +138,16 @@ docs/ARCHITECTURE.md      Architecture reference
 
 ## Contributing
 
-Contributions are welcome! Please open an issue to discuss your idea before submitting a PR.
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for setup,
+conventions, and the PR checklist. In short:
 
-1. Fork the repo and create a feature branch
-2. Make your changes
-3. Run `dotnet build src/ChllSeeding.sln` and `dotnet test src/ChllSeeding.Core.Tests`
-4. Submit a pull request
+1. Open an issue to discuss anything non-trivial before submitting a PR
+2. Fork the repo and create a feature branch off `main`
+3. Make your changes
+4. Run `dotnet build src/ChllSeeding.sln -c Release` and `dotnet test src/ChllSeeding.Core.Tests`
+5. Submit a pull request
+
+Found a security issue? Please report it privately per [SECURITY.md](SECURITY.md) — don't open a public issue.
 
 ## Contact
 
@@ -151,4 +155,5 @@ For questions, feedback, or support: [GitHub Issues](https://github.com/Cat-Tree
 
 ## License
 
-[AGPL-3.0](LICENSE)
+Copyright (C) 2026 Cat Tree Gaming L.L.C. Licensed under [AGPL-3.0](LICENSE); see
+[NOTICE](NOTICE) for third-party components.
