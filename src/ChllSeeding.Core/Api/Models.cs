@@ -229,7 +229,6 @@ public sealed record SessionStartAnalytics(
     string OsVersion,
     string OsArch,
     bool EfficiencyMode,
-    bool EuEnabled,
     bool AutoSeed);
 
 /// <summary>Admin-editable seeding timing config served by the API (embedded in each directive

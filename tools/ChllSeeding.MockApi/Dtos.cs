@@ -40,7 +40,7 @@ public record SeedingDirective(
 
 public record StartSessionRequest(
     string Game, int Index, string? SteamId,
-    string? OsVersion, string? OsArch, bool? EfficiencyMode, bool? EuEnabled, bool? AutoSeed);
+    string? OsVersion, string? OsArch, bool? EfficiencyMode, bool? AutoSeed);
 public record StartSessionResponse(string SessionId);
 
 public record HeartbeatRequest(string SessionId);

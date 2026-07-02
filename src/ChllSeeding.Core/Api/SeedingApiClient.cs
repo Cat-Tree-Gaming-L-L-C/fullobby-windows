@@ -69,7 +69,6 @@ public sealed class SeedingApiClient(HttpClient http)
             body["os_version"] = analytics.OsVersion;
             body["os_arch"] = analytics.OsArch;
             body["efficiency_mode"] = analytics.EfficiencyMode;
-            body["eu_enabled"] = analytics.EuEnabled;
             body["auto_seed"] = analytics.AutoSeed;
         }
         return SendAsync<StartSessionResponse>(HttpMethod.Post, "/api/seeding/start-session", body, ct);

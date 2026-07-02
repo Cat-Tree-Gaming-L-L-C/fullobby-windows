@@ -27,7 +27,6 @@ public class AnalyticsTests : IDisposable
     {
         var a = Analytics.Gather(_config, autoSeed: false);
         Assert.False(a.EfficiencyMode);
-        Assert.False(a.EuEnabled);
         Assert.False(a.AutoSeed);
     }
 
@@ -35,11 +34,9 @@ public class AnalyticsTests : IDisposable
     public void ReadsFlagsFromConfig()
     {
         _config.SetString("efficiency_mode", "true");
-        _config.SetString("eu_enabled", "true");
 
         var a = Analytics.Gather(_config, autoSeed: true);
         Assert.True(a.EfficiencyMode);
-        Assert.True(a.EuEnabled);
         Assert.True(a.AutoSeed);
     }
 

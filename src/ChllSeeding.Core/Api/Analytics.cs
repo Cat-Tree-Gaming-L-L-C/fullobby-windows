@@ -5,8 +5,7 @@ namespace ChllSeeding.Core.Api;
 
 /// <summary>
 /// Gathers the non-PII analytics snapshot sent with a seeding session start.
-/// Reads the efficiency-mode and EU-enabled toggles from config and the OS facts from
-/// <see cref="OsInfo"/>. (The EU-enabled toggle is sent as the <c>eu_enabled</c> wire field.)
+/// Reads the efficiency-mode toggle from config and the OS facts from <see cref="OsInfo"/>.
 /// </summary>
 public static class Analytics
 {
@@ -14,6 +13,5 @@ public static class Analytics
         OsVersion: OsInfo.OsVersion,
         OsArch: OsInfo.OsArch,
         EfficiencyMode: config.GetBool("efficiency_mode"),
-        EuEnabled: config.GetBool("eu_enabled"),
         AutoSeed: autoSeed);
 }

@@ -1,6 +1,6 @@
 # Privacy Policy — CHLL Seeding
 
-Last updated: 2026-06-07
+Last updated: 2026-07-01
 
 ## Overview
 
@@ -23,7 +23,6 @@ CHLL Seeding collects minimal, non-personally-identifiable analytics to improve 
 | `os_version` | `10.0.22631` | Understand OS distribution; prioritize compatibility work |
 | `os_arch` | `x86_64` | Know which architectures to support and test |
 | `efficiency_mode` | `true/false` | Measure adoption of the efficiency mode feature |
-| `eu_enabled` | `true/false` | Understand cross-region seeding participation |
 | `auto_seed` | `true/false` | Measure adoption of scheduled auto-seed |
 
 ### Session Lifecycle Data
@@ -56,7 +55,7 @@ This helps us understand server rotation patterns and improve the candidate sele
 
 1. **Leaderboard** — session duration and verified time power the public seeding leaderboard. Opted-out users are excluded.
 2. **Version adoption** — client version data tells us when it's safe to deprecate old versions and whether forced-update thresholds are reasonable.
-3. **Feature prioritization** — feature flags (efficiency mode, EU servers, auto-seed) help us understand which features are actually used so we can focus development effort.
+3. **Feature prioritization** — feature flags (efficiency mode, auto-seed) help us understand which features are actually used so we can focus development effort.
 4. **OS compatibility** — OS version and architecture data inform which platforms to test and support.
 5. **Session health** — end reasons and rotation patterns help us identify and fix issues in the seeding flow (e.g., if sessions are ending in errors disproportionately).
 
@@ -77,4 +76,5 @@ Analytics data is only accessible to Comp HLL administrators for the purposes de
 
 ## Contact
 
-Questions about this policy can be directed to the Comp HLL community Discord.
+Questions about this policy can be directed to the Comp HLL community Discord, or by
+email at privacy@comp-hll.org.
