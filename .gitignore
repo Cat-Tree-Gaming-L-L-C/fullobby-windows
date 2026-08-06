@@ -1,0 +1,19 @@
+node_modules/
+dist/
+target/
+.env
+.env.local
+*.log
+.claude/
+
+# Obsidian (repo opened as a vault for doc viewing)
+.obsidian/
+
+# .NET / WinUI 3
+bin/
+obj/
+*.user
+.vs/
+artifacts/
+installer/Output/
+msbuild.binlog

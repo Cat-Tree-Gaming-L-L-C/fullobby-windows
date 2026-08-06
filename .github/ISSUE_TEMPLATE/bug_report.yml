@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a problem with the Fullobby client
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug!
+
+        **Do not report security vulnerabilities here.** For anything
+        exploitable, follow [SECURITY.md](https://github.com/Cat-Tree-Gaming-L-L-C/fullobby-windows/blob/main/SECURITY.md)
+        to report privately instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including what you expected to happen.
+      placeholder: When I click Seed, the app…
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce it?
+      placeholder: |
+        1. Open the app
+        2. Click …
+        3. See error
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+      description: Shown on the About page (e.g. 0.1.0).
+    validations:
+      required: true
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows version
+      description: e.g. Windows 11 23H2 (build 22631).
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: >
+        Paste any relevant log lines. Logs live in
+        `%LOCALAPPDATA%\Fullobby\logs` (or use the Tools tab → View Logs).
+        Redact tokens/API keys before pasting.
+      render: text
+    validations:
+      required: false

@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Fullobby.App.Views.OnboardingView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:Fullobby.App.ViewModels">
+
+    <!-- Opaque full-bleed overlay so the app behind it is hidden during first-run. -->
+    <Grid Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel
+                Spacing="14"
+                Padding="32,28"
+                MaxWidth="360"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center">
+
+                <!-- Step indicator -->
+                <TextBlock
+                    x:Name="StepLabel"
+                    HorizontalAlignment="Center"
+                    FontSize="12"
+                    Opacity="0.6" />
+
+                <!-- Step 0: Sign in -->
+                <StackPanel x:Name="StepSignIn" Spacing="10">
+                    <Image Source="ms-appx:///Assets/logo_no_text.png" Width="56" Height="56" HorizontalAlignment="Center" />
+                    <TextBlock Text="Welcome to Fullobby" Style="{StaticResource SubtitleTextBlockStyle}" HorizontalAlignment="Center" TextAlignment="Center" />
+                    <TextBlock
+                        Text="Sign in to track your seeding contributions, or continue as a guest."
+                        Opacity="0.7" TextWrapping="Wrap" TextAlignment="Center" />
+
+                    <Button Content="Sign in with Steam" Style="{StaticResource AccentButtonStyle}"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Command="{x:Bind Account.LoginCommand}" CommandParameter="steam" />
+                    <Button Content="Sign in with Discord"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Command="{x:Bind Account.LoginCommand}" CommandParameter="discord" />
+
+                    <!-- Not live yet: exposed but disabled. To turn one on, drop its
+                         IsEnabled="False" here and add the provider key to
+                         ApiValidation.ValidProviders. -->
+                    <Button Content="Sign in with Epic Games" IsEnabled="False"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Command="{x:Bind Account.LoginCommand}" CommandParameter="epic" />
+                    <Button Content="Sign in with Xbox" IsEnabled="False"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Command="{x:Bind Account.LoginCommand}" CommandParameter="microsoft" />
+                    <TextBlock Text="Epic Games and Xbox sign-in are coming soon."
+                               FontSize="11" Opacity="0.5" TextWrapping="Wrap"
+                               TextAlignment="Center" HorizontalAlignment="Center" />
+
+                    <TextBlock Text="or" HorizontalAlignment="Center" Opacity="0.5" FontSize="12" />
+
+                    <Button Content="Continue as Guest"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Command="{x:Bind Account.RegisterGuestCommand}" />
+                </StackPanel>
+
+                <!-- Step 1: Join a seeding network (limited-beta hard gate) -->
+                <StackPanel x:Name="StepNetwork" Spacing="10" Visibility="Collapsed">
+                    <TextBlock Text="Join a Seeding Network" Style="{StaticResource SubtitleTextBlockStyle}" HorizontalAlignment="Center" TextAlignment="Center" />
+                    <TextBlock
+                        Text="Fullobby is in limited beta: seeding runs inside community networks. Enter the network name and join code you received from a participating network."
+                        Opacity="0.7" TextWrapping="Wrap" TextAlignment="Center" />
+
+                    <TextBox x:Name="NetworkTagBox" PlaceholderText="Network name" MaxLength="64" />
+                    <PasswordBox x:Name="NetworkCodeBox" PlaceholderText="Join code" MaxLength="128" />
+                    <Button x:Name="NetworkJoinButton" Content="Join"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Click="JoinNetwork_Click" />
+                    <TextBlock x:Name="NetworkJoinError"
+                               Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                               FontSize="12" TextWrapping="Wrap" TextAlignment="Center"
+                               Visibility="Collapsed" />
+
+                    <!-- Joined networks -->
+                    <TextBlock x:Name="NetworkListHeader" Text="Your networks"
+                               FontSize="12" Opacity="0.6" Visibility="Collapsed" />
+                    <ItemsControl ItemsSource="{x:Bind Account.Networks}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:NetworkMembershipRow">
+                                <Grid Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                      CornerRadius="8" Padding="12,8" Margin="0,2">
+                                    <TextBlock Text="{x:Bind Label}" FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Button x:Name="NetworkContinueButton" Content="Continue" Style="{StaticResource AccentButtonStyle}"
+                            HorizontalAlignment="Center" Margin="0,6,0,0" IsEnabled="False"
+                            Click="NetworkContinue_Click" />
+                    <TextBlock Text="No join code? Ask the staff of a community that runs Fullobby."
+                               FontSize="11" Opacity="0.4" TextWrapping="Wrap"
+                               TextAlignment="Center" HorizontalAlignment="Center" />
+                </StackPanel>
+
+                <!-- Step 2: Link accounts -->
+                <StackPanel x:Name="StepLink" Spacing="10" Visibility="Collapsed">
+                    <TextBlock Text="Link Accounts for Session Tracking" Style="{StaticResource SubtitleTextBlockStyle}" HorizontalAlignment="Center" TextAlignment="Center" />
+                    <TextBlock
+                        Text="Link your Steam and Discord accounts to track your seeding sessions."
+                        Opacity="0.7" TextWrapping="Wrap" TextAlignment="Center" />
+
+                    <!-- Steam: already-linked status row, then the (re-)link button + helper copy. -->
+                    <Grid x:Name="SteamLinkedRow" Visibility="Collapsed"
+                          Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                          CornerRadius="8" Padding="12,8">
+                        <TextBlock Text="Steam linked" Foreground="{StaticResource BrandBadgeSuccessBrush}"
+                                   FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
+                        <Border x:Name="SteamSignedInBadge" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="4" Padding="6,1">
+                            <TextBlock Text="signed in" FontSize="10" Opacity="0.8" />
+                        </Border>
+                    </Grid>
+                    <Button x:Name="LinkSteamButton" Content="Link Steam Account"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="steam" />
+                    <TextBlock x:Name="SteamLinkHelp" Text="Required to verify seeding time"
+                               FontSize="11" Opacity="0.5" Margin="2,-4,0,0" />
+
+                    <!-- Discord: same shape (button hides once linked). -->
+                    <Grid x:Name="DiscordLinkedRow" Visibility="Collapsed"
+                          Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                          CornerRadius="8" Padding="12,8">
+                        <TextBlock Text="Discord linked" Foreground="{StaticResource BrandBadgeSuccessBrush}"
+                                   FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
+                        <Border x:Name="DiscordSignedInBadge" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="4" Padding="6,1">
+                            <TextBlock Text="signed in" FontSize="10" Opacity="0.8" />
+                        </Border>
+                    </Grid>
+                    <Button x:Name="LinkDiscordButton" Content="Link Discord Account"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="discord" />
+                    <TextBlock x:Name="DiscordLinkHelp" Text="For community features and richer profile"
+                               FontSize="11" Opacity="0.5" Margin="2,-4,0,0" />
+
+                    <!-- Not live yet: exposed but disabled. To turn one on, drop its
+                         IsEnabled="False" and add the provider to ApiValidation.ValidProviders. -->
+                    <Button Content="Link Epic Games Account" IsEnabled="False"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="epic" />
+                    <Button Content="Link Xbox Account" IsEnabled="False"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="microsoft" />
+                    <TextBlock Text="Epic Games and Xbox linking is coming soon."
+                               FontSize="11" Opacity="0.5" TextWrapping="Wrap"
+                               TextAlignment="Center" HorizontalAlignment="Center" />
+
+                    <Button x:Name="LinkContinueButton" Content="Skip for now" Style="{StaticResource AccentButtonStyle}"
+                            HorizontalAlignment="Center" Margin="0,6,0,0" Click="ToNickname_Click" />
+                    <TextBlock x:Name="LinkLaterHint" Text="You can link accounts later from Settings"
+                               FontSize="11" Opacity="0.4" TextAlignment="Center" HorizontalAlignment="Center" />
+                </StackPanel>
+
+                <!-- Step 3: Nickname -->
+                <StackPanel x:Name="StepNickname" Spacing="10" Visibility="Collapsed">
+                    <TextBlock x:Name="NicknameHeading" Text="Choose a Nickname" Style="{StaticResource SubtitleTextBlockStyle}" HorizontalAlignment="Center" />
+                    <TextBlock x:Name="NicknameSubtext"
+                        Text="Pick a display name for the leaderboard, or go anonymous."
+                        Opacity="0.7" TextWrapping="Wrap" TextAlignment="Center" />
+
+                    <TextBox x:Name="NicknameBox" PlaceholderText="Enter nickname…" MaxLength="32" />
+
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                        <Button x:Name="RandomizeNameButton" Content="Go Anonymous" Click="RandomizeName_Click" />
+                        <Button x:Name="SaveNameButton" Content="Save" Style="{StaticResource AccentButtonStyle}" Click="SaveName_Click" />
+                    </StackPanel>
+
+                    <HyperlinkButton Content="Skip" HorizontalAlignment="Center" Click="ToDone_Click" />
+
+                    <!-- Leaderboard opt-out toggle (the toggle is the inverse of opt-out). -->
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                            <TextBlock Text="Show on Leaderboard" FontSize="13" />
+                            <TextBlock Text="Appear in public rankings" FontSize="11" Opacity="0.5" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="OnboardLeaderboardToggle" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Toggled="OnboardLeaderboardToggle_Toggled" />
+                    </Grid>
+                    <TextBlock Text="You can change this anytime from Settings"
+                               FontSize="11" Opacity="0.4" TextAlignment="Center" HorizontalAlignment="Center" />
+                </StackPanel>
+
+                <!-- Step 4: Done -->
+                <StackPanel x:Name="StepDone" Spacing="12" Visibility="Collapsed" HorizontalAlignment="Center">
+                    <TextBlock Text="You're all set!" Style="{StaticResource TitleTextBlockStyle}" HorizontalAlignment="Center" />
+                    <StackPanel Spacing="2" HorizontalAlignment="Center">
+                        <TextBlock x:Name="DoneSummary" Opacity="0.8" HorizontalAlignment="Center" TextAlignment="Center" />
+                        <TextBlock x:Name="DoneSteamLine" Text="Steam: Linked" Visibility="Collapsed"
+                                   Foreground="{StaticResource BrandBadgeSuccessBrush}" FontSize="13" HorizontalAlignment="Center" />
+                        <TextBlock x:Name="DoneDiscordLine" Text="Discord: Linked" Visibility="Collapsed"
+                                   Foreground="{StaticResource BrandBadgeSuccessBrush}" FontSize="13" HorizontalAlignment="Center" />
+                    </StackPanel>
+                    <Button Content="Start Seeding" Style="{StaticResource AccentButtonStyle}"
+                            HorizontalAlignment="Center" Click="Finish_Click" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

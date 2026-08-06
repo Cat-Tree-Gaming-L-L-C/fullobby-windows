@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Fullobby.App.Views.AboutPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ScrollViewer Padding="24,16" VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="10" MaxWidth="460" HorizontalAlignment="Stretch">
+
+            <!-- ── Header ──────────────────────────────────────────────── -->
+            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                <Image Source="ms-appx:///Assets/logo_no_text.png" Width="48" Height="48" VerticalAlignment="Center" />
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock
+                        Text="Fullobby"
+                        FontFamily="{StaticResource BrandDisplayFontFamily}"
+                        FontSize="22"
+                        CharacterSpacing="80" />
+                    <TextBlock x:Name="VersionLine" FontSize="12" Opacity="0.6" />
+                </StackPanel>
+            </StackPanel>
+
+            <TextBlock
+                Text="Helps the Comp HLL community seed Hell Let Loose servers — join early, fill the server, and get credit for your contribution."
+                Opacity="0.7" TextWrapping="Wrap" Margin="0,2,0,4" />
+
+            <!-- ── FAQ ─────────────────────────────────────────────────── -->
+            <TextBlock Text="FAQ" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,6,0,0" />
+
+            <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <Expander.Header>
+                    <TextBlock Text="What is seeding?" TextWrapping="Wrap" />
+                </Expander.Header>
+                <TextBlock
+                    Text="Seeding means joining a near-empty server early so it can reach the population where everyone else joins. Fullobby launches Hell Let Loose, joins the right server, and skips the intro for you."
+                    TextWrapping="Wrap" Opacity="0.8" />
+            </Expander>
+
+            <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <Expander.Header>
+                    <TextBlock Text="Do I have to watch it?" TextWrapping="Wrap" />
+                </Expander.Header>
+                <TextBlock
+                    Text="No. Keep Hell Let Loose running and connected — the app tracks your seeding time in the background and can switch servers or stop automatically. Turn on Seeding Power Savings in Settings to run the game at low resource settings while you seed."
+                    TextWrapping="Wrap" Opacity="0.8" />
+            </Expander>
+
+            <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <Expander.Header>
+                    <TextBlock Text="What is auto-seed?" TextWrapping="Wrap" />
+                </Expander.Header>
+                <TextBlock
+                    Text="Auto-seed schedules a daily seeding session that follows the server's seeding schedule. Your PC wakes from sleep at the right time, seeds, and restores your settings afterward. Set it up under Settings → Automation."
+                    TextWrapping="Wrap" Opacity="0.8" />
+            </Expander>
+
+            <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <Expander.Header>
+                    <TextBlock Text="Why does it use my Steam account?" TextWrapping="Wrap" />
+                </Expander.Header>
+                <TextBlock
+                    Text="Linking Steam lets the server credit your seeding time on the leaderboard. You can go anonymous or hide from public rankings anytime in Settings."
+                    TextWrapping="Wrap" Opacity="0.8" />
+            </Expander>
+
+            <HyperlinkButton Content="Read the full FAQ →" Tag="{x:Bind FaqUrl}" Click="OpenLink_Click" Margin="0,-2,0,0" />
+
+            <!-- ── Links ───────────────────────────────────────────────── -->
+            <TextBlock Text="Community" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,6,0,0" />
+
+            <Grid ColumnSpacing="8" RowSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Button Grid.Row="0" Grid.Column="0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                        Tag="{x:Bind DiscordUrl}" Click="OpenLink_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE8BD;" FontSize="16" />
+                        <TextBlock Text="Discord" />
+                    </StackPanel>
+                </Button>
+                <Button Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                        Tag="{x:Bind WebsiteUrl}" Click="OpenLink_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE774;" FontSize="16" />
+                        <TextBlock Text="Website" />
+                    </StackPanel>
+                </Button>
+                <Button Grid.Row="1" Grid.Column="0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                        Tag="{x:Bind GitHubUrl}" Click="OpenLink_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE943;" FontSize="16" />
+                        <TextBlock Text="GitHub" />
+                    </StackPanel>
+                </Button>
+                <Button Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                        Tag="{x:Bind FaqUrl}" Click="OpenLink_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE897;" FontSize="16" />
+                        <TextBlock Text="FAQ" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <!-- ── Legal footer ────────────────────────────────────────── -->
+            <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center" Margin="0,4,0,0">
+                <HyperlinkButton Content="Terms" Tag="{x:Bind TermsUrl}" Click="OpenLink_Click" FontSize="12" />
+                <TextBlock Text="·" Opacity="0.4" VerticalAlignment="Center" />
+                <HyperlinkButton Content="Privacy" Tag="{x:Bind PrivacyUrl}" Click="OpenLink_Click" FontSize="12" />
+            </StackPanel>
+
+            <!-- ── Wordmark ────────────────────────────────────────────── -->
+            <TextBlock
+                Text="FULLOBBY"
+                FontFamily="{StaticResource BrandDisplayFontFamily}"
+                FontSize="28"
+                CharacterSpacing="240"
+                Opacity="0.85"
+                HorizontalAlignment="Center"
+                Margin="0,12,0,4" />
+            <TextBlock
+                Text="© Cat Tree Gaming L.L.C."
+                FontSize="11" Opacity="0.4"
+                HorizontalAlignment="Center" Margin="0,0,0,8" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>
