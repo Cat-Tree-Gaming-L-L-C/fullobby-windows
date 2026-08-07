@@ -1,0 +1,7 @@
+{
+  "version": "0.2.0-beta.2",
+  "download_url": "https://github.com/Cat-Tree-Gaming-L-L-C/fullobby-windows/releases/download/v0.2.0-beta.2/Fullobby-Setup-0.2.0-beta.2.exe",
+  "notes": "0.2.0-beta.2 - Seed now confirm popup; per-game power savings opt-in; multi-game groundwork",
+  "sha256": "ff25f808cb40d5a071a937943a60b602d30ee5c4372f2811c0ddfd602821be9e",
+  "signature": "MEUCIQDRGiUPTJfhDQ0TFpgvuXiJh8nd3oA9Vhoz857hICI1YAIgbHdS4ku6lW2K7L30qBPMqDCDdzjBr0blGTNBaKPn9AA="
+}
