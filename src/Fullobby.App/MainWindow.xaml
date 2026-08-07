@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Fullobby.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:tb="using:H.NotifyIcon"
+    xmlns:services="using:Fullobby.App.Services"
+    xmlns:views="using:Fullobby.App.Views">
+
+    <Grid x:Name="RootGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="36" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- System tray icon: lives in the shell so it can hide/show this window.
+             Menu items: Show / Restart / Quit.
+             NOTE: the menu items bind Command, NOT Click. H.NotifyIcon renders the
+             flyout as a native Win32 PopupMenu, which invokes attached commands but
+             never raises XAML Click events (H.NotifyIcon issue #109) — Click handlers
+             here silently do nothing, so the commands are wired in code-behind. -->
+        <tb:TaskbarIcon
+            x:Name="TrayIcon"
+            ToolTipText="Fullobby"
+            IconSource="ms-appx:///Assets/icon.ico"
+            NoLeftClickDelay="True">
+            <tb:TaskbarIcon.ContextFlyout>
+                <MenuFlyout>
+                    <MenuFlyoutItem x:Name="TrayShowItem" Text="Show Window" />
+                    <MenuFlyoutItem x:Name="TrayRestartItem" Text="Restart" />
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem x:Name="TrayQuitItem" Text="Quit" />
+                </MenuFlyout>
+            </tb:TaskbarIcon.ContextFlyout>
+        </tb:TaskbarIcon>
+
+        <!-- Custom titlebar: drag region for the frameless window -->
+        <Grid x:Name="AppTitleBar" Background="Transparent">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="12,0,0,0">
+                <Image Source="ms-appx:///Assets/logo_no_text.png" Width="18" Height="18" />
+                <TextBlock
+                    Text="Fullobby"
+                    FontFamily="{StaticResource BrandDisplayFontFamily}"
+                    FontSize="17"
+                    CharacterSpacing="80"
+                    VerticalAlignment="Center" />
+                <TextBlock
+                    x:Name="VersionText"
+                    FontSize="11"
+                    Opacity="0.5"
+                    VerticalAlignment="Center" />
+                <Border
+                    x:Name="DevBadge"
+                    Visibility="Collapsed"
+                    Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                    CornerRadius="4"
+                    Padding="6,1"
+                    VerticalAlignment="Center">
+                    <TextBlock Text="DEV BUILD" FontSize="10" FontWeight="SemiBold" />
+                </Border>
+            </StackPanel>
+        </Grid>
+
+        <NavigationView
+            x:Name="NavView"
+            Grid.Row="1"
+            Background="Transparent"
+            PaneDisplayMode="LeftCompact"
+            IsPaneOpen="False"
+            IsBackButtonVisible="Collapsed"
+            IsSettingsVisible="True"
+            SelectionChanged="NavView_SelectionChanged">
+            <NavigationView.MenuItems>
+                <NavigationViewItem x:Name="SeedNavItem" Content="Seed" Tag="seed">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE945;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Launch" Tag="launch">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE768;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Ranks" Tag="leaderboard">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE734;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Tools" Tag="tools">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE90F;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="About" Tag="about">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE946;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <Frame x:Name="ContentFrame" />
+        </NavigationView>
+
+        <!-- In-app toast stack: overlays the content, anchored bottom. -->
+        <ItemsControl
+            x:Name="ToastHost"
+            Grid.Row="1"
+            VerticalAlignment="Bottom"
+            HorizontalAlignment="Stretch"
+            Margin="12,0,12,12">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="services:InAppToast">
+                    <InfoBar
+                        IsOpen="True"
+                        IsClosable="True"
+                        Margin="0,6,0,0"
+                        Severity="{x:Bind Severity}"
+                        Message="{x:Bind Message}"
+                        Closed="Toast_Closed" />
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- First-run onboarding overlay: covers the shell (rows 0+1) until completed/skipped.
+             Visibility is driven from code-behind (x:Bind isn't supported on a Window root). -->
+        <views:OnboardingView
+            x:Name="Onboarding"
+            Grid.Row="0"
+            Grid.RowSpan="2" />
+    </Grid>
+</Window>

@@ -1,0 +1,216 @@
+name: Release
+
+# Tag-driven release: push a semver tag (e.g. `v1.2.3`, or `v1.2.3-beta.1` for a
+# prerelease) and this builds + tests, publishes the self-contained app, builds the
+# Inno installer, optionally code-signs it, attests build provenance, computes the
+# SHA-256, and creates a GitHub Release with the installer, its checksum, and an
+# update manifest.
+#
+# The manifest (latest.json / latest-beta.json) matches the shape the in-app updater
+# reads from the static update feed (UpdaterService → UpdateConfig.FeedBaseUrl,
+# https://updates.fullobby.com): { version, download_url, notes, sha256, signature }.
+# The feed is a GitHub Pages site — deliberately NOT the API, so the backend is never in a
+# position to strip the pinned-key signature. `version` is the full SemVer (incl. any
+# `-beta.N`) so beta→beta updates order correctly. download_url is the GitHub release asset
+# on github.com, which is in the updater's trusted-domain allowlist.
+#
+# RELEASE SIGNING (`signature`): the in-app updater MANDATES a pinned-key ECDSA P-256
+# signature over (version, sha256). The signing private key is held OFFLINE (air-gapped
+# Pi) and intentionally never reaches CI, so this workflow emits the manifest with
+# `signature: null` plus a `<manifest>.payload.txt` asset (the exact bytes to sign) as
+# release assets. A maintainer signs it offline, finalizes the manifest (runbook + scripts
+# in the private fullobby-api repo), and publishes the signed manifest to the Pages feed.
+# Until that happens the (unsigned or not-yet-published) manifest is REFUSED by clients —
+# the failure mode is "no auto-update", never "unverified update".
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  id-token: write      # Sigstore signing for build provenance attestation
+  attestations: write  # store the attestation on the repo
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build & publish release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # need the tag object for the annotation message
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Resolve version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $ver = $tag -replace '^v',''            # 1.2.3  or  1.2.3-beta.1 (full SemVer)
+          $pre = if ($ver.Contains('-')) { 'true' } else { 'false' }
+          $manifest = if ($pre -eq 'true') { 'latest-beta.json' } else { 'latest.json' }
+          "VERSION=$ver"                          >> $env:GITHUB_ENV
+          "IS_PRERELEASE=$pre"                    >> $env:GITHUB_ENV
+          "MANIFEST_NAME=$manifest"               >> $env:GITHUB_ENV
+          "INSTALLER=Fullobby-Setup-$ver.exe" >> $env:GITHUB_ENV
+          Write-Host "Releasing $tag -> version $ver (prerelease: $pre)"
+
+      - name: Configure signing
+        shell: pwsh
+        env:
+          ESIGNER_USER: ${{ secrets.SSL_COM_USERNAME }}
+        run: |
+          # Code-signing is optional: it runs only when the SSL.com eSigner secrets are
+          # configured, so the workflow still produces an (unsigned) release before the OV
+          # cert is set up. Presence of SSL_COM_USERNAME is the proxy for "configured" — the
+          # maintainer sets username/password/credential_id/totp_secret together.
+          if ($env:ESIGNER_USER) { "HAS_CERT=true" >> $env:GITHUB_ENV } else { "HAS_CERT=false" >> $env:GITHUB_ENV }
+
+      - name: Restore
+        run: dotnet restore src/Fullobby.sln
+
+      - name: Build (Release)
+        run: dotnet build src/Fullobby.sln -c Release --no-restore -p:Version=${{ env.VERSION }}
+
+      - name: Test
+        run: dotnet test src/Fullobby.Core.Tests -c Release --no-build
+
+      - name: Publish app (win-x64, self-contained)
+        run: >-
+          dotnet publish src/Fullobby.App -c Release -r win-x64 --self-contained true
+          -p:Platform=x64 -p:Version=${{ env.VERSION }} -o artifacts/publish
+
+      # Cloud Authenticode signing via SSL.com eSigner (CodeSignTool). Post-2023 OV certs are
+      # non-exportable (cloud HSM), so there is no PFX — the action drives SSL.com's signing
+      # API with the account creds + an automated-2FA TOTP seed. Signs in place (output_path ==
+      # source dir + override) so the installer embeds the signed exe and the published SHA-256
+      # covers the signed installer. Pinned to v1.3.2 by commit SHA (supply-chain hygiene).
+      - name: Sign app executable (SSL.com eSigner)
+        if: env.HAS_CERT == 'true'
+        uses: SSLcom/esigner-codesign@cf5f6c1d38ad10f47e3ed9aca873f429b1a8d85b # v1.3.2
+        with:
+          command: sign
+          username: ${{ secrets.SSL_COM_USERNAME }}
+          password: ${{ secrets.SSL_COM_PASSWORD }}
+          credential_id: ${{ secrets.SSL_COM_CREDENTIAL_ID }}
+          totp_secret: ${{ secrets.SSL_COM_TOTP_SECRET }}
+          file_path: ${{ github.workspace }}/artifacts/publish/Fullobby.exe
+          output_path: ${{ github.workspace }}/artifacts/publish
+          malware_block: 'false'
+          override: 'true'
+          environment_name: PROD
+          clean_logs: 'false'
+
+      - name: Build installer (Inno Setup)
+        run: iscc /DAppVersion=${{ env.VERSION }} installer\Fullobby.iss
+
+      - name: Sign installer (SSL.com eSigner)
+        if: env.HAS_CERT == 'true'
+        uses: SSLcom/esigner-codesign@cf5f6c1d38ad10f47e3ed9aca873f429b1a8d85b # v1.3.2
+        with:
+          command: sign
+          username: ${{ secrets.SSL_COM_USERNAME }}
+          password: ${{ secrets.SSL_COM_PASSWORD }}
+          credential_id: ${{ secrets.SSL_COM_CREDENTIAL_ID }}
+          totp_secret: ${{ secrets.SSL_COM_TOTP_SECRET }}
+          file_path: ${{ github.workspace }}/installer/Output/${{ env.INSTALLER }}
+          output_path: ${{ github.workspace }}/installer/Output
+          malware_block: 'false'
+          override: 'true'
+          environment_name: PROD
+          clean_logs: 'false'
+
+      # Fail closed: never publish a release that claims to be signed but isn't. A publicly
+      # trusted OV cert + RFC-3161 timestamp resolves to Status=Valid on the runner.
+      - name: Verify Authenticode signatures
+        if: env.HAS_CERT == 'true'
+        shell: pwsh
+        run: |
+          $targets = @(
+            "artifacts/publish/Fullobby.exe",
+            "installer/Output/$env:INSTALLER"
+          )
+          foreach ($t in $targets) {
+            $sig = Get-AuthenticodeSignature $t
+            if ($sig.Status -ne 'Valid') {
+              throw "Authenticode verification FAILED for ${t}: $($sig.Status) - $($sig.StatusMessage)"
+            }
+            Write-Host "Verified $t -> $($sig.SignerCertificate.Subject)"
+          }
+
+      # Build provenance: a Sigstore-signed SLSA attestation binding the installer's digest to
+      # this repo, workflow, and commit. Gives users a publisher-independent authenticity check
+      # (`gh attestation verify <installer> -R <org>/<repo>`) that works even while releases are
+      # not Authenticode-signed, and stays valuable after they are. Runs after signing so the
+      # attested digest covers the final released bytes.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: installer/Output/${{ env.INSTALLER }}
+
+      - name: Checksum + update manifest
+        shell: pwsh
+        run: |
+          $file = "installer/Output/$env:INSTALLER"
+          if (-not (Test-Path $file)) { throw "Installer not found at $file" }
+
+          $hash = (Get-FileHash -Algorithm SHA256 $file).Hash.ToLower()
+          "$hash  $env:INSTALLER" | Out-File -Encoding ascii "${file}.sha256"
+
+          $download = "${{ github.server_url }}/${{ github.repository }}/releases/download/${{ github.ref_name }}/$env:INSTALLER"
+
+          # Release notes for the manifest come from the annotated tag message (if any).
+          $notes = (git tag -l --format='%(contents)' "${{ github.ref_name }}") -join "`n"
+          if (-not $notes) { $notes = "" }
+
+          # signature stays null here — the release-signing private key is held OFFLINE and never
+          # touches CI. An enforcing client REFUSES a null-signature manifest, so until the operator
+          # signs it offline, finalizes the manifest (runbook + scripts in the private fullobby-api
+          # repo), and publishes it to the Pages feed, this release simply will not auto-update anyone.
+          # Safe failure mode. (version is the full SemVer, so the signed payload matches the manifest.)
+          $manifest = [ordered]@{
+            version      = $env:VERSION
+            download_url = $download
+            notes        = $notes.Trim()
+            sha256       = $hash
+            signature    = $null
+          }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $manifest | ConvertTo-Json | Out-File -Encoding utf8 "dist/$env:MANIFEST_NAME"
+
+          # Canonical payload the offline signer must sign — must match UpdateSignature.BuildSignedPayload
+          # (LF separators, lowercase sha256, no trailing newline). Emitted as a release asset + job
+          # summary so the operator can copy it to the air-gapped Pi.
+          $payload = "fullobby-update.v1`nversion=$env:VERSION`nsha256=$hash"
+          [System.IO.File]::WriteAllText(
+            (Join-Path (Get-Location) "dist/$env:MANIFEST_NAME.payload.txt"), $payload)
+
+          Write-Host "SHA-256: $hash"
+          Get-Content "dist/$env:MANIFEST_NAME"
+          "## Release signing payload" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          "Sign this on the offline Pi — ``sign-release.sh $env:VERSION $hash`` (fullobby-api repo):" |
+            Out-File -Append $env:GITHUB_STEP_SUMMARY
+          '```'    | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          $payload | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          '```'    | Out-File -Append $env:GITHUB_STEP_SUMMARY
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: Fullobby ${{ env.VERSION }}
+          prerelease: ${{ env.IS_PRERELEASE }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            installer/Output/${{ env.INSTALLER }}
+            installer/Output/${{ env.INSTALLER }}.sha256
+            dist/${{ env.MANIFEST_NAME }}
+            dist/${{ env.MANIFEST_NAME }}.payload.txt

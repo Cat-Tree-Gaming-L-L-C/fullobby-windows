@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Fullobby.App.Views.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:Fullobby.App.ViewModels">
+
+    <ScrollViewer Padding="24,16" VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="6" MaxWidth="460" HorizontalAlignment="Stretch">
+
+            <!-- ── Account ─────────────────────────────────────────────── -->
+            <TextBlock Text="Account" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" />
+
+            <ProgressRing
+                IsActive="True" Width="20" Height="20" HorizontalAlignment="Center" Margin="0,4"
+                Visibility="{x:Bind Account.AuthLoading, Mode=OneWay, Converter={StaticResource BoolToVis}}" />
+
+            <!-- Signed in -->
+            <StackPanel
+                Spacing="6"
+                Visibility="{x:Bind Account.IsLoggedIn, Mode=OneWay, Converter={StaticResource BoolToVis}}">
+                <!-- Name on its own row so it can use the full width; actions sit below. -->
+                <TextBlock
+                    Text="{x:Bind Account.DisplayName, Mode=OneWay}"
+                    FontWeight="SemiBold"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="NoWrap" />
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <Button
+                        Content="Rotate API Key"
+                        Command="{x:Bind Account.RotateApiKeyCommand}"
+                        Visibility="{x:Bind Account.CanRotateApiKey, Mode=OneWay, Converter={StaticResource BoolToVis}}" />
+                    <Button Content="Sign Out" Command="{x:Bind Account.SignOutCommand}" />
+                    <Button Content="Delete Account" Click="DeleteAccount_Click" />
+                </StackPanel>
+
+                <!-- Linked providers -->
+                <TextBlock
+                    Text="Linked Providers"
+                    FontSize="12" Opacity="0.6" Margin="0,4,0,0"
+                    Visibility="{x:Bind Account.HasLinkedProviders, Mode=OneWay, Converter={StaticResource BoolToVis}}" />
+                <ItemsControl ItemsSource="{x:Bind Account.LinkedProviders}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:LinkedProviderRow">
+                            <Grid Padding="6,2" Margin="0,1">
+                                <TextBlock Text="{x:Bind Label}" FontSize="12" VerticalAlignment="Center" />
+                                <Button
+                                    Content="Unlink"
+                                    HorizontalAlignment="Right"
+                                    Tag="{x:Bind Provider}"
+                                    Click="Unlink_Click"
+                                    Visibility="{x:Bind CanUnlink, Converter={StaticResource BoolToVis}}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Link buttons -->
+                <StackPanel Spacing="4" Margin="0,2" HorizontalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                        <Button
+                            Content="Link Steam"
+                            Command="{x:Bind Account.LinkProviderCommand}"
+                            CommandParameter="steam"
+                            Visibility="{x:Bind Account.SteamLinked, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                        <Button
+                            Content="Link Discord"
+                            Command="{x:Bind Account.LinkProviderCommand}"
+                            CommandParameter="discord"
+                            Visibility="{x:Bind Account.HasDiscordProvider, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                    </StackPanel>
+                    <!-- Not live yet: exposed but disabled. To turn one on, drop its
+                         IsEnabled="False" and add the provider to ApiValidation.ValidProviders. -->
+                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                        <Button Content="Link Epic Games" IsEnabled="False" Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="epic" />
+                        <Button Content="Link Xbox" IsEnabled="False" Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="microsoft" />
+                    </StackPanel>
+                    <TextBlock Text="Epic Games and Xbox linking is coming soon." FontSize="11" Opacity="0.5" HorizontalAlignment="Center" />
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Signed out: sign-in options -->
+            <StackPanel
+                Spacing="6"
+                Visibility="{x:Bind Account.IsLoggedIn, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="Sign in with Steam" Style="{StaticResource AccentButtonStyle}" Command="{x:Bind Account.LoginCommand}" CommandParameter="steam" />
+                    <Button Content="Sign in with Discord" Command="{x:Bind Account.LoginCommand}" CommandParameter="discord" />
+                </StackPanel>
+                <!-- Not live yet: exposed but disabled. To turn one on, drop its
+                     IsEnabled="False" and add the provider to ApiValidation.ValidProviders. -->
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="Sign in with Epic Games" IsEnabled="False" Command="{x:Bind Account.LoginCommand}" CommandParameter="epic" />
+                    <Button Content="Sign in with Xbox" IsEnabled="False" Command="{x:Bind Account.LoginCommand}" CommandParameter="microsoft" />
+                </StackPanel>
+                <TextBlock Text="Epic Games and Xbox sign-in are coming soon." FontSize="11" Opacity="0.5" />
+            </StackPanel>
+
+            <!-- ── Player ──────────────────────────────────────────────── -->
+            <TextBlock Text="Player" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
+
+            <Button
+                Content="{x:Bind Account.NameButtonText, Mode=OneWay}"
+                HorizontalAlignment="Left"
+                IsEnabled="{x:Bind Account.IsLoggedIn, Mode=OneWay}"
+                Click="ChangeName_Click" />
+
+            <Grid Visibility="{x:Bind Account.IsLoggedIn, Mode=OneWay, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <TextBlock Text="Show on Leaderboard" />
+                    <TextBlock Text="Appear in public rankings" FontSize="12" Opacity="0.5" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <ProgressRing x:Name="LeaderboardSpinner" Width="16" Height="16" IsActive="True" Visibility="Collapsed" />
+                    <ToggleSwitch x:Name="LeaderboardToggle" Toggled="LeaderboardToggle_Toggled" />
+                </StackPanel>
+            </Grid>
+
+            <!-- ── Networks ────────────────────────────────────────────── -->
+            <TextBlock Text="Seeding Networks" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
+
+            <StackPanel
+                Spacing="4"
+                Visibility="{x:Bind Account.IsLoggedIn, Mode=OneWay, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="Communities you seed with, in priority order (top = preferred)."
+                           FontSize="12" Opacity="0.5" TextWrapping="Wrap" />
+
+                <ItemsControl ItemsSource="{x:Bind Account.Networks}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:NetworkMembershipRow">
+                            <Grid Padding="6,2" Margin="0,1" ColumnSpacing="4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{x:Bind Label}" FontSize="12" VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Padding="8,4" Tag="{x:Bind}" Click="NetworkUp_Click"
+                                        ToolTipService.ToolTip="Higher priority">
+                                    <FontIcon Glyph="&#xE70E;" FontSize="11" />
+                                </Button>
+                                <Button Grid.Column="2" Padding="8,4" Tag="{x:Bind}" Click="NetworkDown_Click"
+                                        ToolTipService.ToolTip="Lower priority">
+                                    <FontIcon Glyph="&#xE70D;" FontSize="11" />
+                                </Button>
+                                <Button Grid.Column="3" Content="Leave" Tag="{x:Bind}" Click="NetworkLeave_Click" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Button Content="Join a network" HorizontalAlignment="Left" Click="NetworkJoin_Click" />
+            </StackPanel>
+
+            <TextBlock Text="Sign in to manage your seeding networks."
+                       FontSize="12" Opacity="0.5"
+                       Visibility="{x:Bind Account.IsLoggedIn, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+
+            <!-- ── Settings ────────────────────────────────────────────── -->
+            <TextBlock Text="Settings" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
+
+            <ToggleSwitch
+                x:Name="DarkModeToggle"
+                Header="Dark Mode"
+                Toggled="DarkModeToggle_Toggled" />
+
+            <ToggleSwitch
+                x:Name="CloseToTrayToggle"
+                Header="Minimize to tray on close"
+                OffContent="Closing the window exits the app"
+                OnContent="Closing the window keeps it running in the tray"
+                Toggled="CloseToTrayToggle_Toggled" />
+
+            <ToggleSwitch
+                x:Name="SwitchNotificationToggle"
+                Header="Notify before switching servers"
+                OffContent="Switch immediately with no warning"
+                OnContent="Show a 30s countdown + desktop notification before switching"
+                Toggled="SwitchNotificationToggle_Toggled" />
+
+            <Grid Margin="0,4,0,0">
+                <StackPanel>
+                    <TextBlock Text="Splash Bypass Duration" />
+                    <TextBlock Text="How long to send keypresses to skip the intro video" FontSize="12" Opacity="0.5" />
+                </StackPanel>
+                <ComboBox x:Name="SplashDurationCombo" HorizontalAlignment="Right" Width="110" SelectionChanged="SplashDurationCombo_SelectionChanged">
+                    <ComboBoxItem Content="10 sec" Tag="10" />
+                    <ComboBoxItem Content="20 sec" Tag="20" />
+                    <ComboBoxItem Content="40 sec" Tag="40" />
+                    <ComboBoxItem Content="60 sec" Tag="60" />
+                </ComboBox>
+            </Grid>
+
+            <!-- ── Automation ──────────────────────────────────────────── -->
+            <TextBlock Text="Automation" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
+
+            <ToggleSwitch
+                x:Name="StartupToggle"
+                Header="Start with Windows"
+                OffContent="The app does not launch at sign-in"
+                OnContent="The app launches automatically at sign-in"
+                Toggled="StartupToggle_Toggled" />
+
+            <TextBlock Text="Auto-Seed" Margin="0,4,0,0" />
+            <TextBlock Text="Seed automatically once a day. The wake time follows the server's seeding schedule (UTC); your PC wakes from sleep to seed."
+                       FontSize="12" Opacity="0.5" TextWrapping="Wrap" />
+
+            <!-- Daily auto-seed (single task; the server decides what to seed) -->
+            <Grid Margin="0,2,0,0">
+                <StackPanel>
+                    <TextBlock Text="Daily auto-seed" />
+                    <TextBlock x:Name="AutoseedStatus" Text="Not scheduled" FontSize="12" Opacity="0.5" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                    <Button x:Name="AutoseedSetup" Content="Set up" Click="AutoseedSetup_Click" />
+                    <Button x:Name="AutoseedRemove" Content="Remove" Visibility="Collapsed" Click="AutoseedRemove_Click" />
+                </StackPanel>
+            </Grid>
+
+            <!-- ── Updates ─────────────────────────────────────────────── -->
+            <TextBlock Text="Updates" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
+
+            <Grid>
+                <StackPanel>
+                    <TextBlock Text="App Updates" />
+                    <TextBlock x:Name="UpdateStatus" Text="Check for the latest version" FontSize="12" Opacity="0.5" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <ProgressRing x:Name="UpdateSpinner" Width="16" Height="16" IsActive="True" Visibility="Collapsed" />
+                    <Button x:Name="CheckUpdatesButton" Content="Check for Updates" Click="CheckUpdates_Click" />
+                </StackPanel>
+            </Grid>
+            <ToggleSwitch
+                x:Name="BetaToggle"
+                Header="Beta Updates"
+                OffContent="Stable releases only"
+                OnContent="Include beta (pre-release) updates"
+                Toggled="BetaToggle_Toggled" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

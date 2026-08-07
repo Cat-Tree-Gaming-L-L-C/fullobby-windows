@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main, rewrite/winui3]
+  pull_request:
+    branches: [main, rewrite/winui3]
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore src/Fullobby.sln
+
+      - name: Build (Release)
+        run: dotnet build src/Fullobby.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test src/Fullobby.Core.Tests -c Release --no-build
+
+      - name: Publish app (win-x64, self-contained)
+        run: dotnet publish src/Fullobby.App -c Release -r win-x64 --self-contained true -p:Platform=x64 -o artifacts/publish
+
+      - name: Build installer (Inno Setup)
+        run: iscc installer\Fullobby.iss
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Fullobby-Setup
+          path: installer/Output/*.exe

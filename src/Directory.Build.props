@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Company>Cat Tree Gaming LLC</Company>
+    <Product>Fullobby</Product>
+    <Copyright>© Cat Tree Gaming L.L.C.</Copyright>
+    <NeutralLanguage>en-US</NeutralLanguage>
+  </PropertyGroup>
+</Project>
