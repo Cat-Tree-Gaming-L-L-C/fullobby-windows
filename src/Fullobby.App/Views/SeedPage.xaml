@@ -145,25 +145,43 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <!-- Seed button (idle states) -->
+                <!-- Seed button (idle states). Efficiency-capable games get a split button: the
+                     primary click seeds with the game's remembered Power Savings choice (zero
+                     friction), the flyout offers the explicit pair (each click persisted as the
+                     new remembered default). Other games keep a plain button. -->
                 <StackPanel
                     Spacing="8"
                     Margin="0,8,0,0"
                     Visibility="{x:Bind ViewModel.ShowSeedButtons, Mode=OneWay, Converter={StaticResource BoolToVis}}">
-                    <!-- Power Savings opt-in (remembered per game; hidden for games that don't
-                         support efficiency mode) -->
-                    <CheckBox
-                        Content="Power Savings — low-resource game settings while seeding"
-                        IsChecked="{x:Bind ViewModel.EfficiencyMode, Mode=TwoWay}"
-                        Visibility="{x:Bind ViewModel.ShowEfficiencyOption, Converter={StaticResource BoolToVis}}"
-                        ToolTipService.ToolTip="Temporarily edits the game's GameUserSettings.ini to apply low-resource settings while seeding. Your original settings are backed up and restored when seeding ends." />
+                    <SplitButton
+                        Content="Seed"
+                        Height="56"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Command="{x:Bind ViewModel.SeedCommand}"
+                        Visibility="{x:Bind ViewModel.ShowEfficiencyOption, Converter={StaticResource BoolToVis}}">
+                        <SplitButton.Flyout>
+                            <MenuFlyout Placement="Bottom">
+                                <MenuFlyoutItem
+                                    Text="Seed Now (no power savings)"
+                                    Command="{x:Bind ViewModel.SeedWithChoiceCommand}"
+                                    CommandParameter="false" />
+                                <MenuFlyoutItem
+                                    Text="Seed with Power Savings"
+                                    Command="{x:Bind ViewModel.SeedWithChoiceCommand}"
+                                    CommandParameter="true"
+                                    ToolTipService.ToolTip="Temporarily edits the game's GameUserSettings.ini to apply low-resource settings while seeding. Your original settings are backed up and restored when seeding ends." />
+                            </MenuFlyout>
+                        </SplitButton.Flyout>
+                    </SplitButton>
                     <Button
                         Content="Seed"
                         Height="56"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
                         Style="{StaticResource AccentButtonStyle}"
-                        Command="{x:Bind ViewModel.SeedCommand}" />
+                        Command="{x:Bind ViewModel.SeedCommand}"
+                        Visibility="{x:Bind ViewModel.ShowEfficiencyOption, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
                 </StackPanel>
 
                 <!-- Waiting for update: cancel -->
@@ -260,7 +278,10 @@
             </Border>
         </Grid>
 
-        <!-- Auto-seed countdown overlay (scheduled / missed-task triggered) -->
+        <!-- Auto-seed "Seed now?" prompt (scheduled / missed-task triggered): the countdown overlay
+             styled as a confirm dialog. An explicit answer starts immediately and persists the
+             Power Savings choice per game; on timeout the remembered preference applies unchanged
+             (unattended auto-seed), and Cancel aborts as before. -->
         <Grid
             Background="#B0000000"
             Visibility="{x:Bind ViewModel.AutoseedCountdownActive, Mode=OneWay, Converter={StaticResource BoolToVis}}">
@@ -272,28 +293,46 @@
                 VerticalAlignment="Center">
                 <StackPanel Spacing="12" HorizontalAlignment="Center">
                     <TextBlock
-                        Text="Auto-Seed"
+                        Text="Seed now?"
                         FontWeight="SemiBold"
                         FontSize="16"
                         HorizontalAlignment="Center" />
+                    <!-- Game + target server (best-effort preview; game-only until the fetch lands) -->
                     <TextBlock
-                        Text="{x:Bind ViewModel.AutoseedCountdownText, Mode=OneWay}"
-                        Opacity="0.85"
+                        Text="{x:Bind ViewModel.AutoseedPromptContext, Mode=OneWay}"
+                        Opacity="0.8"
                         TextAlignment="Center"
                         TextWrapping="Wrap"
                         HorizontalAlignment="Center" />
-                    <!-- Same per-game Power Savings opt-in as the Seed button — the countdown is the
-                         user's last chance to change it before the auto-seed launches. -->
-                    <CheckBox
-                        Content="Power Savings — low-resource game settings while seeding"
-                        HorizontalAlignment="Center"
-                        IsChecked="{x:Bind ViewModel.EfficiencyMode, Mode=TwoWay}"
-                        Visibility="{x:Bind ViewModel.ShowEfficiencyOption, Converter={StaticResource BoolToVis}}"
-                        ToolTipService.ToolTip="Temporarily edits the game's GameUserSettings.ini to apply low-resource settings while seeding. Your original settings are backed up and restored when seeding ends." />
-                    <Button
-                        Content="Cancel"
-                        HorizontalAlignment="Center"
-                        Command="{x:Bind ViewModel.CancelAutoseedCommand}" />
+                    <TextBlock
+                        Text="{x:Bind ViewModel.AutoseedCountdownText, Mode=OneWay}"
+                        Opacity="0.7"
+                        FontSize="12"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap"
+                        HorizontalAlignment="Center" />
+                    <StackPanel Spacing="6" MinWidth="260">
+                        <Button
+                            Content="Seed Now"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Command="{x:Bind ViewModel.AutoseedChooseCommand}"
+                            CommandParameter="false" />
+                        <Button
+                            Content="Seed with Power Savings"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Command="{x:Bind ViewModel.AutoseedChooseCommand}"
+                            CommandParameter="true"
+                            Visibility="{x:Bind ViewModel.ShowEfficiencyOption, Converter={StaticResource BoolToVis}}"
+                            ToolTipService.ToolTip="Temporarily edits the game's GameUserSettings.ini to apply low-resource settings while seeding. Your original settings are backed up and restored when seeding ends." />
+                        <Button
+                            Content="Cancel"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Command="{x:Bind ViewModel.CancelAutoseedCommand}" />
+                    </StackPanel>
                 </StackPanel>
             </Border>
         </Grid>

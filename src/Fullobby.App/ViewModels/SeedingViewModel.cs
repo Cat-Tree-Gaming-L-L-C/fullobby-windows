@@ -233,13 +233,22 @@ public sealed partial class SeedingViewModel : ObservableObject
     private long _switchCountdown;
     private long _switchSnoozeRemaining;
 
-    // Auto-seed countdown overlay (a scheduled or missed auto-seed shows a 60s cancellable countdown
-    // before launching).
+    // Auto-seed "Seed now?" prompt (a scheduled or missed auto-seed shows a 60s confirm overlay
+    // before launching: Seed Now / Seed with Power Savings / Cancel, with the countdown visible).
     [ObservableProperty]
     private bool autoseedCountdownActive;
 
     [ObservableProperty]
     private string autoseedCountdownText = "";
+
+    /// <summary>Context line of the "Seed now?" prompt: the game, plus the directive's current
+    /// target server once the best-effort preview fetch lands ("Hell Let Loose — ServerName").</summary>
+    [ObservableProperty]
+    private string autoseedPromptContext = "";
+
+    /// <summary>Completed by <see cref="AutoseedChoose"/> when the user answers the "Seed now?"
+    /// prompt early (true = with Power Savings). Null outside the countdown.</summary>
+    private TaskCompletionSource<bool>? _autoseedChoice;
 
     // Connectivity to the live SSE feed, polled from SseConnectionState on the 1s timer. The UI
     // shows a "Live" indicator while connected and a Reconnect affordance when it's down (stats
@@ -419,6 +428,15 @@ public sealed partial class SeedingViewModel : ObservableObject
 
         ClearSeedError();
         await RunDirectedSeedingAsync(autoSeed: false).ConfigureAwait(true);
+    }
+
+    /// <summary>Seed via the split button's explicit flyout pair ("true" = with Power Savings):
+    /// the click becomes the game's new remembered default, then the normal seed flow runs.</summary>
+    [RelayCommand]
+    private Task SeedWithChoiceAsync(string withPowerSavings)
+    {
+        EfficiencyMode = withPowerSavings == "true"; // persisted per game by the changed hook
+        return SeedAsync();
     }
 
     /// <summary>The unified seeding loop: ask the server what to seed (directive), launch it, and obey
@@ -604,12 +622,25 @@ public sealed partial class SeedingViewModel : ObservableObject
             // warning before the game launches.
             _toast.Show(Branding.ProductName, "Auto-seed starting in 60 seconds. Click to cancel.");
 
-            // 60s countdown the user can cancel.
+            // 60s "Seed now?" prompt. An explicit answer (Seed Now / Seed with Power Savings)
+            // starts immediately and becomes the game's new remembered Power Savings default; on
+            // timeout the remembered preference applies unchanged, so unattended auto-seeds keep
+            // working exactly as before. Cancel keeps its abort semantics.
+            _autoseedChoice = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            AutoseedPromptContext = _engine.CurrentGame.DisplayName;
+            _ = FetchAutoseedTargetPreviewAsync(); // best-effort server name for the context line
             AutoseedCountdownActive = true;
             for (var i = 60; i > 0; i--)
             {
-                AutoseedCountdownText = $"Auto-seeding in {i}s…";
-                await Task.Delay(TimeSpan.FromSeconds(1)).ConfigureAwait(true);
+                AutoseedCountdownText = $"Starting automatically in {i}s…";
+                var tick = Task.Delay(TimeSpan.FromSeconds(1));
+                var first = await Task.WhenAny(tick, _autoseedChoice.Task).ConfigureAwait(true);
+                if (first == _autoseedChoice.Task)
+                {
+                    // Persisted per game by the changed hook — the explicit click is the new default.
+                    EfficiencyMode = await _autoseedChoice.Task.ConfigureAwait(true);
+                    break;
+                }
                 if (_autoSeedState.IsCancelled)
                 {
                     _log.LogInformation("Auto-seed countdown cancelled by user");
@@ -631,7 +662,33 @@ public sealed partial class SeedingViewModel : ObservableObject
         finally
         {
             AutoseedCountdownActive = false;
+            _autoseedChoice = null;
             _autoSeedState.End();
+        }
+    }
+
+    /// <summary>"Seed now?" prompt answered: start the auto-seed immediately, with ("true") or
+    /// without ("false") Power Savings. Completes the countdown's choice task.</summary>
+    [RelayCommand]
+    private void AutoseedChoose(string withPowerSavings) =>
+        _autoseedChoice?.TrySetResult(withPowerSavings == "true");
+
+    /// <summary>Best-effort: resolve the directive's current target so the "Seed now?" prompt can
+    /// name the server. Display only — the authoritative directive is re-fetched when the seed
+    /// actually starts, so a stale preview is harmless. Failures leave the game-only context.</summary>
+    private async Task FetchAutoseedTargetPreviewAsync()
+    {
+        try
+        {
+            var d = await _api.GetDirectiveAsync(_engine.CurrentGame.Id, null, null).ConfigureAwait(true);
+            if (AutoseedCountdownActive && d.Target is { Server.Name.Length: > 0 } target)
+            {
+                AutoseedPromptContext = $"{_engine.CurrentGame.DisplayName} — {target.Server.Name}";
+            }
+        }
+        catch (Exception e)
+        {
+            _log.LogDebug(e, "Auto-seed target preview fetch failed (non-fatal)");
         }
     }
 
