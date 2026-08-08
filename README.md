@@ -54,9 +54,9 @@ Every release can be verified two independent ways:
 
 - **One-click seeding** — launches HLL via Steam and joins the target server
 - **Seed All** — cycles through NA/EU servers, skipping offline or full ones
-- **Auto-seed scheduling** — set a time and the app seeds unattended via Windows Task Scheduler
+- **Auto-seed scheduling** — set a time and the app seeds via Windows Task Scheduler; if you're at the machine it asks "Seed now?" first, and proceeds on its own if you're away
 - **Live server stats** — real-time player counts and map info
-- **Efficiency mode** — automatically applies low-graphics settings to reduce resource usage while seeding
+- **Power savings** — optional low-graphics settings while seeding, chosen per game and remembered for next time
 - **System tray** — runs in the background with close-to-tray support
 - **In-app updates** — notifies you when a new version is available
 - **Discord & Steam sign-in** — track seeding stats and appear on the leaderboard
@@ -77,7 +77,11 @@ The app checks whether Steam and HLL are running by taking a snapshot of the Win
 
 When a seeding session ends (server switch, time limit, or user stop), the app terminates HLL via `TerminateProcess`. Before killing any process, the app verifies its full image path contains the expected Steam game installation folder (e.g., `\steamapps\common\Hell Let Loose\`). Processes outside the Steam game directory are never touched.
 
-### Efficiency mode (opt-in)
+### Power savings / efficiency mode (opt-in)
+
+Power savings is chosen per game — from the Seed button's flyout or the "Seed now?"
+prompt — and your last choice is remembered for that game. It is off by default, and
+games without efficiency-mode support never offer it.
 
 When enabled, the app temporarily edits `GameUserSettings.ini` — the same INI file the in-game settings menu writes to. Changes are: switching to windowed 1024x768, setting all graphics quality to minimum, capping the framerate at 30, and muting audio, plus disabling a few non-essential HUD/gameplay display options (gore, hints, and incoming kick-vote/command/chat notifications) to further reduce rendering load. The original file is backed up before any changes, and restored automatically when seeding ends. A persistent flag file ensures recovery even if the app crashes mid-session.
 

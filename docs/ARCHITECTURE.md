@@ -74,7 +74,7 @@ section below.
 | API client | `Core.Api.SeedingApiClient`, `Models`/`ApiJson`, `RetryPolicy`/`ResilienceHandler`, `AuthHandler` + `AuthRefresher` + `AuthHeaders` |
 | Seeding networks | Multi-tenant communities (limited-beta gate): membership via `SeedingApiClient` (`JoinNetworkAsync`/`GetMyNetworksAsync`/`LeaveNetworkAsync`/`SetNetworkPrioritiesAsync`), state + hard gate in `AccountViewModel` (onboarding network step; re-armed portal on session restore with zero memberships or a `join_a_network` directive — fails open on fetch errors). Seeding status is per network (`NetworkSeedingStatus`); the seed board flattens/groups by network. Join codes are sent and forgotten — never stored client-side. |
 | Live stats / SSE | `Core.Api.SseStreamClient : IHostedService` + `SseFrameParser`, `SseConnectionState`, `SeedingStatusCache`, `Core.Servers.LiveStats` |
-| Config | `Core.Config.ConfigService` (STJ store, atomic temp+rename, 500ms throttle, DPAPI secrets, `icacls` hardening; no legacy-dir migration) + `Core.Security.DpapiProtector`, `Core.Config.AtomicFile` |
+| Config | `Core.Config.ConfigService` (STJ store, atomic temp+rename, 500ms throttle, DPAPI secrets, `icacls` hardening; no legacy-dir migration) + `Core.Security.DpapiProtector`, `Core.Config.AtomicFile`, `Core.Config.EfficiencyPreference` (per-game power-savings key `efficiency_mode.<gameId>`; one-time migration off the retired global toggle) |
 | Steam / process | `Core.Native.SteamLauncher`, `ProcessMonitor`, `SteamPaths` |
 | Window focus / input | `Core.Native.WindowFocus` (HLL window find/cache, PostMessage Esc/F13 splash bypass, AttachThreadInput force-focus), `Win11Input` (SendInput + UIA fallback) |
 | Auto-seed / scheduling | `Core.Scheduling.AutoSeedService`, `ScheduledTaskService` (schtasks `/create /xml`), `AutoSeedSlot`/`AutoSeedTime`/`AutoSeedState`, `MissedAutoseedMonitor : IHostedService` |
@@ -85,7 +85,7 @@ section below.
 | Startup | `Core.Platform.StartupRegistry` (HKCU Run `Fullobby`) |
 | Updater | `Core.Update.UpdaterService` + `UpdateValidation` + `UpdateSignature` + `UpdateInfo` (mandatory pinned-key ECDSA P-256 signature over `(version, sha256)` — private key offline, signing runbook in the private `fullobby-api` repo; HTTPS + trusted-domain + ext + ≤500MB + SHA-256; launches Inno setup.exe; stable/beta `update_channel`) |
 | Power | `Core.Native.PowerStatus` (powercfg modern-standby/wake-timer warnings) |
-| UI | `App.Views.*Page` + `App.ViewModels.*` (frameless 5-tab shell); onboarding is a 5-step overlay (sign-in → join network → link → nickname → done) |
+| UI | `App.Views.*Page` + `App.ViewModels.*` (frameless 5-tab shell); onboarding is a 5-step overlay (sign-in → join network → link → nickname → done); the seed surface is a `SplitButton` on efficiency-capable games and the auto-seed countdown resolves through a "Seed now?" dialog (Seed Now / Seed with Power Savings / Cancel), falling back to the remembered per-game choice when unattended |
 | Keep-awake | `Core.Native.KeepAwake` (`SetThreadExecutionState` re-asserting thread; held while seeding) |
 
 ## WinUI 3 gotchas (load-bearing)
