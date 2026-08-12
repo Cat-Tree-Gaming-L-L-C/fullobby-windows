@@ -311,7 +311,7 @@ public partial class App : Application
                 break;
             case DeepLinkAction.LinkCallback link:
                 Log.Information("Deep link: link callback for provider {Provider}", link.Provider);
-                _ = account.HandleLinkCallbackAsync(link.Provider);
+                _ = account.HandleLinkCallbackAsync(link.Provider, link.StagedCode);
                 break;
             case DeepLinkAction.RegisterCallback reg:
                 Log.Information("Deep link: register callback received");

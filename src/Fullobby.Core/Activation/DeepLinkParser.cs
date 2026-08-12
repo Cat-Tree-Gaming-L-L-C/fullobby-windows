@@ -62,19 +62,28 @@ public static class DeepLinkParser
             }
             case "auth/link-callback":
             {
-                if (parameters.TryGetValue("provider", out var provider)
-                    && parameters.TryGetValue("provider_id", out var providerId)
-                    && provider.Length > 0
+                if (!parameters.TryGetValue("provider", out var provider)
+                    || provider.Length == 0
+                    || !ValidProviders.Contains(provider))
+                {
+                    // Link callback missing or unknown provider
+                    return new DeepLinkAction.Unknown(url);
+                }
+                // A fresh link arrives staged (single-use hex code to confirm at
+                // POST /api/auth/link-confirm); an already-linked identity arrives
+                // as the legacy committed form (provider_id + linked=true).
+                if (parameters.TryGetValue("staged", out var staged)
+                    && staged.Length > 0
+                    && staged.All(char.IsAsciiHexDigit))
+                {
+                    return new DeepLinkAction.LinkCallback(provider, null, staged);
+                }
+                if (parameters.TryGetValue("provider_id", out var providerId)
                     && providerId.Length > 0)
                 {
-                    if (!ValidProviders.Contains(provider))
-                    {
-                        // Link callback with unknown provider
-                        return new DeepLinkAction.Unknown(url);
-                    }
-                    return new DeepLinkAction.LinkCallback(provider, providerId);
+                    return new DeepLinkAction.LinkCallback(provider, providerId, null);
                 }
-                // Link callback missing provider or provider_id
+                // Link callback with neither a staged code nor a provider_id
                 return new DeepLinkAction.Unknown(url);
             }
             case "auth/register-callback":

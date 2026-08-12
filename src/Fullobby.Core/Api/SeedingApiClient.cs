@@ -133,6 +133,13 @@ public sealed class SeedingApiClient(HttpClient http)
         return SendAsync<LinkInitResponse>(HttpMethod.Post, $"/api/auth/{provider}/link-init", null, ct);
     }
 
+    /// <summary>Commit a staged provider link (auth required). The OAuth link callback stages
+    /// the verified identity under a single-use code instead of committing it; the API refuses
+    /// the commit unless the authenticated user is the one who initiated the link.</summary>
+    public Task<LinkConfirmResponse> ConfirmLinkAsync(string code, CancellationToken ct = default) =>
+        SendAsync<LinkConfirmResponse>(HttpMethod.Post, "/api/auth/link-confirm",
+            new Dictionary<string, object?> { ["code"] = code }, ct);
+
     /// <summary>Unlink a provider from the current account (auth required).</summary>
     public Task UnlinkProviderAsync(string provider, CancellationToken ct = default)
     {

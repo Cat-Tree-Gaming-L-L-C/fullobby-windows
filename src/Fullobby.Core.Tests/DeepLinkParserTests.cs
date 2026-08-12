@@ -100,6 +100,55 @@ public class DeepLinkParserTests
         Assert.IsType<DeepLinkAction.Unknown>(action);
     }
 
+    // ── Staged link callbacks (API stages at the OAuth callback; the client
+    //    commits via POST /api/auth/link-confirm) ─────────────────────────
+
+    [Theory]
+    [InlineData("steam")]
+    [InlineData("discord")]
+    [InlineData("epic")]
+    [InlineData("xbox")]
+    public void ParseStagedLinkCallback(string provider)
+    {
+        var code = new string('a', 64);
+        var action = DeepLinkParser.Parse(
+            $"fullobby://auth/link-callback?provider={provider}&staged={code}&display=Some%20Name");
+
+        var link = Assert.IsType<DeepLinkAction.LinkCallback>(action);
+        Assert.Equal(provider, link.Provider);
+        Assert.Equal(code, link.StagedCode);
+        Assert.Null(link.ProviderId);
+    }
+
+    [Fact]
+    public void ParseStagedLinkCallbackRejectsNonHexCode()
+    {
+        var action = DeepLinkParser.Parse(
+            "fullobby://auth/link-callback?provider=steam&staged=not-hex!");
+
+        Assert.IsType<DeepLinkAction.Unknown>(action);
+    }
+
+    [Fact]
+    public void ParseLegacyCommittedLinkCallbackHasNoStagedCode()
+    {
+        var action = DeepLinkParser.Parse(
+            "fullobby://auth/link-callback?provider=steam&provider_id=12345&linked=true");
+
+        var link = Assert.IsType<DeepLinkAction.LinkCallback>(action);
+        Assert.Equal("12345", link.ProviderId);
+        Assert.Null(link.StagedCode);
+    }
+
+    [Fact]
+    public void ParseStagedLinkCallbackInvalidProviderIsUnknown()
+    {
+        var action = DeepLinkParser.Parse(
+            $"fullobby://auth/link-callback?provider=twitch&staged={new string('b', 64)}");
+
+        Assert.IsType<DeepLinkAction.Unknown>(action);
+    }
+
     [Fact]
     public void ParseValidRegisterCallback()
     {

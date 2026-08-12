@@ -121,6 +121,15 @@ public sealed class LinkInitResponse
     public string RedirectUrl { get; set; } = "";
 }
 
+/// <summary>Response from POST /api/auth/link-confirm (committing a staged link).</summary>
+public sealed class LinkConfirmResponse
+{
+    public string Provider { get; set; } = "";
+    public string ProviderId { get; set; } = "";
+    public string? DisplayName { get; set; }
+    public bool Linked { get; set; }
+}
+
 /// <summary>Response from POST /api/auth/rotate-api-key.</summary>
 public sealed class RotateApiKeyResponse
 {

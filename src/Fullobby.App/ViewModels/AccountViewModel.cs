@@ -466,14 +466,34 @@ public sealed partial class AccountViewModel : ObservableObject
         }
     }
 
-    /// <summary>Handle <c>fullobby://auth/link-callback</c>: refresh linked providers
-    /// and the user record (linking can change account fields).</summary>
-    public async Task HandleLinkCallbackAsync(string provider)
+    /// <summary>Handle <c>fullobby://auth/link-callback</c>: commit the staged link, then
+    /// refresh linked providers and the user record (linking can change account fields).</summary>
+    /// <remarks>A fresh link arrives STAGED — the API commits nothing at the OAuth callback and
+    /// requires <c>POST /api/auth/link-confirm</c> from the initiating user's session (link-CSRF
+    /// defense). No extra dialog here: the pending-link marker consumed below proves this client
+    /// started the flow moments ago, and the server independently refuses a confirm from any
+    /// other user. An already-linked identity arrives committed (<paramref name="stagedCode"/>
+    /// null) and just needs the refresh.</remarks>
+    public async Task HandleLinkCallbackAsync(string provider, string? stagedCode = null)
     {
         if (!_oauthState.ConsumePendingLink(provider))
         {
             _log.LogWarning("Link callback for {Provider} did not match a pending link — ignoring", provider);
             return;
+        }
+
+        if (stagedCode is not null)
+        {
+            try
+            {
+                await _api.ConfirmLinkAsync(stagedCode).ConfigureAwait(false);
+            }
+            catch (Exception e)
+            {
+                _log.LogError(e, "Failed to confirm staged {Provider} link", provider);
+                _toast.Error(ApiValidation.FriendlyError(e.Message));
+                return;
+            }
         }
 
         await RefreshLinkedDataAsync().ConfigureAwait(false);

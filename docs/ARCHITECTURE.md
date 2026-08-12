@@ -129,14 +129,18 @@ These depend on the `seeding-api` backend / release infra and can't be verified 
   game-keyed maps in `SeedingStatusResponse`).
 - Provider linking/sign-in for **Epic Games** and **Xbox** is stubbed (disabled) in Settings until
   the backend supports those providers and they're added to `ApiValidation.ValidProviders`.
-- **Provider-link CSRF is enforced server-side.** `link-init` (auth required) mints a single-use,
-  HMAC-signed, user-bound link `state` (`link:{user_id}:{ts}:{sig}`, 2-min expiry) that the OAuth
-  callback validates and *atomically consumes* — so the linking itself cannot be forged or replayed.
-  Unlike `auth/callback`, the `auth/link-callback` deep link carries no token or state (only
-  `provider`/`provider_id`/`linked=true`): the sensitive action already happened server-side, leaving
-  the client nothing to authorize. The client adds a single-use *pending-link* marker
-  (`OAuthStateStore.SetPendingLink`/`ConsumePendingLink`) as defense-in-depth so a forged deep link it
-  never initiated is ignored. No client-side cryptographic round-trip is needed.
+- **Provider linking commits only on authenticated confirmation.** `link-init` (auth required)
+  mints a single-use, HMAC-signed, user-bound link `state` (`link:{user_id}:{ts}:{sig}`, 2-min
+  expiry) that the OAuth callback validates and *atomically consumes*. The callback then **stages**
+  the verified identity instead of committing it: a fresh link's `auth/link-callback` deep link
+  carries `provider` + a single-use `staged` code (10-min TTL), and the client commits it with
+  `POST /api/auth/link-confirm` — which the API refuses unless the authenticated caller is the user
+  who initiated the link (link-CSRF defense; an already-linked identity still arrives as the legacy
+  committed `provider_id`/`linked=true` form). The client needs no extra confirmation dialog: its
+  single-use *pending-link* marker (`OAuthStateStore.SetPendingLink`/`ConsumePendingLink`) proves it
+  started the flow, and the server's user-match check is the real boundary. A forged deep link the
+  client never initiated is dropped by the marker; a stolen staged code is useless without the
+  initiating user's credentials.
 
 ### OAuth deep-link flow (sign-in)
 
