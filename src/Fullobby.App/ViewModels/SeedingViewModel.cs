@@ -109,15 +109,27 @@ public sealed partial class SeedingViewModel : ObservableObject
         // directly on the backing field so the load doesn't re-persist through the changed hook).
         efficiencyMode = EfficiencyPreference.IsEnabled(_config, _engine.CurrentGame);
 
+        // Built BEFORE any event subscription below: engine events arrive on the engine's own
+        // thread, and a countdown property they set reaches EnsureTimerRunning through its
+        // generated changed-hook — which would dereference a not-yet-assigned _timer.
+        //
+        // The timer now runs only while something is actually counting down (see EnsureTimerRunning
+        // and the stop at the end of OnTimerTick). It used to start here and never stop, which meant
+        // a 1 Hz UI-thread wake for the life of the process — including the many hours this app
+        // spends hidden in the tray, where it defeats timer coalescing and keeps the thread out of
+        // deep idle.
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _timer.Tick += OnTimerTick;
+
         _engine.Event += OnEngineEvent;
         _bootstrap.ServersLoaded += OnServersLoaded;
         _bootstrap.ServersLoadFailed += OnServersLoadFailed;
         _live.StatsUpdated += OnStatsUpdated;
         _statusCache.Updated += OnSeedingStatusUpdated;
 
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        _timer.Tick += OnTimerTick;
-        _timer.Start();
+        // Connection state is event-driven, not polled — see SseConnectionState.Changed.
+        _sseState.Changed += OnSseStateChanged;
+        SyncSseState();
 
         // If the bootstrapper already loaded servers before this VM existed, reflect that now.
         if (_bootstrap.HasServers)
@@ -1138,12 +1150,59 @@ public sealed partial class SeedingViewModel : ObservableObject
 
     // ── Countdown timer (visual only; the engine drives the real timing) ───────
 
-    private void OnTimerTick(object? sender, object e)
+    /// <summary>True while some countdown still needs a per-second tick. The countdowns here are
+    /// display-only (the engine owns the real timing), so the worst a mis-gate can do is freeze a
+    /// label — it cannot desync seeding, the splash bypass, or a server switch.</summary>
+    private bool NeedsTicking =>
+        SeedAllCooldownRemaining > 0 || SplashBypassActive || ServerSwitchActive;
+
+    /// <summary>Start the countdown timer if anything needs it. Safe to call from any thread:
+    /// engine events reach these properties from the seeding engine's own thread, and a
+    /// DispatcherTimer must be started on the UI thread.</summary>
+    private void EnsureTimerRunning()
     {
-        // Mirror the live SSE connection state into observable UI props (cheap, once a second).
+        if (!NeedsTicking)
+        {
+            return;
+        }
+        if (_dispatcher.HasThreadAccess)
+        {
+            if (!_timer.IsEnabled)
+            {
+                _timer.Start();
+            }
+        }
+        else
+        {
+            _dispatcher.TryEnqueue(() =>
+            {
+                if (!_timer.IsEnabled && NeedsTicking)
+                {
+                    _timer.Start();
+                }
+            });
+        }
+    }
+
+    // Any path that switches one of these on starts the timer, so no caller has to remember to.
+    partial void OnSplashBypassActiveChanged(bool value) => EnsureTimerRunning();
+
+    partial void OnServerSwitchActiveChanged(bool value) => EnsureTimerRunning();
+
+    partial void OnSeedAllCooldownRemainingChanged(int value) => EnsureTimerRunning();
+
+    private void OnSseStateChanged() => _dispatcher.TryEnqueue(SyncSseState);
+
+    /// <summary>Copy the shared connection state into the observable properties the Seed page binds
+    /// (the Live dot, the status text, the Reconnect button). Must run on the UI thread.</summary>
+    private void SyncSseState()
+    {
         SseConnected = _sseState.Connected;
         ConnectionFailures = _sseState.FailureCount;
+    }
 
+    private void OnTimerTick(object? sender, object e)
+    {
         // Tick the Seed All cooldown down to 0 (drives the "Retry in {n}s" button label).
         if (SeedAllCooldownRemaining > 0)
         {
@@ -1171,6 +1230,12 @@ public sealed partial class SeedingViewModel : ObservableObject
                 _switchCountdown--;
             }
             UpdateSwitchText();
+        }
+
+        // Nothing left to count down — go back to sleep until something restarts us.
+        if (!NeedsTicking)
+        {
+            _timer.Stop();
         }
     }
 

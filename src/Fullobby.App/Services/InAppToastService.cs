@@ -12,6 +12,9 @@ public sealed class InAppToastService
     private const int DefaultDurationMs = 3000;
     private const int ErrorDurationMs = 10000;
 
+    /// <summary>Most toasts shown at once; the oldest is dropped past this.</summary>
+    private const int MaxToasts = 3;
+
     // Captured on the UI thread: the service is first resolved when the shell is built.
     private readonly DispatcherQueue _dispatcher = DispatcherQueue.GetForCurrentThread();
 
@@ -58,6 +61,13 @@ public sealed class InAppToastService
         if (existing is not null)
         {
             Remove(existing);
+        }
+
+        // Cap the stack: toasts now occupy a real row in the shell, so an unbounded burst (error +
+        // reconnect + update, say) would squeeze the page content instead of just overlaying it.
+        while (Toasts.Count >= MaxToasts)
+        {
+            Remove(Toasts[0]);
         }
 
         var toast = new InAppToast(message, severity);

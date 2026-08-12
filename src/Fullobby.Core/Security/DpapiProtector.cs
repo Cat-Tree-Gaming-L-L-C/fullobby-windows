@@ -72,9 +72,34 @@ public static class DpapiProtector
     /// <summary>True if <paramref name="value"/> is already a DPAPI ciphertext.</summary>
     public static bool IsEncrypted(string value) => value.StartsWith(EncryptedPrefix, StringComparison.Ordinal);
 
+    /// <summary>
+    /// Encrypt a sensitive value, reporting whether protection actually succeeded.
+    /// Returns <c>true</c> with the ciphertext when the value is protected (or needs no
+    /// protection); <c>false</c> with the value untouched when DPAPI is unavailable, so the caller
+    /// can decline to persist it rather than silently writing a token to disk in the clear.
+    /// </summary>
+    public static bool TryEncrypt(string key, string value, out string result)
+    {
+        if (!IsSensitive(key) || value.Length == 0)
+        {
+            result = value;
+            return true;
+        }
+        try
+        {
+            result = Encrypt(value);
+            return true;
+        }
+        catch (CryptographicException)
+        {
+            result = value;
+            return false;
+        }
+    }
+
     /// <summary>Encrypt when the key is sensitive and the value is non-empty; otherwise pass through.
-    /// On a DPAPI failure, falls back to storing plaintext rather than throwing, so a transient
-    /// crypto error never blocks saving a token.</summary>
+    /// On a DPAPI failure the value is returned unencrypted — callers that persist the result must
+    /// use <see cref="TryEncrypt"/> instead, so an unprotected secret is never written to disk.</summary>
     public static string MaybeEncrypt(string key, string value)
     {
         if (!IsSensitive(key) || value.Length == 0)

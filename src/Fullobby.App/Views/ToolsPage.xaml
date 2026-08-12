@@ -4,7 +4,10 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <Grid Padding="24,16">
+    <!-- ScrollViewer to match every other page: the window is a fixed, non-resizable 600px tall,
+         so without one the bottom of this page is unreachable at 125%+ text scaling. -->
+    <ScrollViewer Padding="24,16" VerticalScrollBarVisibility="Auto">
+    <Grid>
         <!-- ── Main tools menu ─────────────────────────────────────────── -->
         <StackPanel x:Name="MainMenu" Spacing="10" MaxWidth="460" HorizontalAlignment="Stretch" VerticalAlignment="Top">
             <TextBlock Text="Tools" Style="{StaticResource TitleTextBlockStyle}" />
@@ -85,4 +88,5 @@
                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Click="OpenLink_Click" />
         </StackPanel>
     </Grid>
+    </ScrollViewer>
 </Page>

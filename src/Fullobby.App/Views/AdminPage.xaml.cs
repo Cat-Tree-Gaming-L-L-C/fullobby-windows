@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using Fullobby.Core;
 using Fullobby.Core.Api;
+using Fullobby.Core.Security;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
@@ -21,9 +23,11 @@ public sealed partial class AdminPage : Page
     private readonly SeedingApiClient _api;
     private readonly ILogger<AdminPage> _log;
 
-    /// <summary>The panel origin the WebView is allowed to navigate within —
-    /// learned from the panel-code URL. Anything else opens in the system browser.</summary>
-    private string? _panelHost;
+    /// <summary>The panel origin (scheme + host + port) the WebView is allowed to navigate
+    /// within — learned from the panel-code URL. Anything else opens in the system browser.
+    /// Host alone is not enough: matching on host would treat an http:// downgrade of the same
+    /// host as same-origin and carry the panel session over cleartext.</summary>
+    private string? _panelOrigin;
 
     private bool _signedIn;
 
@@ -52,11 +56,22 @@ public sealed partial class AdminPage : Page
         {
             // WebView2 needs a writable user-data folder; the default for an
             // unpackaged app is next to the exe (Program Files — read-only).
-            Environment.SetEnvironmentVariable(
-                "WEBVIEW2_USER_DATA_FOLDER",
-                Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "com.fullobby.app", "webview2"));
+            var profileDir = Branding.WebViewProfileDir;
+            Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", profileDir);
+
+            // This folder holds the admin panel's session cookies, so it gets the same ACL
+            // treatment as the config store. It sits under LOCALAPPDATA (where WebView2 wants it)
+            // rather than the config directory, so it isn't covered by that directory's hardening.
+            try
+            {
+                Directory.CreateDirectory(profileDir);
+                DirectoryHardening.RestrictToCurrentUser(profileDir, _log);
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Could not prepare the WebView2 profile directory");
+            }
+
             await PanelView.EnsureCoreWebView2Async();
         }
         catch (Exception ex)
@@ -81,13 +96,16 @@ public sealed partial class AdminPage : Page
             return;
         }
 
-        _panelHost = Uri.TryCreate(code.Url, UriKind.Absolute, out var u) ? u.Host : null;
-        if (_panelHost is null)
+        // Require an absolute https URL: the single-use panel code rides in this URL's query, so
+        // an http:// panel address would put it — and the session it redeems for — on the wire.
+        if (!Uri.TryCreate(code.Url, UriKind.Absolute, out var panelUri)
+            || !string.Equals(panelUri.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal))
         {
-            _log.LogError("Panel-code URL unparseable");
+            _log.LogError("Panel-code URL is not an absolute https URL");
             ShowStatus("The admin panel address could not be resolved. Please try again.", retry: true);
             return;
         }
+        _panelOrigin = panelUri.GetLeftPart(UriPartial.Authority);
 
         // Keep the embedded session inside the panel: same-origin navigation only.
         // External links (Discord invites, docs) go to the system browser, so the
@@ -100,15 +118,20 @@ public sealed partial class AdminPage : Page
         PanelView.CoreWebView2.NavigationStarting += (_, args) =>
         {
             if (Uri.TryCreate(args.Uri, UriKind.Absolute, out var target)
-                && !string.Equals(target.Host, _panelHost, StringComparison.OrdinalIgnoreCase))
+                && !string.Equals(
+                    target.GetLeftPart(UriPartial.Authority),
+                    _panelOrigin,
+                    StringComparison.OrdinalIgnoreCase))
             {
                 args.Cancel = true;
                 OpenExternal(args.Uri);
             }
         };
 
-        // The callback page redeems the single-use code and lands on /admin.
-        PanelView.CoreWebView2.Navigate(code.Url + "&next=%2Fadmin");
+        // The callback page redeems the single-use code and lands on /admin. The panel URL is not
+        // guaranteed to carry a query string, so pick the separator rather than assuming '&'.
+        var separator = panelUri.Query.Length > 0 ? "&" : "?";
+        PanelView.CoreWebView2.Navigate(code.Url + separator + "next=%2Fadmin");
         _signedIn = true;
         StatusPanel.Visibility = Visibility.Collapsed;
         PanelView.Visibility = Visibility.Visible;
@@ -123,11 +146,25 @@ public sealed partial class AdminPage : Page
         RetryButton.Visibility = retry ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    /// <summary>Open a link the embedded panel asked for in the system browser.
+    /// Only http/https is honoured: <c>UseShellExecute</c> resolves whatever it is handed, so an
+    /// unfiltered URI from web content would let a compromised or XSS'd panel page run
+    /// <c>file://</c>/UNC executables or invoke a local protocol handler (<c>ms-msdt:</c>,
+    /// <c>search-ms:</c>) as the signed-in admin. The URL is deliberately not logged — it is
+    /// attacker-controlled in exactly the case worth logging.</summary>
     private void OpenExternal(string url)
     {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var target)
+            || !(string.Equals(target.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
+                 || string.Equals(target.Scheme, Uri.UriSchemeHttp, StringComparison.Ordinal)))
+        {
+            _log.LogWarning("Blocked a non-web link requested by the admin panel");
+            return;
+        }
+
         try
         {
-            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+            Process.Start(new ProcessStartInfo { FileName = target.AbsoluteUri, UseShellExecute = true });
         }
         catch (Exception ex)
         {

@@ -75,4 +75,10 @@ public static class Branding
     /// <summary>%USERPROFILE%\fullobby-backup</summary>
     public static string BackupRootDir => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), BackupDirName);
+
+    /// <summary>%LOCALAPPDATA%\com.fullobby.app\webview2 — the admin panel's WebView2 profile
+    /// (session cookies). Local, not roaming: WebView2 profiles must not follow a roaming profile.</summary>
+    public static string WebViewProfileDir => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        ConfigDirName, "webview2");
 }

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Fullobby.Core.Security;
@@ -30,8 +29,22 @@ public sealed class ConfigService
     private readonly string _configPath;
     private readonly ILogger<ConfigService> _log;
 
+    /// <summary>Sensitive keys held in memory but deliberately excluded from the file, because DPAPI
+    /// could not protect them. The session keeps working; nothing unprotected reaches the disk.</summary>
+    private readonly HashSet<string> _unprotectedKeys = new(StringComparer.Ordinal);
+
     private long _lastSaveMs;
     private bool _savePending;
+
+    /// <summary>Raised when a secret could not be encrypted and so will not be persisted. The shell
+    /// surfaces this — otherwise the user is silently signed out on the next launch with no reason.</summary>
+    public event Action? SecretProtectionUnavailable;
+
+    /// <summary>True once any secret has failed protection this session.</summary>
+    public bool HasUnprotectedSecrets
+    {
+        get { lock (_gate) { return _unprotectedKeys.Count > 0; } }
+    }
 
     /// <summary>Production constructor — uses the branded config directory.</summary>
     public ConfigService(ILogger<ConfigService> log) : this(log, Branding.ConfigDir) { }
@@ -52,7 +65,7 @@ public sealed class ConfigService
         }
 
         // Idempotent: covers fresh dirs and dirs whose permissions were changed.
-        RestrictDirectoryAcl(configDir);
+        DirectoryHardening.RestrictToCurrentUser(configDir, _log);
 
         Load();
         MigratePlaintextSecrets();
@@ -125,14 +138,20 @@ public sealed class ConfigService
         }
 
         JsonElement element;
+        var unprotected = false;
         if (value is string s && DpapiProtector.IsSensitive(key))
         {
-            var protectedValue = DpapiProtector.MaybeEncrypt(key, s);
-            if (s.Length > 0 && !DpapiProtector.IsEncrypted(protectedValue))
+            // Fail closed: if DPAPI can't protect the value we keep it in memory so the current
+            // session carries on, but it is excluded from the file (see SaveToDisk). Writing it in
+            // the clear would leave a long-lived refresh token readable by any same-user process,
+            // defeating both the CurrentUser scope and the app-specific entropy above it.
+            unprotected = !DpapiProtector.TryEncrypt(key, s, out var protectedValue);
+            if (unprotected)
             {
-                _log.LogWarning(
-                    "DPAPI encryption failed for sensitive key '{Key}' — storing it as plaintext in " +
-                    "config.json. The value stays usable but is no longer protected at rest.", key);
+                _log.LogError(
+                    "DPAPI encryption failed for sensitive key '{Key}' — it will NOT be saved to " +
+                    "config.json. The current session keeps working; sign-in will be required again " +
+                    "on the next launch.", key);
             }
             element = JsonSerializer.SerializeToElement(protectedValue);
         }
@@ -146,6 +165,14 @@ public sealed class ConfigService
         lock (_gate)
         {
             _config[key] = element;
+            if (unprotected)
+            {
+                _unprotectedKeys.Add(key);
+            }
+            else
+            {
+                _unprotectedKeys.Remove(key);
+            }
             if (now - _lastSaveMs >= SaveDebounceMs)
             {
                 _lastSaveMs = now;
@@ -163,17 +190,40 @@ public sealed class ConfigService
         {
             SaveToDisk();
         }
+        if (unprotected)
+        {
+            SecretProtectionUnavailable?.Invoke();
+        }
     }
 
-    /// <summary>Remove a key (and persist). No-op when the key is absent.</summary>
+    /// <summary>Remove a key. Goes through the same throttle as <see cref="Set{T}"/> — sign-out
+    /// issues several removals back to back, and writing each one through synchronously meant six
+    /// serialize + fsync + rename cycles in a row. Callers needing durability right away follow up
+    /// with <see cref="FlushPendingSaves"/>, as the auth paths already do.</summary>
     public void Remove(string key)
     {
-        bool removed;
+        bool shouldSave;
+        long now = Environment.TickCount64;
         lock (_gate)
         {
-            removed = _config.Remove(key);
+            if (!_config.Remove(key))
+            {
+                return;
+            }
+            _unprotectedKeys.Remove(key);
+            if (now - _lastSaveMs >= SaveDebounceMs)
+            {
+                _lastSaveMs = now;
+                _savePending = false;
+                shouldSave = true;
+            }
+            else
+            {
+                _savePending = true;
+                shouldSave = false;
+            }
         }
-        if (removed)
+        if (shouldSave)
         {
             SaveToDisk();
         }
@@ -237,6 +287,7 @@ public sealed class ConfigService
     private void MigratePlaintextSecrets()
     {
         var changed = false;
+        var unavailable = false;
         lock (_gate)
         {
             foreach (var key in DpapiProtector.SensitiveKeys)
@@ -247,13 +298,21 @@ public sealed class ConfigService
                     var val = el.GetString()!;
                     if (val.Length > 0 && !DpapiProtector.IsEncrypted(val))
                     {
-                        // MaybeEncrypt (not Encrypt): a transient DPAPI failure must not throw out
-                        // of the constructor and crash startup — it falls back to leaving the value
-                        // as-is, same as the normal save path.
-                        var encrypted = DpapiProtector.MaybeEncrypt(key, val);
-                        if (encrypted == val)
+                        // TryEncrypt (not Encrypt): a DPAPI failure must not throw out of the
+                        // constructor and crash startup.
+                        if (!DpapiProtector.TryEncrypt(key, val, out var encrypted))
                         {
-                            continue; // DPAPI unavailable — leave it for a later save attempt
+                            // Can't protect a value a pre-encryption version left here in the clear.
+                            // Keep it in memory so this session still works, and mark it so the save
+                            // below rewrites the file without it — scrubbing the exposed plaintext
+                            // rather than leaving it there hoping a later attempt succeeds.
+                            _unprotectedKeys.Add(key);
+                            changed = true;
+                            unavailable = true;
+                            _log.LogError(
+                                "DPAPI unavailable — removing unprotected value for key '{Key}' from " +
+                                "config.json. Sign-in will be required again on the next launch.", key);
+                            continue;
                         }
                         _config[key] = JsonSerializer.SerializeToElement(encrypted);
                         changed = true;
@@ -267,15 +326,38 @@ public sealed class ConfigService
         {
             SaveToDisk();
         }
+        if (unavailable)
+        {
+            SecretProtectionUnavailable?.Invoke();
+        }
     }
 
     private void SaveToDisk()
     {
-        string json;
+        // Snapshot under the lock, serialize outside it. Serializing the whole document inline held
+        // the gate against every concurrent Get/Set from the SSE, heartbeat, and UI threads.
+        Dictionary<string, JsonElement> snapshot;
         lock (_gate)
         {
-            json = JsonSerializer.Serialize(_config, WriteOptions);
+            if (_unprotectedKeys.Count == 0)
+            {
+                snapshot = new Dictionary<string, JsonElement>(_config, StringComparer.Ordinal);
+            }
+            else
+            {
+                // Secrets DPAPI couldn't protect are held in memory only — never written.
+                snapshot = new Dictionary<string, JsonElement>(_config.Count, StringComparer.Ordinal);
+                foreach (var (k, v) in _config)
+                {
+                    if (!_unprotectedKeys.Contains(k))
+                    {
+                        snapshot[k] = v;
+                    }
+                }
+            }
         }
+
+        var json = JsonSerializer.Serialize(snapshot, WriteOptions);
         try
         {
             AtomicFile.WriteAllBytes(_configPath, Encoding.UTF8.GetBytes(json));
@@ -286,80 +368,10 @@ public sealed class ConfigService
         }
     }
 
-    /// <summary>Restrict the config directory's ACL to the current user only
-    /// (disable inheritance, grant the user full control). Port of
-    /// <c>restrict_directory_acl</c> — shells out to <c>icacls</c>.</summary>
-    private void RestrictDirectoryAcl(string path)
-    {
-        if (!RunIcacls(path, "/inheritance:r"))
-        {
-            return;
-        }
-
-        var username = Environment.UserName;
-        if (!IsSafeUsername(username))
-        {
-            _log.LogWarning("USERNAME is empty or contains unexpected characters — skipping ACL grant");
-            return;
-        }
-
-        if (RunIcacls(path, "/grant:r", $"{username}:F"))
-        {
-            _log.LogInformation("Config directory ACLs restricted to current user");
-        }
-    }
-
-    private bool RunIcacls(string path, params string[] args)
-    {
-        try
-        {
-            var psi = new ProcessStartInfo("icacls")
-            {
-                CreateNoWindow = true,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
-            psi.ArgumentList.Add(path);
-            foreach (var a in args)
-            {
-                psi.ArgumentList.Add(a);
-            }
-
-            using var proc = Process.Start(psi);
-            if (proc is null)
-            {
-                _log.LogWarning("Failed to start icacls");
-                return false;
-            }
-            // Drain BOTH redirected streams before waiting: icacls writes a "Successfully processed
-            // N files" line to stdout, and reading only stderr can deadlock if stdout fills its pipe.
-            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
-            var stderr = proc.StandardError.ReadToEnd();
-            stdoutTask.GetAwaiter().GetResult();
-            proc.WaitForExit();
-            if (proc.ExitCode != 0)
-            {
-                _log.LogWarning("icacls {Args} returned non-zero: {Err}", string.Join(' ', args), stderr);
-                return false;
-            }
-            return true;
-        }
-        catch (Exception e)
-        {
-            _log.LogWarning(e, "Failed to run icacls");
-            return false;
-        }
-    }
 
     // ── Validation (public for unit coverage) ──────
 
     /// <summary>A config key must be non-empty, ≤255 chars, and free of null bytes.</summary>
     public static bool IsValidKey(string key) =>
         key.Length is > 0 and <= 255 && !key.Contains('\0');
-
-    /// <summary>A Windows username safe to interpolate into an <c>icacls</c> grant argument.</summary>
-    public static bool IsSafeUsername(string name) =>
-        name.Length is > 0 and <= 104
-        && name.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '.' or '-' or ' ');
 }

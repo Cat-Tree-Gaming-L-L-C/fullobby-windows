@@ -9,16 +9,29 @@
         <StackPanel Spacing="10">
 
             <!-- Header + period selector -->
-            <Grid>
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
                 <TextBlock
+                    Grid.Column="0"
                     Text="{x:Bind ViewModel.PeriodLabel, Mode=OneWay}"
+                    ToolTipService.ToolTip="{x:Bind ViewModel.PeriodLabel, Mode=OneWay}"
                     Style="{StaticResource SubtitleTextBlockStyle}"
+                    TextTrimming="CharacterEllipsis"
                     VerticalAlignment="Center" />
-                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
-                    <Button Content="Day" Command="{x:Bind ViewModel.SetPeriodCommand}" CommandParameter="1" />
-                    <Button Content="Week" Command="{x:Bind ViewModel.SetPeriodCommand}" CommandParameter="7" />
-                    <Button Content="Month" Command="{x:Bind ViewModel.SetPeriodCommand}" CommandParameter="30" />
-                    <Button Content="All" Command="{x:Bind ViewModel.SetPeriodCommand}" CommandParameter="3650" />
+                <!-- The active period is accented so the button row itself shows the current
+                     filter, rather than leaving it to the heading text alone. -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                    <Button Content="Day" Command="{x:Bind ViewModel.SetPeriodCommand}" CommandParameter="1"
+                            Style="{x:Bind ViewModel.PeriodDays, Mode=OneWay, Converter={StaticResource PeriodToStyle}, ConverterParameter=1}" />
+                    <Button Content="Week" Command="{x:Bind ViewModel.SetPeriodCommand}" CommandParameter="7"
+                            Style="{x:Bind ViewModel.PeriodDays, Mode=OneWay, Converter={StaticResource PeriodToStyle}, ConverterParameter=7}" />
+                    <Button Content="Month" Command="{x:Bind ViewModel.SetPeriodCommand}" CommandParameter="30"
+                            Style="{x:Bind ViewModel.PeriodDays, Mode=OneWay, Converter={StaticResource PeriodToStyle}, ConverterParameter=30}" />
+                    <Button Content="All" Command="{x:Bind ViewModel.SetPeriodCommand}" CommandParameter="3650"
+                            Style="{x:Bind ViewModel.PeriodDays, Mode=OneWay, Converter={StaticResource PeriodToStyle}, ConverterParameter=3650}" />
                 </StackPanel>
             </Grid>
 

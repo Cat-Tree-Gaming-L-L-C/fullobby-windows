@@ -272,6 +272,13 @@ public sealed class SseStreamClient : IHostedService
                 _log.LogInformation("SSE stream ended");
                 _state.Connected = false;
                 _state.RequestPoll();
+                // Every exit from this method must cancel kaCts, or the reconnect watcher above is
+                // left parked in WaitForReconnect on the *shared* _reconnectWake semaphore: the
+                // closure leaks, and the next Reconnect click releases the semaphore into this dead
+                // connection's waiter instead of the live one, so the button does nothing. The other
+                // three exits are already cancelled (by ct, by the watcher itself, or by keepalive);
+                // a server-closed stream is the one path that has to do it here.
+                await kaCts.CancelAsync().ConfigureAwait(false);
                 return new ConnectionOutcome(1, false, false);
             }
 

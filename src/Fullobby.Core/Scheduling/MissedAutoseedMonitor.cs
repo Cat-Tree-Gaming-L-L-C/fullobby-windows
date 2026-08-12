@@ -102,10 +102,11 @@ public sealed class MissedAutoseedMonitor : IHostedService, IDisposable
         {
             return;
         }
-        if (!await _tasks.IsInstalledAsync(slot.TaskName, ct).ConfigureAwait(false))
-        {
-            return;
-        }
+        // Order matters: the two checks below are in-memory, IsInstalledAsync spawns schtasks.exe.
+        // With the process spawn first, this loop cost ~1,440 process creations per day on every
+        // machine — including the majority that never configured auto-seed at all, which paid the
+        // spawn only to be rejected by the config read a line later. Confirming installation last
+        // makes it a few calls a day for a configured user and none for anyone else.
         if (!AutoSeedTime.TryParseStoredUtc(_config.GetString(slot.StoreKey), out var scheduledUtc))
         {
             return;
@@ -114,6 +115,11 @@ public sealed class MissedAutoseedMonitor : IHostedService, IDisposable
         var nowUtc = DateTime.UtcNow;
         var windowHours = _configProvider.Current.MissedAutoseedWindowHours;
         if (!IsWithinMissedWindow(nowUtc, scheduledUtc, windowHours))
+        {
+            return;
+        }
+
+        if (!await _tasks.IsInstalledAsync(slot.TaskName, ct).ConfigureAwait(false))
         {
             return;
         }

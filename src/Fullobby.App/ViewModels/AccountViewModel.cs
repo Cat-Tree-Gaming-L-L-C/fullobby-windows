@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Net;
 using Fullobby.App.Services;
+using Fullobby.Core;
 using Fullobby.Core.Activation;
 using Fullobby.Core.Api;
 using Fullobby.Core.Config;
@@ -1005,13 +1006,44 @@ public sealed partial class AccountViewModel : ObservableObject
             _config.Remove("onboarding_complete");
         }
         _config.Remove("guest_mode");
-    }
+        // Removals are throttled; sign-out state must survive an immediate kill.
+        _config.FlushPendingSaves();
 
-    private void OpenBrowser(string url, string what)
-    {
+        // The admin panel signs in as its own WebView2 session, which persists in its profile
+        // directory independently of the tokens cleared above — so without this a signed-out user's
+        // panel session survives on disk. Best-effort: WebView2 holds the directory open while the
+        // Admin tab is live, and the delete simply fails then.
         try
         {
-            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            if (Directory.Exists(Branding.WebViewProfileDir))
+            {
+                Directory.Delete(Branding.WebViewProfileDir, recursive: true);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            _log.LogWarning(e, "Could not clear the admin panel WebView2 profile on sign-out");
+        }
+    }
+
+    /// <summary>Open an OAuth/link URL in the system browser. The sign-in and link flows take their
+    /// URL from the API response, so it is validated as an absolute http(s) URL before it reaches
+    /// <c>UseShellExecute</c> — otherwise a malicious or compromised API could return a
+    /// <c>file://</c>/UNC path or a local protocol handler and have the client launch it.</summary>
+    private void OpenBrowser(string url, string what)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var target)
+            || !(string.Equals(target.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
+                 || string.Equals(target.Scheme, Uri.UriSchemeHttp, StringComparison.Ordinal)))
+        {
+            _log.LogError("Refused a non-web {What} URL from the API", what);
+            _toast.Error("Failed to open browser");
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(target.AbsoluteUri) { UseShellExecute = true });
         }
         catch (Exception e)
         {

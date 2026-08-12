@@ -17,6 +17,24 @@ public class DpapiProtectorTests
     }
 
     [Fact]
+    public void TryEncrypt_NonSensitiveOrEmpty_SucceedsUnchanged()
+    {
+        Assert.True(DpapiProtector.TryEncrypt("username", "alice", out var user));
+        Assert.Equal("alice", user);
+        Assert.True(DpapiProtector.TryEncrypt("auth_token", "", out var empty));
+        Assert.Equal("", empty);
+    }
+
+    [Fact]
+    public void TryEncrypt_Sensitive_ProducesDecryptableCiphertext()
+    {
+        Assert.True(DpapiProtector.TryEncrypt("auth_token", "jwt.value.123", out var encrypted));
+        Assert.True(DpapiProtector.IsEncrypted(encrypted));
+        Assert.NotEqual("jwt.value.123", encrypted);
+        Assert.Equal("jwt.value.123", DpapiProtector.Decrypt(encrypted));
+    }
+
+    [Fact]
     public void MaybeEncrypt_NonSensitive_Passthrough()
     {
         Assert.Equal("alice", DpapiProtector.MaybeEncrypt("username", "alice"));

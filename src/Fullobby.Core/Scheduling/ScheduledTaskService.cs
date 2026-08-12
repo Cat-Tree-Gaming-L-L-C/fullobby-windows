@@ -59,9 +59,17 @@ public sealed class ScheduledTaskService
         var startBoundary = $"{DateTime.Now:yyyy-MM-dd}T{normalized}";
 
         var xml = BuildTaskXml(exe, workingDir, args, startBoundary);
-        var tempPath = Path.Combine(Path.GetTempPath(), $"fullobby-task-{Guid.NewGuid():N}.xml");
+
+        // This file decides what a daily, WakeToRun task executes, and a separate process reads it
+        // back — so it must not sit at a guessable path in the shared %TEMP% root, where another
+        // process running as this user could swap the <Command> between our write and schtasks'
+        // read. Write it into a fresh randomly-named subdirectory (same approach the updater takes
+        // for the installer) and remove the whole directory afterwards.
+        var tempDir = Path.Combine(Path.GetTempPath(), $"fullobby-task-{Guid.NewGuid():N}");
+        var tempPath = Path.Combine(tempDir, "task.xml");
         try
         {
+            Directory.CreateDirectory(tempDir);
             // schtasks wants UTF-16 XML (matching the <?xml ... encoding="UTF-16"?> declaration).
             await File.WriteAllTextAsync(tempPath, xml, Encoding.Unicode, ct).ConfigureAwait(false);
 
@@ -77,7 +85,8 @@ public sealed class ScheduledTaskService
         }
         finally
         {
-            try { File.Delete(tempPath); } catch (IOException) { /* best effort */ }
+            try { Directory.Delete(tempDir, recursive: true); } catch (IOException) { /* best effort */ }
+            catch (UnauthorizedAccessException) { /* best effort */ }
         }
     }
 

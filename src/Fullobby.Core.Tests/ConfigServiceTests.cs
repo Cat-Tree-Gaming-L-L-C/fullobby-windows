@@ -34,35 +34,6 @@ public class ConfigValidationTests
     [InlineData("\0")]
     [InlineData("key\0")]
     public void InvalidKey_NullByte(string key) => Assert.False(ConfigService.IsValidKey(key));
-
-    [Theory]
-    [InlineData("Alice")]
-    [InlineData("bob_smith")]
-    [InlineData("John Doe")]
-    [InlineData("user.name")]
-    [InlineData("user-name")]
-    public void SafeUsername_Normal(string name) => Assert.True(ConfigService.IsSafeUsername(name));
-
-    [Fact]
-    public void SafeUsername_RejectsEmpty() => Assert.False(ConfigService.IsSafeUsername(""));
-
-    [Fact]
-    public void SafeUsername_LengthBoundary()
-    {
-        Assert.True(ConfigService.IsSafeUsername(new string('a', 104)));
-        Assert.False(ConfigService.IsSafeUsername(new string('a', 105)));
-    }
-
-    [Theory]
-    [InlineData("user;whoami")]
-    [InlineData("user&calc")]
-    [InlineData("user|dir")]
-    [InlineData("user$(cmd)")]
-    [InlineData("user`cmd`")]
-    [InlineData("user\nname")]
-    [InlineData("user\0name")]
-    [InlineData("../admin")]
-    public void SafeUsername_RejectsSpecialChars(string name) => Assert.False(ConfigService.IsSafeUsername(name));
 }
 
 public class AtomicFileTests
@@ -182,6 +153,36 @@ public class ConfigServiceRoundtripTests : IDisposable
         // A fresh service reading the same file decrypts transparently.
         var reopened = new ConfigService(NullLogger<ConfigService>.Instance, _dir);
         Assert.Equal("jwt.value.123", reopened.GetString("auth_token"));
+    }
+
+    [Fact]
+    public void Remove_ThenFlush_ErasesFromDisk()
+    {
+        // Remove() is throttled like Set(), so the auth paths flush after clearing credentials.
+        // This guards that pairing: a signed-out token must not survive on disk.
+        _config.SetString("auth_token", "jwt.value.123");
+        _config.FlushPendingSaves();
+        Assert.Contains("auth_token", File.ReadAllText(Path.Combine(_dir, "config.json")));
+
+        _config.Remove("auth_token");
+        _config.FlushPendingSaves();
+
+        Assert.Null(_config.GetString("auth_token"));
+        Assert.DoesNotContain("auth_token", File.ReadAllText(Path.Combine(_dir, "config.json")));
+    }
+
+    [Fact]
+    public void UnprotectedSecrets_NoneUnderNormalConditions()
+    {
+        // DPAPI is available in the test environment, so nothing should be held back from disk.
+        _config.SetString("auth_token", "jwt.value.123");
+        _config.SetString("api_key", "key-abc");
+        _config.FlushPendingSaves();
+
+        Assert.False(_config.HasUnprotectedSecrets);
+        var onDisk = File.ReadAllText(Path.Combine(_dir, "config.json"));
+        Assert.Contains("auth_token", onDisk);
+        Assert.Contains("api_key", onDisk);
     }
 
     [Fact]

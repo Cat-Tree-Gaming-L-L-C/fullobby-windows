@@ -41,7 +41,7 @@
                     <TextBlock Text="Do I have to watch it?" TextWrapping="Wrap" />
                 </Expander.Header>
                 <TextBlock
-                    Text="No. Keep Hell Let Loose running and connected — the app tracks your seeding time in the background and can switch servers or stop automatically. Turn on Seeding Power Savings in Settings to run the game at low resource settings while you seed."
+                    Text="No. Keep Hell Let Loose running and connected — the app tracks your seeding time in the background and can switch servers or stop automatically. To run the game at low resource settings while you seed, use the arrow beside the Seed button and choose &quot;Seed with Power Savings&quot; — Fullobby remembers that choice for next time."
                     TextWrapping="Wrap" Opacity="0.8" />
             </Expander>
 

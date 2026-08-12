@@ -78,8 +78,14 @@ public sealed class AppBootstrapper : IHostedService
         _config.FlushPendingSaves();
     }
 
+    /// <summary>How often the server-decided config is re-fetched inside the poll loop.</summary>
+    private const long ConfigRefreshIntervalMs = 15 * 60 * 1000;
+
+    private long _lastConfigRefreshTicks;
+
     private async Task RunAsync(CancellationToken ct)
     {
+        _lastConfigRefreshTicks = Environment.TickCount64;
         await RefreshConfigAsync(ct).ConfigureAwait(false);
         await LoadServersAsync(ct).ConfigureAwait(false);
 
@@ -94,8 +100,15 @@ public sealed class AppBootstrapper : IHostedService
             try { await _sse.WaitForPollOrInterval(interval, ct).ConfigureAwait(false); }
             catch (OperationCanceledException) { break; }
 
-            // Refresh the server-decided config each loop so timing changes propagate without a restart.
-            await RefreshConfigAsync(ct).ConfigureAwait(false);
+            // Refresh the server-decided config so timing changes propagate without a restart —
+            // but on its own slow cadence, not once per poll loop. Tied to the loop it ran every
+            // PollIdleSecs (60s => ~1,440 requests/client/day) in the healthy steady state, for a
+            // value that changes rarely and that every seeding directive already carries inline.
+            if (Environment.TickCount64 - _lastConfigRefreshTicks >= ConfigRefreshIntervalMs)
+            {
+                _lastConfigRefreshTicks = Environment.TickCount64;
+                await RefreshConfigAsync(ct).ConfigureAwait(false);
+            }
 
             // Skip the redundant HTTP round-trip if SSE reconnected while we waited.
             if (_sse.Connected)

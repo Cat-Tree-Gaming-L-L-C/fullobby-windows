@@ -71,17 +71,6 @@ public partial class App : Application
             Log.Warning(ex, "Efficiency-mode startup recovery failed");
         }
 
-        // If "Start with Windows" is enabled but points at a stale exe path (e.g. after an update
-        // moved the install), refresh it. Port of update_startup_path_if_needed().
-        try
-        {
-            AppHost.Services.GetRequiredService<StartupRegistry>().UpdatePathIfNeeded();
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Startup path refresh failed");
-        }
-
         // Fire a missed (scheduler-skipped or post-wake) auto-seed when the watchdog detects one.
         AppHost.Services.GetRequiredService<MissedAutoseedMonitor>().AutoseedDue += OnAutoseedDue;
 
@@ -96,21 +85,6 @@ public partial class App : Application
                 Path.Combine(AppContext.BaseDirectory, "Assets", "icon.ico"),
                 Branding.ProductName,
                 null);
-
-            // The WAS registration above mints a per-exe-path ProgId and never removes the one it
-            // made for a previous path, so moves/updates/dev-builds accumulate live handlers and the
-            // fullobby:// "open with" picker fills up with stale duplicate Fullobby entries.
-            // Prune every Fullobby handler that isn't the running exe so exactly one remains.
-            var exe = Environment.ProcessPath;
-            if (exe is not null)
-            {
-                var removed = ProtocolRegistration.PruneStaleHandlers(Path.GetFileName(exe), exe);
-                if (removed.Count > 0)
-                {
-                    Log.Information("Pruned {Count} stale fullobby:// handler(s): {ProgIds}",
-                        removed.Count, string.Join(", ", removed));
-                }
-            }
         }
         catch (Exception ex)
         {
@@ -191,12 +165,69 @@ public partial class App : Application
         var account = AppHost.Services.GetRequiredService<ViewModels.AccountViewModel>();
         _ = account.RestoreSessionAsync();
 
+        // Deferred startup housekeeping. Nothing on the first frame depends on either of these, and
+        // both hit the registry: PruneStaleHandlers enumerates every subkey of HKCU\Software\Classes
+        // (routinely 1,000–3,000 of them), which is not something to do on the UI thread before the
+        // window is up. The rest of the startup block stays synchronous because it is documented as
+        // having to run before any UI reads config (the efficiency migration and crash recovery).
+        _ = Task.Run(() =>
+        {
+            // "Start with Windows" pointing at a stale exe path (e.g. an update moved the install).
+            try
+            {
+                AppHost.Services.GetRequiredService<StartupRegistry>().UpdatePathIfNeeded();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Startup path refresh failed");
+            }
+
+            // The WAS registration mints a per-exe-path ProgId and never removes the one it made for
+            // a previous path, so moves/updates/dev-builds accumulate live handlers and the
+            // fullobby:// "open with" picker fills up with stale duplicate Fullobby entries.
+            // Prune every Fullobby handler that isn't the running exe so exactly one remains.
+            try
+            {
+                var exe = Environment.ProcessPath;
+                if (exe is not null)
+                {
+                    var removed = ProtocolRegistration.PruneStaleHandlers(Path.GetFileName(exe), exe);
+                    if (removed.Count > 0)
+                    {
+                        Log.Information("Pruned {Count} stale fullobby:// handler(s): {ProgIds}",
+                            removed.Count, string.Join(", ", removed));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Pruning stale fullobby:// handlers failed");
+            }
+        });
+
         // Surface the efficiency-mode crash-recovery notice now that the toast host exists.
+        var toastService = AppHost.Services.GetRequiredService<Services.InAppToastService>();
         var notice = backup.TakeStartupRestoreNotice();
         if (notice is not null)
         {
-            AppHost.Services.GetRequiredService<Services.InAppToastService>().Info(notice);
+            toastService.Info(notice);
         }
+
+        // Credential protection failing is silent by nature: we deliberately do NOT persist secrets
+        // we can't encrypt, so without this the user is simply signed out on the next launch with no
+        // explanation. Sticky (duration 0) because it's the reason for a later surprise, and the
+        // check covers a failure raised during construction, before anything could subscribe.
+        var config = AppHost.Services.GetRequiredService<ConfigService>();
+        config.SecretProtectionUnavailable += WarnSecretsUnprotected;
+        if (config.HasUnprotectedSecrets)
+        {
+            WarnSecretsUnprotected();
+        }
+
+        void WarnSecretsUnprotected() => toastService.Warning(
+            "Windows couldn't encrypt your saved credentials on this PC, so they haven't been saved " +
+            "to disk. You'll stay signed in until you close Fullobby, then need to sign in again.",
+            durationMs: 0);
 
         // The first instance itself may have been protocol-launched or scheduled-task-launched
         // (fullobby:// deep link, or --autoseed from a scheduled task).
@@ -383,10 +414,22 @@ public partial class App : Application
                 shared: true)
             .CreateLogger();
 
-        return Host.CreateDefaultBuilder()
+        // A bare HostBuilder, not Host.CreateDefaultBuilder(). The default builder registers
+        // appsettings.json + appsettings.{Environment}.json providers with reloadOnChange: true,
+        // which puts a FileSystemWatcher on the app directory — two OS change-notification handles
+        // and a background thread that exist to reload files this project does not have and never
+        // reads (nothing here injects IConfiguration). It also registers Console/Debug/EventSource
+        // logging providers that UseSerilog then makes moot.
+        return new HostBuilder()
             .UseSerilog()
             .ConfigureServices(services =>
             {
+                // Explicit because the bare builder adds no logging of its own: UseSerilog supplies
+                // the ILoggerFactory, but the open-generic ILogger<T> every service injects comes
+                // from AddLogging. AddHttpClient happens to call it too — this does not rely on that.
+                // Idempotent (TryAdd-based), so the duplicate call costs nothing.
+                services.AddLogging();
+
                 // Core: config, API, native/tools, seeding engine, startup worker.
                 services.AddFullobbyCore();
 

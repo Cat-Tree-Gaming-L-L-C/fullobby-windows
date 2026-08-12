@@ -1,4 +1,5 @@
 using Fullobby.App.ViewModels;
+using Fullobby.Core.Api;
 using Fullobby.Core.Config;
 using Fullobby.Core.Platform;
 using Fullobby.Core.Scheduling;
@@ -22,6 +23,9 @@ public sealed partial class SettingsPage : Page
 
     // Suppresses the Toggled/SelectionChanged handlers while seeding controls from config.
     private bool _loading;
+
+    // Guards the auto-seed buttons: both handlers shell out to schtasks and end in a dialog.
+    private bool _autoseedBusy;
 
     public SettingsPage()
     {
@@ -49,7 +53,12 @@ public sealed partial class SettingsPage : Page
     private void SeedControls()
     {
         _loading = true;
-        DarkModeToggle.IsOn = _window.IsDarkTheme;
+        ThemeCombo.SelectedIndex = _window.CurrentTheme switch
+        {
+            ElementTheme.Light => 1,
+            ElementTheme.Default => 2, // follow system
+            _ => 0,                    // dark (brand default)
+        };
         CloseToTrayToggle.IsOn = _config.GetBool("close_to_tray", true);
         SwitchNotificationToggle.IsOn = _config.GetBool("switch_notification", true);
         LeaderboardToggle.IsOn = Account.ShowOnLeaderboard;
@@ -134,8 +143,36 @@ public sealed partial class SettingsPage : Page
 
     private void AutoseedRemove_Click(object sender, RoutedEventArgs e) => _ = RemoveAutoseedAsync();
 
+    /// <summary>Disable both auto-seed buttons and show the spinner while a schtasks call is in
+    /// flight. Each call shells out to schtasks.exe and ends in a dialog, so without this a
+    /// double-click runs the operation twice and stacks two dialogs.</summary>
+    private bool BeginAutoseedBusy()
+    {
+        if (_autoseedBusy)
+        {
+            return false;
+        }
+        _autoseedBusy = true;
+        AutoseedSpinner.Visibility = Visibility.Visible;
+        AutoseedSetup.IsEnabled = false;
+        AutoseedRemove.IsEnabled = false;
+        return true;
+    }
+
+    private void EndAutoseedBusy()
+    {
+        _autoseedBusy = false;
+        AutoseedSpinner.Visibility = Visibility.Collapsed;
+        AutoseedSetup.IsEnabled = true;
+        AutoseedRemove.IsEnabled = true;
+    }
+
     private async Task SetupAutoseedAsync()
     {
+        if (!BeginAutoseedBusy())
+        {
+            return;
+        }
         try
         {
             var message = await _autoseed.SetupAsync();
@@ -146,19 +183,55 @@ public sealed partial class SettingsPage : Page
         {
             await AlertAsync("Error", "Failed to set up the auto-seed task. Check the logs for details.");
         }
+        finally
+        {
+            EndAutoseedBusy();
+        }
     }
 
     private async Task RemoveAutoseedAsync()
     {
+        // Removing the task silently stops a scheduled wake the user is relying on, so confirm it.
+        var confirm = new ContentDialog
+        {
+            Title = "Remove Auto-Seed",
+            Content = "Your PC will no longer wake to seed automatically. You can set this up again at any time.",
+            PrimaryButtonText = "Remove",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = XamlRoot,
+        };
+        if (await confirm.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        if (!BeginAutoseedBusy())
+        {
+            return;
+        }
+        var removed = true;
         try
         {
             await _autoseed.UninstallAsync();
         }
         catch (Exception)
         {
-            // Removal failures are non-fatal; reflect whatever the current status is.
+            // A failed removal leaves a task that will still wake the machine — the user has to be
+            // told, otherwise the refreshed status ("Scheduled") reads as the removal not applying yet.
+            removed = false;
         }
-        await LoadAutoseedStatusAsync();
+        finally
+        {
+            await LoadAutoseedStatusAsync();
+            EndAutoseedBusy();
+        }
+
+        if (!removed)
+        {
+            await AlertAsync("Error",
+                "Couldn't remove the auto-seed task, so your PC may still wake to seed. Check the logs for details.");
+        }
     }
 
     private Task AlertAsync(string title, string content) =>
@@ -187,15 +260,48 @@ public sealed partial class SettingsPage : Page
             Text = Account.DisplayName,
             MaxLength = 32,
         };
+        var errorText = new TextBlock
+        {
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+            Visibility = Visibility.Collapsed,
+        };
+        if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush)
+            && brush is Microsoft.UI.Xaml.Media.Brush critical)
+        {
+            errorText.Foreground = critical;
+        }
+
+        var content = new StackPanel { Spacing = 8 };
+        content.Children.Add(input);
+        content.Children.Add(errorText);
+
         var dialog = new ContentDialog
         {
             Title = "Change Name",
-            Content = input,
+            Content = content,
             PrimaryButtonText = "Save",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = XamlRoot,
         };
+        // Validate before closing: an empty or rejected name would otherwise dismiss the dialog and
+        // leave the name unchanged, with the reason (if any) landing in a toast the user has already
+        // looked away from. Same deferral + inline-error shape as the join-network dialog below.
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            var trimmed = input.Text.Trim();
+            var error = trimmed.Length == 0
+                ? "Enter a nickname."
+                : ApiValidation.ValidateDisplayName(trimmed);
+            if (error is not null)
+            {
+                args.Cancel = true;
+                errorText.Text = error;
+                errorText.Visibility = Visibility.Visible;
+            }
+        };
+
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)
         {
             await Account.UpdateDisplayNameAsync(input.Text);
@@ -215,7 +321,7 @@ public sealed partial class SettingsPage : Page
         };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)
         {
-            await Account.DeleteAccountAsync();
+            await Account.DeleteAccountCommand.ExecuteAsync(null);
         }
     }
 
@@ -223,7 +329,10 @@ public sealed partial class SettingsPage : Page
     {
         if ((sender as FrameworkElement)?.Tag is string provider)
         {
-            await Account.UnlinkProviderAsync(provider);
+            // Through the generated command, not the method: AsyncRelayCommand refuses concurrent
+            // executions, so a double-click can't fire two unlink requests. Calling the method
+            // directly bypasses that guard, which is the whole reason the command exists.
+            await Account.UnlinkProviderCommand.ExecuteAsync(provider);
         }
     }
 
@@ -253,19 +362,30 @@ public sealed partial class SettingsPage : Page
 
     // ── Seeding networks ────────────────────────────────────────────────────
 
-    private async void NetworkUp_Click(object sender, RoutedEventArgs e)
-    {
-        if ((sender as FrameworkElement)?.Tag is NetworkMembershipRow row)
-        {
-            await Account.MoveNetworkAsync(row, -1);
-        }
-    }
+    /// <summary>Serializes the network-row actions. Reorder and Leave all rewrite the same
+    /// priority list and push the whole order to the API, so two overlapping calls can race and
+    /// persist an order the user never asked for. These have no generated command to lean on
+    /// (MoveNetworkAsync takes two arguments), hence an explicit gate.</summary>
+    private bool _networkBusy;
 
-    private async void NetworkDown_Click(object sender, RoutedEventArgs e)
+    private async void NetworkUp_Click(object sender, RoutedEventArgs e) => await MoveNetworkAsync(sender, -1);
+
+    private async void NetworkDown_Click(object sender, RoutedEventArgs e) => await MoveNetworkAsync(sender, +1);
+
+    private async Task MoveNetworkAsync(object sender, int delta)
     {
-        if ((sender as FrameworkElement)?.Tag is NetworkMembershipRow row)
+        if (_networkBusy || (sender as FrameworkElement)?.Tag is not NetworkMembershipRow row)
         {
-            await Account.MoveNetworkAsync(row, +1);
+            return;
+        }
+        _networkBusy = true;
+        try
+        {
+            await Account.MoveNetworkAsync(row, delta);
+        }
+        finally
+        {
+            _networkBusy = false;
         }
     }
 
@@ -284,9 +404,18 @@ public sealed partial class SettingsPage : Page
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = XamlRoot,
         };
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary || _networkBusy)
+        {
+            return;
+        }
+        _networkBusy = true;
+        try
         {
             await Account.LeaveNetworkAsync(row);
+        }
+        finally
+        {
+            _networkBusy = false;
         }
     }
 
@@ -352,13 +481,21 @@ public sealed partial class SettingsPage : Page
 
     // ── Settings toggles ────────────────────────────────────────────────────
 
-    private void DarkModeToggle_Toggled(object sender, RoutedEventArgs e)
+    private void ThemeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loading)
         {
             return;
         }
-        _window.SetTheme(DarkModeToggle.IsOn);
+        if (ThemeCombo.SelectedItem is ComboBoxItem { Tag: string tag })
+        {
+            _window.SetTheme(tag switch
+            {
+                "light" => ElementTheme.Light,
+                "system" => ElementTheme.Default,
+                _ => ElementTheme.Dark,
+            });
+        }
     }
 
     private void CloseToTrayToggle_Toggled(object sender, RoutedEventArgs e)

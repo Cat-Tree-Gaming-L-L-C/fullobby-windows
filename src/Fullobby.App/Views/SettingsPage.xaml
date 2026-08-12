@@ -5,11 +5,22 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:vm="using:Fullobby.App.ViewModels">
 
+    <!-- Layout contract for this page: every row that pairs a label with a control is a two-column
+         Grid (* for the text, Auto for the control). A single-cell Grid with a right-aligned button
+         renders the button *on top of* the label, which silently hides dynamic strings (provider
+         handles, network names, schtasks timestamps, versions) behind the control. The window is a
+         fixed 500px wide and non-resizable, so there is no user recovery from an overlap — the
+         constraint has to be expressed in the layout. Text columns wrap or ellipsize; anything
+         ellipsized carries a ToolTip so the full value stays reachable. -->
     <ScrollViewer Padding="24,16" VerticalScrollBarVisibility="Auto">
-        <StackPanel Spacing="6" MaxWidth="460" HorizontalAlignment="Stretch">
+        <StackPanel Spacing="6" HorizontalAlignment="Stretch">
 
             <!-- ── Account ─────────────────────────────────────────────── -->
-            <TextBlock Text="Account" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" />
+            <TextBlock
+                Text="Account"
+                Style="{StaticResource BodyStrongTextBlockStyle}"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                AutomationProperties.HeadingLevel="Level2" />
 
             <ProgressRing
                 IsActive="True" Width="20" Height="20" HorizontalAlignment="Center" Margin="0,4"
@@ -22,6 +33,7 @@
                 <!-- Name on its own row so it can use the full width; actions sit below. -->
                 <TextBlock
                     Text="{x:Bind Account.DisplayName, Mode=OneWay}"
+                    ToolTipService.ToolTip="{x:Bind Account.DisplayName, Mode=OneWay}"
                     FontWeight="SemiBold"
                     TextTrimming="CharacterEllipsis"
                     TextWrapping="NoWrap" />
@@ -31,22 +43,36 @@
                         Command="{x:Bind Account.RotateApiKeyCommand}"
                         Visibility="{x:Bind Account.CanRotateApiKey, Mode=OneWay, Converter={StaticResource BoolToVis}}" />
                     <Button Content="Sign Out" Command="{x:Bind Account.SignOutCommand}" />
-                    <Button Content="Delete Account" Click="DeleteAccount_Click" />
                 </StackPanel>
 
                 <!-- Linked providers -->
                 <TextBlock
                     Text="Linked Providers"
-                    FontSize="12" Opacity="0.6" Margin="0,4,0,0"
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Margin="0,4,0,0"
                     Visibility="{x:Bind Account.HasLinkedProviders, Mode=OneWay, Converter={StaticResource BoolToVis}}" />
                 <ItemsControl ItemsSource="{x:Bind Account.LinkedProviders}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:LinkedProviderRow">
-                            <Grid Padding="6,2" Margin="0,1">
-                                <TextBlock Text="{x:Bind Label}" FontSize="12" VerticalAlignment="Center" />
+                            <!-- Label is "Provider (handle)" — a long handle must ellipsize in its
+                                 own column, never slide under the Unlink button. -->
+                            <Grid Padding="6,2" Margin="0,1" ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    Grid.Column="0"
+                                    Text="{x:Bind Label}"
+                                    ToolTipService.ToolTip="{x:Bind Label}"
+                                    FontSize="12"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="NoWrap"
+                                    VerticalAlignment="Center" />
                                 <Button
+                                    Grid.Column="1"
                                     Content="Unlink"
-                                    HorizontalAlignment="Right"
                                     Tag="{x:Bind Provider}"
                                     Click="Unlink_Click"
                                     Visibility="{x:Bind CanUnlink, Converter={StaticResource BoolToVis}}" />
@@ -75,7 +101,23 @@
                         <Button Content="Link Epic Games" IsEnabled="False" Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="epic" />
                         <Button Content="Link Xbox" IsEnabled="False" Command="{x:Bind Account.LinkProviderCommand}" CommandParameter="microsoft" />
                     </StackPanel>
-                    <TextBlock Text="Epic Games and Xbox linking is coming soon." FontSize="11" Opacity="0.5" HorizontalAlignment="Center" />
+                    <TextBlock
+                        Text="Epic Games and Xbox linking is coming soon."
+                        FontSize="11"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        TextWrapping="Wrap"
+                        HorizontalAlignment="Center" />
+                </StackPanel>
+
+                <!-- Irreversible: kept off the row that holds Sign Out so a mis-click can't land
+                     on it, and labelled with its consequence rather than sitting bare. -->
+                <StackPanel Spacing="2" Margin="0,10,0,0">
+                    <Button Content="Delete Account" Click="DeleteAccount_Click" HorizontalAlignment="Left" />
+                    <TextBlock
+                        Text="Permanently deletes your account and all seeding history."
+                        FontSize="11"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        TextWrapping="Wrap" />
                 </StackPanel>
             </StackPanel>
 
@@ -93,41 +135,79 @@
                     <Button Content="Sign in with Epic Games" IsEnabled="False" Command="{x:Bind Account.LoginCommand}" CommandParameter="epic" />
                     <Button Content="Sign in with Xbox" IsEnabled="False" Command="{x:Bind Account.LoginCommand}" CommandParameter="microsoft" />
                 </StackPanel>
-                <TextBlock Text="Epic Games and Xbox sign-in are coming soon." FontSize="11" Opacity="0.5" />
+                <TextBlock
+                    Text="Epic Games and Xbox sign-in are coming soon."
+                    FontSize="11"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                    TextWrapping="Wrap" />
             </StackPanel>
 
             <!-- ── Player ──────────────────────────────────────────────── -->
-            <TextBlock Text="Player" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
+            <TextBlock
+                Text="Player"
+                Style="{StaticResource BodyStrongTextBlockStyle}"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                AutomationProperties.HeadingLevel="Level2"
+                Margin="0,8,0,0" />
 
             <Button
                 Content="{x:Bind Account.NameButtonText, Mode=OneWay}"
                 HorizontalAlignment="Left"
                 IsEnabled="{x:Bind Account.IsLoggedIn, Mode=OneWay}"
                 Click="ChangeName_Click" />
+            <TextBlock
+                Text="Sign in to change your display name."
+                FontSize="11"
+                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                TextWrapping="Wrap"
+                Visibility="{x:Bind Account.IsLoggedIn, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
 
-            <Grid Visibility="{x:Bind Account.IsLoggedIn, Mode=OneWay, Converter={StaticResource BoolToVis}}">
-                <StackPanel>
-                    <TextBlock Text="Show on Leaderboard" />
-                    <TextBlock Text="Appear in public rankings" FontSize="12" Opacity="0.5" />
+            <Grid
+                ColumnSpacing="12"
+                Visibility="{x:Bind Account.IsLoggedIn, Mode=OneWay, Converter={StaticResource BoolToVis}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="Show on Leaderboard" TextWrapping="Wrap" />
+                    <TextBlock
+                        Text="Appear in public rankings"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        TextWrapping="Wrap" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <ProgressRing x:Name="LeaderboardSpinner" Width="16" Height="16" IsActive="True" Visibility="Collapsed" />
-                    <ToggleSwitch x:Name="LeaderboardToggle" Toggled="LeaderboardToggle_Toggled" />
+                    <ToggleSwitch
+                        x:Name="LeaderboardToggle"
+                        AutomationProperties.Name="Show on Leaderboard"
+                        Toggled="LeaderboardToggle_Toggled" />
                 </StackPanel>
             </Grid>
 
             <!-- ── Networks ────────────────────────────────────────────── -->
-            <TextBlock Text="Seeding Networks" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
+            <TextBlock
+                Text="Seeding Networks"
+                Style="{StaticResource BodyStrongTextBlockStyle}"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                AutomationProperties.HeadingLevel="Level2"
+                Margin="0,8,0,0" />
 
             <StackPanel
                 Spacing="4"
                 Visibility="{x:Bind Account.IsLoggedIn, Mode=OneWay, Converter={StaticResource BoolToVis}}">
-                <TextBlock Text="Communities you seed with, in priority order (top = preferred)."
-                           FontSize="12" Opacity="0.5" TextWrapping="Wrap" />
+                <TextBlock
+                    Text="Networks you seed with, in priority order (top = preferred)."
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextWrapping="Wrap" />
 
                 <ItemsControl ItemsSource="{x:Bind Account.Networks}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:NetworkMembershipRow">
+                            <!-- Network names are operator-supplied and routinely long; the name
+                                 column ellipsizes with a ToolTip rather than clipping mid-glyph. -->
                             <Grid Padding="6,2" Margin="0,1" ColumnSpacing="4">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -135,12 +215,21 @@
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{x:Bind Label}" FontSize="12" VerticalAlignment="Center" />
+                                <TextBlock
+                                    Grid.Column="0"
+                                    Text="{x:Bind Label}"
+                                    ToolTipService.ToolTip="{x:Bind Label}"
+                                    FontSize="12"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="NoWrap"
+                                    VerticalAlignment="Center" />
                                 <Button Grid.Column="1" Padding="8,4" Tag="{x:Bind}" Click="NetworkUp_Click"
+                                        AutomationProperties.Name="Raise network priority"
                                         ToolTipService.ToolTip="Higher priority">
                                     <FontIcon Glyph="&#xE70E;" FontSize="11" />
                                 </Button>
                                 <Button Grid.Column="2" Padding="8,4" Tag="{x:Bind}" Click="NetworkDown_Click"
+                                        AutomationProperties.Name="Lower network priority"
                                         ToolTipService.ToolTip="Lower priority">
                                     <FontIcon Glyph="&#xE70D;" FontSize="11" />
                                 </Button>
@@ -153,38 +242,95 @@
                 <Button Content="Join a network" HorizontalAlignment="Left" Click="NetworkJoin_Click" />
             </StackPanel>
 
-            <TextBlock Text="Sign in to manage your seeding networks."
-                       FontSize="12" Opacity="0.5"
-                       Visibility="{x:Bind Account.IsLoggedIn, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+            <TextBlock
+                Text="Sign in to manage your seeding networks."
+                FontSize="12"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                TextWrapping="Wrap"
+                Visibility="{x:Bind Account.IsLoggedIn, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
 
-            <!-- ── Settings ────────────────────────────────────────────── -->
-            <TextBlock Text="Settings" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
+            <!-- ── Appearance & Behaviour ──────────────────────────────── -->
+            <TextBlock
+                Text="Appearance &amp; Behaviour"
+                Style="{StaticResource BodyStrongTextBlockStyle}"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                AutomationProperties.HeadingLevel="Level2"
+                Margin="0,8,0,0" />
 
-            <ToggleSwitch
-                x:Name="DarkModeToggle"
-                Header="Dark Mode"
-                Toggled="DarkModeToggle_Toggled" />
-
-            <ToggleSwitch
-                x:Name="CloseToTrayToggle"
-                Header="Minimize to tray on close"
-                OffContent="Closing the window exits the app"
-                OnContent="Closing the window keeps it running in the tray"
-                Toggled="CloseToTrayToggle_Toggled" />
-
-            <ToggleSwitch
-                x:Name="SwitchNotificationToggle"
-                Header="Notify before switching servers"
-                OffContent="Switch immediately with no warning"
-                OnContent="Show a 30s countdown + desktop notification before switching"
-                Toggled="SwitchNotificationToggle_Toggled" />
-
-            <Grid Margin="0,4,0,0">
-                <StackPanel>
-                    <TextBlock Text="Splash Bypass Duration" />
-                    <TextBlock Text="How long to send keypresses to skip the intro video" FontSize="12" Opacity="0.5" />
+            <!-- Descriptions live in their own wrapped TextBlock, not in On/OffContent: the stock
+                 ToggleSwitch template lays On/OffContent out on a single non-wrapping line beside
+                 the ~52px track, so a sentence there is hard-clipped mid-word at this window width.
+                 With no On/OffContent set, the switch shows the standard On/Off state labels. -->
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="Theme" TextWrapping="Wrap" />
+                    <TextBlock
+                        Text="Dark is the Fullobby default"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        TextWrapping="Wrap" />
                 </StackPanel>
-                <ComboBox x:Name="SplashDurationCombo" HorizontalAlignment="Right" Width="110" SelectionChanged="SplashDurationCombo_SelectionChanged">
+                <ComboBox
+                    x:Name="ThemeCombo"
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    MinWidth="150"
+                    AutomationProperties.Name="App theme"
+                    SelectionChanged="ThemeCombo_SelectionChanged">
+                    <ComboBoxItem Content="Dark" Tag="dark" />
+                    <ComboBoxItem Content="Light" Tag="light" />
+                    <ComboBoxItem Content="Use system setting" Tag="system" />
+                </ComboBox>
+            </Grid>
+
+            <StackPanel>
+                <ToggleSwitch
+                    x:Name="CloseToTrayToggle"
+                    Header="Minimize to tray on close"
+                    Toggled="CloseToTrayToggle_Toggled" />
+                <TextBlock
+                    Text="When on, closing the window keeps Fullobby running in the tray. When off, closing exits the app."
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+
+            <StackPanel Margin="0,6,0,0">
+                <ToggleSwitch
+                    x:Name="SwitchNotificationToggle"
+                    Header="Notify before switching servers"
+                    Toggled="SwitchNotificationToggle_Toggled" />
+                <TextBlock
+                    Text="When on, you get a 30-second countdown and a desktop notification before Fullobby moves you to another server."
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+
+            <Grid Margin="0,10,0,0" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="Splash Bypass Duration" TextWrapping="Wrap" />
+                    <TextBlock
+                        Text="How long to send keypresses to skip the intro video"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+                <ComboBox
+                    x:Name="SplashDurationCombo"
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    MinWidth="110"
+                    AutomationProperties.Name="Splash bypass duration"
+                    SelectionChanged="SplashDurationCombo_SelectionChanged">
                     <ComboBoxItem Content="10 sec" Tag="10" />
                     <ComboBoxItem Content="20 sec" Tag="20" />
                     <ComboBoxItem Content="40 sec" Tag="40" />
@@ -193,50 +339,96 @@
             </Grid>
 
             <!-- ── Automation ──────────────────────────────────────────── -->
-            <TextBlock Text="Automation" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
+            <TextBlock
+                Text="Automation"
+                Style="{StaticResource BodyStrongTextBlockStyle}"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                AutomationProperties.HeadingLevel="Level2"
+                Margin="0,8,0,0" />
 
-            <ToggleSwitch
-                x:Name="StartupToggle"
-                Header="Start with Windows"
-                OffContent="The app does not launch at sign-in"
-                OnContent="The app launches automatically at sign-in"
-                Toggled="StartupToggle_Toggled" />
+            <StackPanel>
+                <ToggleSwitch
+                    x:Name="StartupToggle"
+                    Header="Start with Windows"
+                    Toggled="StartupToggle_Toggled" />
+                <TextBlock
+                    Text="When on, Fullobby launches automatically at sign-in."
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextWrapping="Wrap" />
+            </StackPanel>
 
-            <TextBlock Text="Auto-Seed" Margin="0,4,0,0" />
-            <TextBlock Text="Seed automatically once a day. The wake time follows the server's seeding schedule (UTC); your PC wakes from sleep to seed."
-                       FontSize="12" Opacity="0.5" TextWrapping="Wrap" />
+            <TextBlock Text="Auto-Seed" Margin="0,10,0,0" TextWrapping="Wrap" />
+            <TextBlock
+                Text="Seed automatically once a day. The wake time follows the server's seeding schedule (UTC); your PC wakes from sleep to seed."
+                FontSize="12"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                TextWrapping="Wrap" />
 
-            <!-- Daily auto-seed (single task; the server decides what to seed) -->
-            <Grid Margin="0,2,0,0">
-                <StackPanel>
-                    <TextBlock Text="Daily auto-seed" />
-                    <TextBlock x:Name="AutoseedStatus" Text="Not scheduled" FontSize="12" Opacity="0.5" />
+            <!-- Daily auto-seed (single task; the server decides what to seed).
+                 AutoseedStatus carries a locale-formatted next-run timestamp once the task exists —
+                 the longest dynamic string on this page, so it gets the wrapping * column. -->
+            <Grid Margin="0,2,0,0" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="Daily auto-seed" TextWrapping="Wrap" />
+                    <TextBlock
+                        x:Name="AutoseedStatus"
+                        Text="Not scheduled"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        TextWrapping="Wrap" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <ProgressRing x:Name="AutoseedSpinner" Width="16" Height="16" IsActive="True" Visibility="Collapsed" />
                     <Button x:Name="AutoseedSetup" Content="Set up" Click="AutoseedSetup_Click" />
                     <Button x:Name="AutoseedRemove" Content="Remove" Visibility="Collapsed" Click="AutoseedRemove_Click" />
                 </StackPanel>
             </Grid>
 
             <!-- ── Updates ─────────────────────────────────────────────── -->
-            <TextBlock Text="Updates" Style="{StaticResource BodyStrongTextBlockStyle}" Opacity="0.7" Margin="0,8,0,0" />
+            <TextBlock
+                Text="Updates"
+                Style="{StaticResource BodyStrongTextBlockStyle}"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                AutomationProperties.HeadingLevel="Level2"
+                Margin="0,8,0,0" />
 
-            <Grid>
-                <StackPanel>
-                    <TextBlock Text="App Updates" />
-                    <TextBlock x:Name="UpdateStatus" Text="Check for the latest version" FontSize="12" Opacity="0.5" />
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="App Updates" TextWrapping="Wrap" />
+                    <!-- Carries a full SemVer, including pre-release suffixes on the beta channel. -->
+                    <TextBlock
+                        x:Name="UpdateStatus"
+                        Text="Check for the latest version"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        TextWrapping="Wrap" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <ProgressRing x:Name="UpdateSpinner" Width="16" Height="16" IsActive="True" Visibility="Collapsed" />
                     <Button x:Name="CheckUpdatesButton" Content="Check for Updates" Click="CheckUpdates_Click" />
                 </StackPanel>
             </Grid>
-            <ToggleSwitch
-                x:Name="BetaToggle"
-                Header="Beta Updates"
-                OffContent="Stable releases only"
-                OnContent="Include beta (pre-release) updates"
-                Toggled="BetaToggle_Toggled" />
+
+            <StackPanel Margin="0,6,0,0">
+                <ToggleSwitch
+                    x:Name="BetaToggle"
+                    Header="Beta Updates"
+                    Toggled="BetaToggle_Toggled" />
+                <TextBlock
+                    Text="When on, pre-release builds are offered alongside stable ones."
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextWrapping="Wrap" />
+            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </Page>

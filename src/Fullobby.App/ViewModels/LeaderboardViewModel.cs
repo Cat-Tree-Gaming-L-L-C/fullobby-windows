@@ -22,6 +22,11 @@ public sealed partial class LeaderboardViewModel : ObservableObject
     private long _leaderboardCooldownUntil;
     private long _myStatsCooldownUntil;
 
+    // Period each list was last fetched for, so a period change bypasses the cooldown above.
+    // -1 means "never fetched", which no real period value equals.
+    private long _lastLeaderboardPeriod = -1;
+    private long _lastMyStatsPeriod = -1;
+
     public LeaderboardViewModel(
         ILogger<LeaderboardViewModel> log,
         SeedingApiClient api,
@@ -102,10 +107,15 @@ public sealed partial class LeaderboardViewModel : ObservableObject
 
     private async Task FetchLeaderboardAsync()
     {
-        if (OnCooldown(ref _leaderboardCooldownUntil, 5))
+        // The cooldown throttles repeat requests for the SAME data. A period switch asks for
+        // different data, so it must bypass it — otherwise switching Day→Week inside the window
+        // updated the heading to "This Week" and silently left yesterday's rows underneath it,
+        // with no spinner and no error to suggest anything had gone wrong.
+        if (PeriodDays == _lastLeaderboardPeriod && OnCooldown(ref _leaderboardCooldownUntil, 5))
         {
             return;
         }
+        _lastLeaderboardPeriod = PeriodDays;
         RunOnUi(() =>
         {
             Loading = true;
@@ -156,11 +166,12 @@ public sealed partial class LeaderboardViewModel : ObservableObject
             ShowMyStats = true;
             MyStatsLoading = true;
         });
-        if (OnCooldown(ref _myStatsCooldownUntil, 5))
+        if (PeriodDays == _lastMyStatsPeriod && OnCooldown(ref _myStatsCooldownUntil, 5))
         {
             RunOnUi(() => MyStatsLoading = false);
             return;
         }
+        _lastMyStatsPeriod = PeriodDays;
         try
         {
             var stats = await _api.GetUserStatsAsync(user.UserId, PeriodDays).ConfigureAwait(false);

@@ -250,6 +250,18 @@ public sealed class SeedingApiClient(HttpClient http)
             return;
         }
 
+        // Redirects are not followed on the authenticated clients (custom headers like x-api-key
+        // survive a cross-origin hop, unlike Authorization). If the API ever legitimately redirects,
+        // it surfaces here as an explicit, named failure rather than a confusing parse error.
+        if ((int)response.StatusCode is >= 300 and < 400)
+        {
+            throw new ApiException(
+                $"API returned an unfollowed redirect ({(int)response.StatusCode}) to " +
+                $"'{response.Headers.Location}'. Redirects are disabled on authenticated requests; " +
+                "if this endpoint is meant to redirect, that has to be handled explicitly.",
+                response.StatusCode);
+        }
+
         if ((int)response.StatusCode == 426)
         {
             var min = "unknown";

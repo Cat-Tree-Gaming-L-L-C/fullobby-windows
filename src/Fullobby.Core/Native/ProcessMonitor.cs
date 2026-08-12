@@ -247,10 +247,21 @@ public sealed class ProcessMonitor
         {
             do
             {
-                var name = entry.szExeFile.ToString();
+                // Compare against the fixed-size buffer directly and only materialize a string on a
+                // match. Calling ToString() per entry allocated once for every process on the
+                // machine — and CheckGameLaunchProcesses deliberately bypasses the cache and runs
+                // every 1–3s for up to 3 minutes during a launch, so this was tens of thousands of
+                // throwaway strings at exactly the moment the machine is busy starting a game.
+                var nameSpan = entry.szExeFile.AsReadOnlySpan();
+                var end = nameSpan.IndexOf('\0');
+                if (end >= 0)
+                {
+                    nameSpan = nameSpan[..end];
+                }
+
                 foreach (var target in exeNames)
                 {
-                    if (string.Equals(target, name, StringComparison.OrdinalIgnoreCase))
+                    if (nameSpan.Equals(target, StringComparison.OrdinalIgnoreCase))
                     {
                         if (!result.TryGetValue(target, out var list))
                         {

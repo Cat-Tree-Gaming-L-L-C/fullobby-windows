@@ -61,6 +61,10 @@ public sealed class AuthSession
         }
         _config.Remove("auth_token");
         _config.Remove("auth_refresh_token");
+        // Removal is throttled like any other write, so flush: credentials must be *gone* from
+        // disk the moment we clear them. A kill inside the debounce window would otherwise leave
+        // a signed-out user's refresh token sitting in config.json.
+        _config.FlushPendingSaves();
     }
 
     public void SetApiKey(string key)
@@ -82,6 +86,7 @@ public sealed class AuthSession
             _apiKey = null;
         }
         _config.Remove("api_key");
+        _config.FlushPendingSaves(); // durable immediately, same reason as ClearTokens
     }
 
     private static string? NullIfEmpty(string? s) => string.IsNullOrEmpty(s) ? null : s;

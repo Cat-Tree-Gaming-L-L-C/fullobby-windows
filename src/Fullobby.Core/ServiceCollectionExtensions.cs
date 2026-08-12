@@ -68,12 +68,21 @@ public static class ServiceCollectionExtensions
         var version = typeof(SeedingApiClient).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
         var userAgent = $"Fullobby/{version}";
 
+        // Auth-bearing clients do not follow redirects. .NET strips the Authorization header on a
+        // cross-origin redirect but NOT custom headers, so an open redirect (or a compromise) on the
+        // API would replay `x-api-key` to a third-party host. The OAuth flows are unaffected —
+        // provider redirects happen in the system browser, and link-init returns its URL as JSON.
+        // The updater client below deliberately keeps redirects: GitHub's CDN 302s release
+        // downloads, and that client is unauthenticated.
+        static HttpMessageHandler NoRedirects() => new SocketsHttpHandler { AllowAutoRedirect = false };
+
         services.AddHttpClient<SeedingApiClient>(client =>
             {
                 client.Timeout = TimeSpan.FromSeconds(30);
                 client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
                 client.DefaultRequestHeaders.Add("x-client-version", version);
             })
+            .ConfigurePrimaryHttpMessageHandler(NoRedirects)
             // Outer → inner: auth/refresh wraps transient-retry wraps the socket handler.
             .AddHttpMessageHandler<AuthHandler>()
             .AddHttpMessageHandler<ResilienceHandler>();
@@ -85,6 +94,7 @@ public static class ServiceCollectionExtensions
                 client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
                 client.DefaultRequestHeaders.Add("x-client-version", version);
             })
+            .ConfigurePrimaryHttpMessageHandler(NoRedirects)
             .AddHttpMessageHandler<ResilienceHandler>();
 
         // SSE client: effectively no timeout (a stream stays open), no delegating handlers
@@ -94,7 +104,8 @@ public static class ServiceCollectionExtensions
                 client.Timeout = Timeout.InfiniteTimeSpan;
                 client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
                 client.DefaultRequestHeaders.Add("x-client-version", version);
-            });
+            })
+            .ConfigurePrimaryHttpMessageHandler(NoRedirects);
 
         // Updater client: unauthenticated (the release feed is public; downloads hit GitHub's CDN),
         // with a long timeout to cover a large installer download. The size cap bounds the body.

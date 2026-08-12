@@ -115,9 +115,28 @@
                                 CornerRadius="6"
                                 Padding="10,4"
                                 Margin="0,2">
-                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                    <TextBlock Text="{x:Bind StatsLine, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" />
+                                <!-- Grid, not a horizontal StackPanel: a StackPanel measures its
+                                     first child at infinite width, so a long "name — map — n/N"
+                                     line consumes the row and pushes the badges past the right
+                                     edge (the ScrollViewer doesn't scroll horizontally). The
+                                     Passworded badge is precisely what explains why a server is
+                                     never seeded, so it must not be the first thing to disappear. -->
+                                <Grid ColumnSpacing="8" VerticalAlignment="Center">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock
+                                        Grid.Column="0"
+                                        Text="{x:Bind StatsLine, Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind StatsLine, Mode=OneWay}"
+                                        FontSize="12"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="NoWrap"
+                                        VerticalAlignment="Center" />
                                     <Border
+                                        Grid.Column="1"
                                         Visibility="{x:Bind IsPassworded, Mode=OneWay, Converter={StaticResource BoolToVis}}"
                                         Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
                                         CornerRadius="4"
@@ -131,6 +150,7 @@
                                     </Border>
                                     <!-- Today's ready standing (ready-check / seeded state) -->
                                     <Border
+                                        Grid.Column="2"
                                         Visibility="{x:Bind ShowReadyBadge, Mode=OneWay, Converter={StaticResource BoolToVis}}"
                                         Background="{ThemeResource SystemControlBackgroundBaseLowBrush}"
                                         CornerRadius="4"
@@ -138,7 +158,7 @@
                                         VerticalAlignment="Center">
                                         <TextBlock Text="{x:Bind ReadyBadge, Mode=OneWay}" FontSize="11" />
                                     </Border>
-                                </StackPanel>
+                                </Grid>
                             </Border>
                             </StackPanel>
                         </DataTemplate>
@@ -224,7 +244,7 @@
 
         <!-- Server-switch overlay -->
         <Grid
-            Background="#B0000000"
+            Background="{ThemeResource SmokeFillColorDefaultBrush}"
             Visibility="{x:Bind ViewModel.ServerSwitchActive, Mode=OneWay, Converter={StaticResource BoolToVis}}">
             <Border
                 Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
@@ -238,10 +258,13 @@
                         FontWeight="SemiBold"
                         FontSize="16"
                         HorizontalAlignment="Center" />
+                    <!-- Wraps: during a forced switch this is the only thing telling the user
+                         which server they are being moved to, and server names are long. -->
                     <TextBlock
                         Text="{x:Bind ViewModel.ServerSwitchServerName, Mode=OneWay}"
                         Opacity="0.8"
                         TextAlignment="Center"
+                        TextWrapping="Wrap"
                         HorizontalAlignment="Center" />
                     <TextBlock
                         Text="{x:Bind ViewModel.ServerSwitchDetail, Mode=OneWay}"
@@ -283,7 +306,7 @@
              Power Savings choice per game; on timeout the remembered preference applies unchanged
              (unattended auto-seed), and Cancel aborts as before. -->
         <Grid
-            Background="#B0000000"
+            Background="{ThemeResource SmokeFillColorDefaultBrush}"
             Visibility="{x:Bind ViewModel.AutoseedCountdownActive, Mode=OneWay, Converter={StaticResource BoolToVis}}">
             <Border
                 Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"

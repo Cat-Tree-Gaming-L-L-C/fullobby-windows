@@ -16,6 +16,7 @@
             <converters:RankToBrushConverter x:Key="RankToBrush" />
             <converters:RankToFontWeightConverter x:Key="RankToWeight" />
             <converters:SessionStatusToBrushConverter x:Key="SessionStatusToBrush" />
+            <converters:PeriodToStyleConverter x:Key="PeriodToStyle" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

@@ -23,6 +23,56 @@ public class SseConnectionStateTests
         Assert.False(woken);
     }
 
+    // The UI drives its connection indicator off Changed instead of polling these fields once a
+    // second, so both halves matter: a real change must notify, and a no-op write must not — the
+    // SSE loop reassigns Connected on every reconnect attempt, and waking the UI thread for an
+    // unchanged value is the cost this event exists to avoid.
+
+    [Fact]
+    public void Changed_FiresOnConnectedTransition()
+    {
+        var state = new SseConnectionState();
+        var fired = 0;
+        state.Changed += () => fired++;
+
+        state.Connected = true;
+        Assert.Equal(1, fired);
+
+        state.Connected = false;
+        Assert.Equal(2, fired);
+    }
+
+    [Fact]
+    public void Changed_SilentOnRedundantWrite()
+    {
+        var state = new SseConnectionState();
+        state.Connected = true;
+
+        var fired = 0;
+        state.Changed += () => fired++;
+
+        state.Connected = true;
+        state.Connected = true;
+        Assert.Equal(0, fired);
+    }
+
+    [Fact]
+    public void Changed_TracksFailureCount()
+    {
+        var state = new SseConnectionState();
+        var fired = 0;
+        state.Changed += () => fired++;
+
+        state.FailureCount = 3;
+        Assert.Equal(1, fired);
+
+        state.FailureCount = 3; // unchanged — no wake
+        Assert.Equal(1, fired);
+
+        state.FailureCount = 0;
+        Assert.Equal(2, fired);
+    }
+
     [Fact]
     public void ConnectedFlag_RoundTrips()
     {

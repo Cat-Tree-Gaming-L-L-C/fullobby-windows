@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 
 namespace Fullobby.Core.Activation;
 
@@ -42,7 +43,15 @@ public sealed class OAuthStateStore
         {
             var stored = _state;
             _state = null;
-            return stored is not null && stored == state;
+            if (stored is null)
+            {
+                return false;
+            }
+            // Fixed-time compare. Not exploitable in practice — the value is a single-use 128-bit
+            // CSPRNG token delivered over a local deep link with no retry oracle — but comparing
+            // secrets in constant time costs nothing and removes the need to re-derive that.
+            return CryptographicOperations.FixedTimeEquals(
+                Encoding.UTF8.GetBytes(stored), Encoding.UTF8.GetBytes(state));
         }
     }
 

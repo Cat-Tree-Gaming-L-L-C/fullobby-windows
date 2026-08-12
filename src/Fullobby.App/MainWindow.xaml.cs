@@ -75,8 +75,12 @@ public sealed partial class MainWindow : Window
                 (int)(LogicalHeight * scale)));
         };
 
-        // Restore the saved theme (light/dark); absent → follow the system default.
+        // Restore the saved theme (light / dark / system); absent → the brand default, dark.
         ApplyTheme(_config.GetString("theme"));
+
+        // While following the system setting, the OS can flip the theme under us. The caption
+        // buttons are drawn by the shell and don't inherit the XAML theme, so re-tint them.
+        RootGrid.ActualThemeChanged += (_, _) => UpdateTitleBarColors();
 
         NavView.SelectedItem = SeedNavItem;
 
@@ -130,22 +134,38 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>Set the app theme (dark/light) on the window root and persist it.</summary>
-    public void SetTheme(bool dark)
+    /// <summary>Set the app theme on the window root and persist it.
+    /// <see cref="ElementTheme.Default"/> means "follow the system setting".</summary>
+    public void SetTheme(ElementTheme theme)
     {
-        RootGrid.RequestedTheme = dark ? ElementTheme.Dark : ElementTheme.Light;
-        _config.SetString("theme", dark ? "dark" : "light");
+        RootGrid.RequestedTheme = theme;
+        _config.SetString("theme", theme switch
+        {
+            ElementTheme.Light => "light",
+            ElementTheme.Dark => "dark",
+            _ => "system",
+        });
         UpdateTitleBarColors();
     }
 
-    /// <summary>True when the current theme is dark (used to seed the Settings toggle).</summary>
-    public bool IsDarkTheme => RootGrid.RequestedTheme != ElementTheme.Light;
+    /// <summary>The configured theme, including <see cref="ElementTheme.Default"/> for
+    /// follow-the-system (used to seed the Settings picker).</summary>
+    public ElementTheme CurrentTheme => RootGrid.RequestedTheme;
+
+    /// <summary>True when what's actually on screen is dark. Reads <c>ActualTheme</c>, not
+    /// <c>RequestedTheme</c>, so it stays correct while following the system setting.</summary>
+    public bool IsDarkTheme => RootGrid.ActualTheme != ElementTheme.Light;
 
     private void ApplyTheme(string? theme)
     {
-        // Dark is the brand default — only an explicit "light" opts out. (Absent or any
-        // legacy value resolves to dark.)
-        RootGrid.RequestedTheme = theme == "light" ? ElementTheme.Light : ElementTheme.Dark;
+        // Dark is the brand default: absent or unrecognised resolves to dark, so an existing
+        // install's appearance is unchanged on upgrade. Only "system" defers to the OS.
+        RootGrid.RequestedTheme = theme switch
+        {
+            "light" => ElementTheme.Light,
+            "system" => ElementTheme.Default,
+            _ => ElementTheme.Dark,
+        };
         UpdateTitleBarColors();
     }
 
@@ -237,6 +257,16 @@ public sealed partial class MainWindow : Window
             }
 
             var exe = Environment.ProcessPath;
+            // This is the one place left that builds a shell command string, because the 2s delay
+            // needs an intermediary that outlives this process. `exe` comes from the OS and Windows
+            // paths cannot contain a quote — which is exactly why the interpolation below is safe
+            // today. Enforce that rather than leaving it as an unwritten assumption: if the path
+            // ever could contain a quote or newline, the command would break out of its quoting.
+            if (exe is not null && exe.AsSpan().IndexOfAny('"', '\r', '\n') >= 0)
+            {
+                Log.Error("Executable path contains unexpected characters — skipping delayed restart");
+                exe = null;
+            }
             if (exe is not null)
             {
                 Process.Start(new ProcessStartInfo("cmd.exe", $"/c timeout /t 2 /nobreak >nul && \"{exe}\"")

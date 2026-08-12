@@ -107,7 +107,7 @@
                     <Grid x:Name="SteamLinkedRow" Visibility="Collapsed"
                           Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
                           CornerRadius="8" Padding="12,8">
-                        <TextBlock Text="Steam linked" Foreground="{StaticResource BrandBadgeSuccessBrush}"
+                        <TextBlock Text="Steam linked" Foreground="{ThemeResource SystemFillColorSuccessBrush}"
                                    FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
                         <Border x:Name="SteamSignedInBadge" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Center"
                                 Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="4" Padding="6,1">
@@ -124,7 +124,7 @@
                     <Grid x:Name="DiscordLinkedRow" Visibility="Collapsed"
                           Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
                           CornerRadius="8" Padding="12,8">
-                        <TextBlock Text="Discord linked" Foreground="{StaticResource BrandBadgeSuccessBrush}"
+                        <TextBlock Text="Discord linked" Foreground="{ThemeResource SystemFillColorSuccessBrush}"
                                    FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
                         <Border x:Name="DiscordSignedInBadge" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Center"
                                 Background="{ThemeResource ControlFillColorSecondaryBrush}" CornerRadius="4" Padding="6,1">
@@ -193,9 +193,9 @@
                     <StackPanel Spacing="2" HorizontalAlignment="Center">
                         <TextBlock x:Name="DoneSummary" Opacity="0.8" HorizontalAlignment="Center" TextAlignment="Center" />
                         <TextBlock x:Name="DoneSteamLine" Text="Steam: Linked" Visibility="Collapsed"
-                                   Foreground="{StaticResource BrandBadgeSuccessBrush}" FontSize="13" HorizontalAlignment="Center" />
+                                   Foreground="{ThemeResource SystemFillColorSuccessBrush}" FontSize="13" HorizontalAlignment="Center" />
                         <TextBlock x:Name="DoneDiscordLine" Text="Discord: Linked" Visibility="Collapsed"
-                                   Foreground="{StaticResource BrandBadgeSuccessBrush}" FontSize="13" HorizontalAlignment="Center" />
+                                   Foreground="{ThemeResource SystemFillColorSuccessBrush}" FontSize="13" HorizontalAlignment="Center" />
                     </StackPanel>
                     <Button Content="Start Seeding" Style="{StaticResource AccentButtonStyle}"
                             HorizontalAlignment="Center" Click="Finish_Click" />

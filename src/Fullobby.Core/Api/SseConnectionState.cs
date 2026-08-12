@@ -14,19 +14,43 @@ public sealed class SseConnectionState
     private volatile bool _connected;
     private int _failureCount;
 
+    /// <summary>
+    /// Raised when <see cref="Connected"/> or <see cref="FailureCount"/> actually changes value.
+    /// Exists so the UI can reflect connection state without polling: the shell's countdown timer
+    /// used to tick once a second purely to copy these two fields into observable properties, which
+    /// kept the UI thread awake 86,400 times a day in an app that mostly sits minimized in the tray.
+    /// Fired on whichever thread mutated the state (the SSE loop or the polling fallback), so a UI
+    /// subscriber must marshal to its own thread.
+    /// </summary>
+    public event Action? Changed;
+
     /// <summary>True while the SSE stream is connected. The polling fallback idles slowly while
     /// this holds and reverts to its aggressive cadence once it clears.</summary>
     public bool Connected
     {
         get => _connected;
-        set => _connected = value;
+        set
+        {
+            if (_connected == value)
+            {
+                return;
+            }
+            _connected = value;
+            Changed?.Invoke();
+        }
     }
 
     /// <summary>Consecutive SSE connection failures (for the UI's connection indicator).</summary>
     public int FailureCount
     {
         get => Volatile.Read(ref _failureCount);
-        set => Volatile.Write(ref _failureCount, value);
+        set
+        {
+            if (Interlocked.Exchange(ref _failureCount, value) != value)
+            {
+                Changed?.Invoke();
+            }
+        }
     }
 
     /// <summary>Wake the polling fallback so it polls now (called when SSE disconnects). Port of
