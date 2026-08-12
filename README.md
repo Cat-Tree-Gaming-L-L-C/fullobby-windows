@@ -13,7 +13,7 @@ Built by [Cat Tree Gaming L.L.C.](https://github.com/Cat-Tree-Gaming-L-L-C). Nat
 
 Grab the latest installer (`Fullobby-Setup-<ver>.exe`) from [GitHub Releases](https://github.com/Cat-Tree-Gaming-L-L-C/fullobby-windows/releases).
 
-**Requirements:** Windows 10 (19041) / Windows 11, Steam with a supported game
+**Requirements:** Windows 11, Steam with a supported game
 installed (currently Hell Let Loose).
 
 ### Windows SmartScreen warning
@@ -144,7 +144,7 @@ The client communicates with a closed-source API server over HTTPS. All traffic 
 ### Prerequisites
 
 - [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
-- Windows 10 (19041) or later
+- Windows 11
 - [Inno Setup 6](https://jrsoftware.org/isinfo.php) (installer builds only)
 
 ### Build & Run

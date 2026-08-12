@@ -8,7 +8,7 @@ Inno Setup step and is not needed to build or run locally.
 
 - **.NET 9 SDK** (installed machine-wide on this box)
 - Windows App SDK 1.8.x — restored automatically via NuGet on first build
-- Windows 10 build 19041+ (target framework references 10.0.22621.0)
+- Windows 11 (build 22000+; the target framework references the 10.0.22621.0 SDK)
 
 ## Build
 

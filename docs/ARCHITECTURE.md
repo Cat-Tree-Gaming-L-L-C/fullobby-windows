@@ -6,7 +6,7 @@ This document is the durable architecture reference.
 ## Solution layout
 
 ```
-/src/Fullobby.App         WinUI 3 app — net9.0-windows10.0.22621.0, min 10.0.19041.0.
+/src/Fullobby.App         WinUI 3 app — net9.0-windows10.0.22621.0, min 10.0.22000.0 (Windows 11 only).
                              Views, ViewModels, App.xaml, custom Main (DISABLE_XAML_GENERATED_MAIN).
 /src/Fullobby.Core        Class library — all non-UI logic (API, SSE, seeding engine, config,
                              DPAPI, process/Win32, autoseed, updater). No XAML deps; testable.

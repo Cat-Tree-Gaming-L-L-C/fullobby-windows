@@ -13,7 +13,9 @@
 
   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
     <application>
-      <!-- Windows 10 and Windows 11 -->
+      <!-- Windows 10/11 compatibility GUID (Windows 11 has no GUID of its own).
+           The app itself is Windows 11 only — enforced by the csproj min platform
+           version and the installer's MinVersion. -->
       <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" />
     </application>
   </compatibility>

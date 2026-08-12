@@ -43,6 +43,9 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+; Windows 11 only (decision 2026-08-12): refuse Win10 installs at the door
+; rather than shipping accommodations (e.g. a WebView2 runtime bootstrap).
+MinVersion=10.0.22000
 ; Gracefully close a running Fullobby (Restart Manager) before updating
 CloseApplications=yes
 RestartApplications=no
