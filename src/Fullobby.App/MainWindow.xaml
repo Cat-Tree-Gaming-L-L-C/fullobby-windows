@@ -96,6 +96,17 @@
                         <FontIcon Glyph="&#xE946;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <!-- Admin tab: hidden unless /me reports a global Admin grant
+                     (visibility driven from code-behind, like the onboarding overlay). -->
+                <NavigationViewItem
+                    x:Name="AdminNavItem"
+                    Content="Admin"
+                    Tag="admin"
+                    Visibility="Collapsed">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE7EF;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
             </NavigationView.MenuItems>
 
             <Frame x:Name="ContentFrame" />

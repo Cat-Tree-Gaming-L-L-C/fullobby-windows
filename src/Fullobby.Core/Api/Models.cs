@@ -108,6 +108,10 @@ public sealed class UserInfo
     public long CreatedAt { get; set; }
     public long LastSeenAt { get; set; }
     public bool LeaderboardOptOut { get; set; }
+    /// <summary>Whether the user holds a global Admin grant (server-computed from the
+    /// grants system, independent of which provider they signed in with) — gates the
+    /// app's embedded Admin tab.</summary>
+    public bool IsAdmin { get; set; }
 }
 
 public sealed class AuthRefreshResponse
@@ -119,6 +123,15 @@ public sealed class AuthRefreshResponse
 public sealed class LinkInitResponse
 {
     public string RedirectUrl { get; set; } = "";
+}
+
+/// <summary>Response from POST /api/auth/panel-code — a single-use web-panel sign-in
+/// code (120 s TTL) plus the panel callback URL that redeems it.</summary>
+public sealed class PanelCodeResponse
+{
+    public string Code { get; set; } = "";
+    public string Url { get; set; } = "";
+    public long ExpiresIn { get; set; }
 }
 
 /// <summary>Response from POST /api/auth/link-confirm (committing a staged link).</summary>

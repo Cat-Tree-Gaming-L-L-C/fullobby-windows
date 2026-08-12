@@ -108,17 +108,34 @@ public sealed partial class MainWindow : Window
         // First-run onboarding overlay: shown until completed/skipped (x:Bind isn't available
         // on a Window root, so drive visibility from the VM here).
         UpdateOnboardingVisibility();
+        UpdateAdminVisibility();
         Account.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(AccountViewModel.ShowOnboarding))
             {
                 UpdateOnboardingVisibility();
             }
+            else if (e.PropertyName == nameof(AccountViewModel.IsAdminUser))
+            {
+                UpdateAdminVisibility();
+            }
         };
     }
 
     private void UpdateOnboardingVisibility() =>
         Onboarding.Visibility = Account.ShowOnboarding ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Show the Admin tab only while /me reports a global Admin grant. If the
+    /// grant disappears (sign-out, grant revoked) while the tab is open, bounce to Seed.</summary>
+    private void UpdateAdminVisibility()
+    {
+        var admin = Account.IsAdminUser;
+        AdminNavItem.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
+        if (!admin && ContentFrame.CurrentSourcePageType == typeof(Views.AdminPage))
+        {
+            NavView.SelectedItem = SeedNavItem;
+        }
+    }
 
     /// <summary>Set the app theme (dark/light) on the window root and persist it.</summary>
     public void SetTheme(bool dark)
@@ -319,6 +336,7 @@ public sealed partial class MainWindow : Window
             "leaderboard" => typeof(Views.LeaderboardPage),
             "tools" => typeof(Views.ToolsPage),
             "about" => typeof(Views.AboutPage),
+            "admin" => typeof(Views.AdminPage),
             _ => null,
         };
         if (pageType is not null)

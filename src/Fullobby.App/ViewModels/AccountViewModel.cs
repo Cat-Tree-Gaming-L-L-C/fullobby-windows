@@ -76,6 +76,7 @@ public sealed partial class AccountViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(DiscordLinked))]
     [NotifyPropertyChangedFor(nameof(IsSteamSignedIn))]
     [NotifyPropertyChangedFor(nameof(IsDiscordSignedIn))]
+    [NotifyPropertyChangedFor(nameof(IsAdminUser))]
     private UserInfo? user;
 
     [ObservableProperty]
@@ -131,6 +132,10 @@ public sealed partial class AccountViewModel : ObservableObject
     public bool ShowOnboarding => !OnboardingComplete || NetworkGateActive;
 
     public bool HasAccountName => User is not null;
+
+    /// <summary>Whether the signed-in user holds a global Admin grant (server-computed
+    /// on <c>/me</c>, provider-agnostic) — shows the embedded Admin tab.</summary>
+    public bool IsAdminUser => User?.IsAdmin == true;
 
     public string DisplayName =>
         User?.DisplayName is { Length: > 0 } d ? d

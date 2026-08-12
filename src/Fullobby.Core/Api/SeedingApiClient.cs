@@ -133,6 +133,12 @@ public sealed class SeedingApiClient(HttpClient http)
         return SendAsync<LinkInitResponse>(HttpMethod.Post, $"/api/auth/{provider}/link-init", null, ct);
     }
 
+    /// <summary>Mint a single-use web-panel sign-in code from this session (auth required).
+    /// Drives the embedded Admin tab: navigate a WebView to the returned URL and the panel
+    /// callback page signs the same user in as an independent panel session.</summary>
+    public Task<PanelCodeResponse> GetPanelCodeAsync(CancellationToken ct = default) =>
+        SendAsync<PanelCodeResponse>(HttpMethod.Post, "/api/auth/panel-code", null, ct);
+
     /// <summary>Commit a staged provider link (auth required). The OAuth link callback stages
     /// the verified identity under a single-use code instead of committing it; the API refuses
     /// the commit unless the authenticated user is the one who initiated the link.</summary>
