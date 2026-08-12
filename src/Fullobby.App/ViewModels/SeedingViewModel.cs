@@ -342,6 +342,23 @@ public sealed partial class SeedingViewModel : ObservableObject
 
     /// <summary>Show a page-scoped error on the Seed page (seeding/stop/update failures) and drop
     /// back to an idle state so the seed buttons reappear. Clears any stale Launch-page error.</summary>
+    /// <summary>Banner text for a directive request that got an HTTP response. Distinguishes
+    /// the cases a player can act on (wait out a rate limit, re-sign-in, update) from real
+    /// service errors, instead of calling them all "unreachable".</summary>
+    private static string DirectiveErrorMessage(ApiException e) => e.StatusCode switch
+    {
+        null => "Couldn't reach the seeding service. Please try again.",
+        System.Net.HttpStatusCode.TooManyRequests =>
+            "The seeding service is busy — please try again in a minute.",
+        System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden =>
+            "Your sign-in has expired — sign in again from the Account tab.",
+        // "Update required: …" passes through FriendlyError verbatim.
+        System.Net.HttpStatusCode.UpgradeRequired => ApiValidation.FriendlyError(e.Message),
+        { } s when (int)s >= 500 =>
+            "The seeding service hit an error. Please try again shortly.",
+        _ => ApiValidation.FriendlyError(e.Message),
+    };
+
     private void SetSeedError(string message)
     {
         LaunchError = "";
@@ -454,10 +471,21 @@ public sealed partial class SeedingViewModel : ObservableObject
         {
             directive = await _api.GetDirectiveAsync(game, null, null).ConfigureAwait(true);
         }
+        catch (ApiException e)
+        {
+            // The service responded — say what actually happened. The old catch-all
+            // blamed the network ("couldn't reach") for rate limits, auth expiry,
+            // server errors, and even the update-required message alike.
+            _log.LogError(e, "Seeding directive request failed ({Status})", e.StatusCode);
+            SetSeedError(DirectiveErrorMessage(e));
+            IsSeeding = false;
+            return;
+        }
         catch (Exception e)
         {
-            _log.LogError(e, "Failed to fetch seeding directive");
-            SetSeedError("Couldn't reach the seeding service. Please try again.");
+            // No HTTP response at all (DNS/connect/timeout) — genuinely unreachable.
+            _log.LogError(e, "Failed to reach the seeding service");
+            SetSeedError("Couldn't reach the seeding service — check your connection and try again.");
             IsSeeding = false;
             return;
         }

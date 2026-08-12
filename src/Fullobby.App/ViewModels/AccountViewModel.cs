@@ -178,18 +178,23 @@ public sealed partial class AccountViewModel : ObservableObject
                 || _auth.ApiKey is { Length: > 0 };
             if (token is { Length: > 0 } && refresh is { Length: > 0 })
             {
-                if (JwtUtil.IsExpired(token) && JwtUtil.IsExpired(refresh))
-                {
-                    _log.LogInformation("Stored JWT tokens expired, clearing");
-                    _auth.ClearTokens();
-                }
-                else if (await TryLoadMeAsync(guestSync: false).ConfigureAwait(false) == MeLoadResult.Ok)
+                // The refresh token is an opaque UUID, not a JWT — its validity cannot be
+                // judged locally. (An earlier build ran it through JwtUtil.IsExpired, which
+                // reads any dotless string as "expired", so every launch >15 minutes after
+                // the last one deleted a valid 14-day session before making a single
+                // request.) Always ask the server: an expired JWT just 401s /me and
+                // AuthHandler refreshes it in place; a genuinely dead session is cleared by
+                // AuthRefresher on a definitive refresh rejection — never preemptively here.
+                if (await TryLoadMeAsync(guestSync: false).ConfigureAwait(false) == MeLoadResult.Ok)
                 {
                     _log.LogInformation("Auth restored from stored JWT tokens");
                     EnsureOnboardingComplete();
                     await EnforceNetworkGateAsync().ConfigureAwait(false);
                     return;
                 }
+                // Not Ok: if the refresh was definitively rejected, AuthRefresher already
+                // cleared the tokens; otherwise (transient) they stay for a later retry, and
+                // hadStoredCreds keeps the onboarding overlay from re-arming below.
             }
 
             // API-key path (guest or programmatic).
@@ -408,7 +413,16 @@ public sealed partial class AccountViewModel : ObservableObject
         try
         {
             _auth.SetTokens(token, refreshToken);
-            if (await TryLoadMeAsync(guestSync: true).ConfigureAwait(false) == MeLoadResult.Ok)
+            var meResult = await TryLoadMeAsync(guestSync: true).ConfigureAwait(false);
+            if (meResult == MeLoadResult.Transient)
+            {
+                // The tokens are seconds old and almost certainly fine — the /me load hit a
+                // blip (rate limit / outage). One short retry before deciding anything;
+                // discarding freshly minted credentials here forced a pointless re-login.
+                await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+                meResult = await TryLoadMeAsync(guestSync: true).ConfigureAwait(false);
+            }
+            if (meResult == MeLoadResult.Ok)
             {
                 _log.LogInformation("Signed in via OAuth callback");
                 _toast.Success("Signed in");
@@ -424,10 +438,17 @@ public sealed partial class AccountViewModel : ObservableObject
                     await EnforceNetworkGateAsync().ConfigureAwait(false);
                 }
             }
-            else
+            else if (meResult == MeLoadResult.Rejected)
             {
                 _auth.ClearTokens();
                 _toast.Error("Sign-in failed. Please try again.");
+            }
+            else
+            {
+                // Still transient: keep the valid tokens — the session completes on the next
+                // request or restart instead of bouncing the user back to the browser.
+                _log.LogWarning("get_me still failing after OAuth sign-in; keeping tokens");
+                _toast.Error("Signed in, but the service is busy — your account will finish loading shortly.");
             }
         }
         finally
@@ -860,6 +881,16 @@ public sealed partial class AccountViewModel : ObservableObject
             Networks.Add(new NetworkMembershipRow(m));
         }
         HasNetworkMembership = Networks.Count > 0;
+        // A confirmed membership releases a re-armed gate on its own: the portal
+        // exists to make the user join, and they are joined — without this, a gate
+        // armed by a stale or blipped check sat over the app until the user found
+        // the Done button. Mid-wizard (!OnboardingComplete) the wizard still owns
+        // the overlay; only the post-onboarding portal is released here.
+        if (HasNetworkMembership && NetworkGateActive && OnboardingComplete)
+        {
+            _log.LogInformation("Membership confirmed; releasing the join-a-network portal");
+            NetworkGateActive = false;
+        }
     });
 
     // ── Onboarding helpers ──────────────────────────────────────────────────────
@@ -875,6 +906,9 @@ public sealed partial class AccountViewModel : ObservableObject
             NetworkGateActive = false;
         });
         _config.SetString("onboarding_complete", "true");
+        // Durable now, not after the 500 ms debounce — losing this flag to a crash
+        // re-runs the whole wizard for an onboarded user.
+        _config.FlushPendingSaves();
     }
 
     /// <summary>A working session that restored on startup means the user has already onboarded at

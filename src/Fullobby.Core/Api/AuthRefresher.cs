@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -50,8 +51,22 @@ public sealed class AuthRefresher(IHttpClientFactory httpFactory, AuthSession se
 
             if (!resp.IsSuccessStatusCode)
             {
-                log.LogWarning("Token refresh failed: {Status}", (int)resp.StatusCode);
-                session.ClearTokens();
+                // Only a definitive rejection (401/403) ends the session. A 429, a 5xx,
+                // or a proxy error page is the backend having a moment — wiping the
+                // 14-day refresh token here turned every such blip into a forced
+                // re-login (and, with no credentials left on disk, a re-armed
+                // onboarding overlay on the next launch).
+                if (resp.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                {
+                    log.LogWarning("Token refresh rejected ({Status}); clearing session", (int)resp.StatusCode);
+                    session.ClearTokens();
+                }
+                else
+                {
+                    log.LogWarning(
+                        "Token refresh failed transiently ({Status}); keeping tokens for retry",
+                        (int)resp.StatusCode);
+                }
                 return false;
             }
 
@@ -59,10 +74,15 @@ public sealed class AuthRefresher(IHttpClientFactory httpFactory, AuthSession se
                 .ConfigureAwait(false);
             if (body is null || string.IsNullOrEmpty(body.Token))
             {
-                session.ClearTokens();
+                // A 2xx with an unusable body is malformed transport, not a rejection —
+                // keep the tokens; the server's short replay grace lets the next attempt
+                // recover the rotation.
+                log.LogWarning("Token refresh returned an unusable body; keeping tokens");
                 return false;
             }
-            session.SetTokens(body.Token, body.RefreshToken);
+            // Never overwrite a real refresh token with an empty field from a
+            // partial/deserialization-defaulted body.
+            session.SetTokens(body.Token, string.IsNullOrEmpty(body.RefreshToken) ? refresh : body.RefreshToken);
             return true;
         }
         catch (Exception e) when (e is HttpRequestException or JsonException or TaskCanceledException)

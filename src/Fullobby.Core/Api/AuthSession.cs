@@ -44,6 +44,11 @@ public sealed class AuthSession
         }
         _config.SetString("auth_token", token);
         _config.SetString("auth_refresh_token", refresh);
+        // Flush past the debounce: the second write above always lands inside the
+        // 500 ms window, so without this the on-disk refresh token stays the
+        // PREVIOUS (already-consumed) one until some later write — a crash or kill
+        // then restores a dead token and costs the whole session.
+        _config.FlushPendingSaves();
     }
 
     /// <summary>Clear JWT + refresh token (logout / failed refresh).</summary>
@@ -65,6 +70,9 @@ public sealed class AuthSession
             _apiKey = key;
         }
         _config.SetString("api_key", key);
+        // Credentials must be durable immediately (see SetTokens) — an unflushed
+        // rotated API key is unrecoverable after a crash.
+        _config.FlushPendingSaves();
     }
 
     public void ClearApiKey()

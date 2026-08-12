@@ -179,7 +179,8 @@ public sealed class ConfigService
         }
     }
 
-    /// <summary>Flush any save coalesced by the throttle. Call on shutdown so nothing is lost.</summary>
+    /// <summary>Flush any save coalesced by the throttle. Called on shutdown, and after
+    /// writes that must be durable immediately (auth credentials, onboarding state).</summary>
     public void FlushPendingSaves()
     {
         bool pending;
@@ -191,7 +192,7 @@ public sealed class ConfigService
         if (pending)
         {
             SaveToDisk();
-            _log.LogInformation("Flushed pending config save on shutdown");
+            _log.LogDebug("Flushed pending config save");
         }
     }
 
