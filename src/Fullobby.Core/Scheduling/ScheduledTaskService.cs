@@ -109,6 +109,19 @@ public sealed class ScheduledTaskService
         return exit == 0;
     }
 
+    /// <summary>
+    /// Names of <em>our</em> tasks: root-folder tasks named exactly <paramref name="prefix"/> or
+    /// "<paramref name="prefix"/>-…" (the time-keyed wake tasks, plus retired names like
+    /// "Fullobby-EU"). Lists everything via <c>/query /fo csv /nh</c> and filters — schtasks has no
+    /// server-side prefix query. Needed wherever the config can no longer say which task names
+    /// exist (orphan sweep after a wiped config, uninstall). Empty list on failure.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> ListOwnedTasksAsync(string prefix, CancellationToken ct = default)
+    {
+        var (exit, stdout, _) = await RunSchtasksAsync(["/query", "/fo", "CSV", "/nh"], ct).ConfigureAwait(false);
+        return exit == 0 ? ParseOwnedTaskNames(stdout, prefix) : [];
+    }
+
     /// <summary>The task's next run time as schtasks reports it, or null when absent/disabled/"N/A".</summary>
     public async Task<string?> GetNextRunTimeAsync(string taskName, CancellationToken ct = default)
     {
@@ -186,6 +199,46 @@ public sealed class ScheduledTaskService
               </Actions>
             </Task>
             """;
+    }
+
+    /// <summary>
+    /// Extract our task names from <c>schtasks /query /fo CSV /nh</c> output. Each data line's
+    /// first field is the quoted full path ("\Fullobby-0600"); we keep root-folder tasks whose
+    /// name is exactly <paramref name="prefix"/> or starts with "<paramref name="prefix"/>-" —
+    /// never a bare prefix match, so someone else's "FullobbyHelper" is left alone. Ignores
+    /// folder-info lines and localized chatter. Pure; unit-tested.
+    /// </summary>
+    public static List<string> ParseOwnedTaskNames(string csvOutput, string prefix)
+    {
+        var names = new List<string>();
+        foreach (var raw in csvOutput.Split('\n'))
+        {
+            var line = raw.Trim();
+            // Data rows start with the quoted task path: "\Name",...
+            if (!line.StartsWith("\"\\", StringComparison.Ordinal))
+            {
+                continue;
+            }
+            var end = line.IndexOf('"', 2);
+            if (end < 0)
+            {
+                continue;
+            }
+            var path = line[2..end];
+            if (path.Contains('\\'))
+            {
+                continue; // not in the root folder — ours always are
+            }
+            if (path.Equals(prefix, StringComparison.OrdinalIgnoreCase)
+                || path.StartsWith(prefix + "-", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!names.Contains(path, StringComparer.OrdinalIgnoreCase))
+                {
+                    names.Add(path);
+                }
+            }
+        }
+        return names;
     }
 
     /// <summary>

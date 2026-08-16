@@ -8,11 +8,12 @@ using Microsoft.Extensions.Logging;
 namespace Fullobby.Core.Scheduling;
 
 /// <summary>
-/// Background watchdog that fires the auto-seed when Task Scheduler missed it — typically after the
-/// machine woke from Modern Standby past the scheduled time. Polls every 60s; if the task is
-/// installed, its stored UTC time has passed within the last (config-driven) missed window, and it
-/// hasn't already fired today (and nothing is in progress / HLL isn't running), it raises
-/// <see cref="AutoseedDue"/> on a 60s poll, collapsed to one slot.
+/// Background watchdog that fires an auto-seed when Task Scheduler missed one — typically after the
+/// machine woke from Modern Standby past a scheduled time. Polls every 60s over the stored wake
+/// set; if a wake's task is installed, its UTC time has passed within that wake's missed window,
+/// and that wake hasn't already fired today (and nothing is in progress / HLL isn't running), it
+/// raises <see cref="AutoseedDue"/> with the wake's "HH:MM" key. At most one wake fires per tick —
+/// only one seed runs at a time anyway.
 /// </summary>
 public sealed class MissedAutoseedMonitor : IHostedService, IDisposable
 {
@@ -31,8 +32,9 @@ public sealed class MissedAutoseedMonitor : IHostedService, IDisposable
     private CancellationTokenSource? _cts;
     private Task? _loop;
 
-    /// <summary>Raised (off the UI thread) when the missed seed should run.</summary>
-    public event Action? AutoseedDue;
+    /// <summary>Raised (off the UI thread) when a missed seed should run, with the wake's
+    /// "HH:MM" UTC key.</summary>
+    public event Action<string>? AutoseedDue;
 
     public MissedAutoseedMonitor(
         ILogger<MissedAutoseedMonitor> log,
@@ -97,47 +99,69 @@ public sealed class MissedAutoseedMonitor : IHostedService, IDisposable
 
     private async Task CheckOnceAsync(bool afterWake, CancellationToken ct)
     {
-        var slot = AutoSeedSlot.Default;
-        if (_state.IsInProgress || _state.WasTriggeredToday())
-        {
-            return;
-        }
-        // Order matters: the two checks below are in-memory, IsInstalledAsync spawns schtasks.exe.
-        // With the process spawn first, this loop cost ~1,440 process creations per day on every
-        // machine — including the majority that never configured auto-seed at all, which paid the
-        // spawn only to be rejected by the config read a line later. Confirming installation last
-        // makes it a few calls a day for a configured user and none for anyone else.
-        if (!AutoSeedTime.TryParseStoredUtc(_config.GetString(slot.StoreKey), out var scheduledUtc))
-        {
-            return;
-        }
-
+        // Order matters: everything above the IsInstalledAsync call is in-memory, while that call
+        // spawns schtasks.exe. With the process spawn first, this loop cost ~1,440 process
+        // creations per day on every machine — including the majority that never configured
+        // auto-seed at all. Confirming installation last (and only for a wake already inside its
+        // missed window) keeps it to a few calls a day for a configured user and none for anyone
+        // else.
+        var onboarded = _config.GetBool(ConfigKeys.OnboardingComplete);
         var nowUtc = DateTime.UtcNow;
-        var windowHours = _configProvider.Current.MissedAutoseedWindowHours;
-        if (!IsWithinMissedWindow(nowUtc, scheduledUtc, windowHours))
+        var fleetWindowHours = _configProvider.Current.MissedAutoseedWindowHours;
+
+        foreach (var wake in WakeStore.Load(_config))
         {
-            return;
+            if (!AutoSeedTime.TryParseStoredUtc(wake.TimeUtc, out var scheduledUtc))
+            {
+                continue;
+            }
+            if (!IsEligibleToFire(onboarded, _state.IsInProgress, _state.WasTriggeredToday(wake.TimeUtc)))
+            {
+                continue;
+            }
+            // The wake's own missed window (max across its justifying networks, resolved at plan
+            // time); the unattributed fleet wake follows the live fleet value.
+            if (!IsWithinMissedWindow(nowUtc, scheduledUtc, wake.MissedWindowHours ?? fleetWindowHours))
+            {
+                continue;
+            }
+
+            if (!await _tasks.IsInstalledAsync(wake.Slot.TaskName, ct).ConfigureAwait(false))
+            {
+                continue;
+            }
+
+            // Final guards: don't stomp an in-progress seed or a hand-launched game.
+            if (_state.IsInProgress || _process.IsGameRunning(GameCatalog.Hll))
+            {
+                return;
+            }
+
+            var late = nowUtc - new DateTime(DateOnly.FromDateTime(nowUtc), scheduledUtc, DateTimeKind.Utc);
+            _log.Log(afterWake ? LogLevel.Information : LogLevel.Debug,
+                "Missed auto-seed due: scheduled {Time} UTC, {Late:F1}h late (afterWake={Wake})",
+                scheduledUtc, late.TotalHours, afterWake);
+
+            _state.RecordTriggered(wake.TimeUtc);
+            AutoseedDue?.Invoke(wake.TimeUtc);
+            return; // one seed per tick — the next wake gets its turn once this one is done
         }
-
-        if (!await _tasks.IsInstalledAsync(slot.TaskName, ct).ConfigureAwait(false))
-        {
-            return;
-        }
-
-        // Final guards: don't stomp an in-progress seed or a hand-launched game.
-        if (_state.IsInProgress || _process.IsGameRunning(GameCatalog.Hll))
-        {
-            return;
-        }
-
-        var late = nowUtc - new DateTime(DateOnly.FromDateTime(nowUtc), scheduledUtc, DateTimeKind.Utc);
-        _log.Log(afterWake ? LogLevel.Information : LogLevel.Debug,
-            "Missed auto-seed due: scheduled {Time} UTC, {Late:F1}h late (afterWake={Wake})",
-            scheduledUtc, late.TotalHours, afterWake);
-
-        _state.RecordTriggered();
-        AutoseedDue?.Invoke();
     }
+
+    /// <summary>
+    /// The in-memory pre-checks that must all pass before the (process-spawning) task query.
+    ///
+    /// The onboarding check is the important one: the scheduled task lives in Windows Task
+    /// Scheduler, which outlives our config. A reinstall, a wiped config, or any auth reset that
+    /// re-arms the wizard (rejected credentials, unprotectable secrets) leaves the task installed
+    /// while the app is back at first run — and without this the watchdog would raise a desktop
+    /// notification and launch the game behind the onboarding overlay, for a user who has not yet
+    /// agreed to anything. Checked here rather than at the point of firing so nothing is recorded
+    /// as "triggered today": if onboarding completes while still inside the missed window, the
+    /// seed runs normally on a later tick. Pure; unit-tested.
+    /// </summary>
+    public static bool IsEligibleToFire(bool onboardingComplete, bool inProgress, bool triggeredToday) =>
+        onboardingComplete && !inProgress && !triggeredToday;
 
     /// <summary>
     /// True when <paramref name="nowUtc"/> is at or after today's <paramref name="scheduledUtc"/> and

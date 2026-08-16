@@ -69,9 +69,11 @@ app.MapGet("/api/seeding/config", () => Results.Json(MockState.DefaultConfig()))
 
 // Server-decided directive: what to seed next and how to behave. Sequential rotation.
 // Mirrors the real API's auth requirement (401 without credentials); any Bearer/x-api-key passes.
-app.MapGet("/api/seeding/directive", (HttpContext ctx, string? game, int? current_index, string? session_id) =>
+// network_id (optional) mirrors the per-tenant scoping change: restrict target selection to that
+// network; omitted = priority order across all memberships, exactly as before.
+app.MapGet("/api/seeding/directive", (HttpContext ctx, string? game, int? current_index, string? session_id, long? network_id) =>
     ctx.Request.Headers.ContainsKey("Authorization") || ctx.Request.Headers.ContainsKey("x-api-key")
-        ? Results.Json(state.Directive(current_index))
+        ? Results.Json(state.Directive(current_index, network_id))
         : Results.Unauthorized());
 
 app.MapPost("/api/seeding/start-session", (StartSessionRequest req) =>
@@ -88,8 +90,13 @@ app.MapPost("/api/seeding/stop", (StopSessionRequest req) =>
 
 app.MapGet("/api/seeding/leaderboard", (long? days, long? limit) => Results.Json(new[]
 {
+    // Ranks 1-3 are the medal rows; 4 and 5 exercise the un-medalled default style below
+    // the cut-off, which is where the client's rank→style binding used to fall over.
     new LeaderboardEntry(1, 1, "Wandering Fox 330", null, 7200, 5),
     new LeaderboardEntry(2, 2, "Sneaky Badger 12", null, 3600, 3),
+    new LeaderboardEntry(3, 3, "Quiet Elk 88", null, 2700, 3),
+    new LeaderboardEntry(4, 4, "Restless Otter 5", null, 1800, 2),
+    new LeaderboardEntry(5, 5, "Idle Heron 210", null, 900, 1),
 }));
 
 // ── Seeding networks (join code: name "mock" + "TEST-2345-CODE"; uniform 400 otherwise) ──
@@ -177,6 +184,20 @@ mock.MapPost("/networks/clear", () =>
 {
     state.ClearMemberships();
     return Results.Ok(new { cleared = true, memberships = state.Memberships });
+});
+
+// Per-tenant schedule boundaries on the mock network's status entry. All-null body (or POST with
+// {}) clears them back to "not sent" — the pre-per-tenant wire shape. windows [] = always active.
+// Example: {"active_windows":[{"start_min":360,"end_min":540}],"daily_reset_hour_utc":10}
+mock.MapPost("/schedule", (SetScheduleRequest req) =>
+{
+    state.SetSchedule(req.ActiveWindows, req.DailyResetHourUtc, req.MissedAutoseedWindowHours);
+    return Results.Ok(new
+    {
+        active_windows = state.NetworkActiveWindows,
+        daily_reset_hour_utc = state.NetworkDailyResetHourUtc,
+        missed_autoseed_window_hours = state.NetworkMissedAutoseedWindowHours,
+    });
 });
 
 // Auto-advance: simulate servers filling over time so a live seed transitions on its own.

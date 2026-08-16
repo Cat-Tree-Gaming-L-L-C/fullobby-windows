@@ -714,7 +714,7 @@ public sealed class SeedingEngine : IDisposable
     {
         try
         {
-            var d = await _api.GetDirectiveAsync(_currentGame.Id, currentIndex, sessionId, ct).ConfigureAwait(false);
+            var d = await _api.GetDirectiveAsync(_currentGame.Id, currentIndex, sessionId, ct: ct).ConfigureAwait(false);
             _configProvider.Update(d.Config);
             return d;
         }

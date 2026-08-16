@@ -45,6 +45,12 @@ public sealed partial class SeedingViewModel : ObservableObject
     /// re-armed to the fleet's (possibly new) window. The app host resleeps/exits if it was launched
     /// specifically for this auto-seed.</summary>
     public event Action? ResleepRequested;
+
+    /// <summary>Raised with a short reason when an auto-seed is refused or abandoned before it seeds
+    /// anything. The app host shuts down if this process was launched only to run that seed, so a
+    /// blocked scheduled wake doesn't leave a process (and a woken machine) idling until morning.</summary>
+    public event Action<string>? AutoseedAbandoned;
+
     private readonly DispatcherTimer _timer;
 
     /// <summary>The active seeding session id (from start-session), heartbeat-ed until stop. Null
@@ -613,9 +619,9 @@ public sealed partial class SeedingViewModel : ObservableObject
         _account.OpenNetworkGate();
     }
 
-    /// <summary>An auto-seed wake landed outside the scheduled window: re-arm the daily wake to the
-    /// fleet's current window (from the directive's fresh config) and ask the host to resleep, so the
-    /// machine learns a moved window and goes back to sleep instead of idling.</summary>
+    /// <summary>An auto-seed wake landed outside every scheduled window: reconcile the wake set
+    /// against the directive's fresh config and ask the host to resleep, so the machine learns a
+    /// moved window and goes back to sleep instead of idling.</summary>
     private async Task RescheduleAndResleepAsync(SeedingDirective directive)
     {
         try
@@ -624,12 +630,24 @@ public sealed partial class SeedingViewModel : ObservableObject
         }
         catch (Exception e)
         {
-            _log.LogWarning(e, "Failed to re-arm the auto-seed wake for the new window");
+            _log.LogWarning(e, "Failed to re-arm the auto-seed wake set for the new window");
         }
 
-        var (h, m) = AutoSeedService.WakeTimeUtc(directive.Config);
-        _log.LogInformation("Auto-seed outside the window; re-armed for {H:D2}:{M:D2} UTC, resleeping", h, m);
-        SetSeedError($"Outside the seed window — re-armed for {h:D2}:{m:D2} UTC. Your computer will sleep and wake for it.");
+        // Describe what is actually armed now (the reconciled set), falling back to the fleet
+        // derivation if the store is somehow empty.
+        var stored = WakeStore.Load(_config);
+        string armed;
+        if (stored.Count > 0)
+        {
+            armed = string.Join(", ", stored.Select(w => $"{w.TimeUtc} UTC"));
+        }
+        else
+        {
+            var (h, m) = AutoSeedService.WakeTimeUtc(directive.Config);
+            armed = $"{h:D2}:{m:D2} UTC";
+        }
+        _log.LogInformation("Auto-seed outside the window; re-armed for {Armed}, resleeping", armed);
+        SetSeedError($"Outside the seed window — re-armed for {armed}. Your computer will sleep and wake for it.");
         ResleepRequested?.Invoke();
     }
 
@@ -637,18 +655,35 @@ public sealed partial class SeedingViewModel : ObservableObject
 
     /// <summary>
     /// Run an auto-seed: a 60s cancellable countdown, then seed whatever the server directs. Invoked on
-    /// the UI thread from a <c>--autoseed</c> CLI launch or the missed-task monitor. Port of
-    /// <c>run_autoseed</c>, collapsed to a single (region-free) directive-driven run.
+    /// the UI thread from an <c>--autoseed[-HHMM]</c> CLI launch or the missed-task monitor.
+    /// <paramref name="wakeKey"/> is the "HH:MM" UTC identity of the wake that fired (null for a
+    /// legacy wake-less launch) — it keys the per-wake "triggered today" record so the watchdog
+    /// doesn't re-fire a wake whose seed already ran, while a later wake the same day still gets its
+    /// turn.
     /// </summary>
-    public async Task RunAutoseedAsync()
+    public async Task RunAutoseedAsync(string? wakeKey = null)
     {
+        // Hard gate: nothing unattended runs while the onboarding overlay owns the window (first run,
+        // or the limited-beta network gate re-opening it). The overlay covers the whole shell, so the
+        // countdown prompt below would be invisible and the desktop notification would be the user's
+        // only warning before the game launched. Checked before the slot is claimed and before the
+        // notification fires, so a blocked auto-seed leaves no trace and disturbs no state. This is
+        // the shared backstop — every caller (scheduled-task launch and missed-seed watchdog alike)
+        // funnels through here.
+        if (_account.ShowOnboarding)
+        {
+            _log.LogInformation("Auto-seed suppressed — onboarding hasn't been completed");
+            AutoseedAbandoned?.Invoke("onboarding hasn't been completed");
+            return;
+        }
+
         // Guard: only one auto-seed at a time (mirrors AUTOSEED_IN_PROGRESS).
         if (!_autoSeedState.TryBegin())
         {
             _log.LogInformation("Auto-seed already in progress — ignoring");
             return;
         }
-        _autoSeedState.RecordTriggered();
+        _autoSeedState.RecordTriggered(ResolveWakeKey(wakeKey));
 
         try
         {
@@ -686,6 +721,17 @@ public sealed partial class SeedingViewModel : ObservableObject
                     _log.LogInformation("Auto-seed countdown cancelled by user");
                     return;
                 }
+                // The gate above reads state that startup is still settling: a scheduled-task launch
+                // starts this countdown while RestoreSessionAsync is in flight, and a rejected session
+                // (or a revoked network membership) re-arms onboarding seconds later. Re-check every
+                // tick so the overlay appearing mid-countdown stops the seed instead of launching the
+                // game underneath it.
+                if (_account.ShowOnboarding)
+                {
+                    _log.LogInformation("Auto-seed aborted — onboarding re-armed during the countdown");
+                    AutoseedAbandoned?.Invoke("onboarding re-armed during the countdown");
+                    return;
+                }
             }
             AutoseedCountdownActive = false;
 
@@ -705,6 +751,21 @@ public sealed partial class SeedingViewModel : ObservableObject
             _autoseedChoice = null;
             _autoSeedState.End();
         }
+    }
+
+    /// <summary>A launch that didn't name its wake can only be the legacy single-slot task — while
+    /// exactly one wake is stored, that's the one that fired, so its record blocks the watchdog
+    /// from running the same seed again. More than one stored wake means the launch really is
+    /// unidentifiable (shouldn't happen: multi-wake tasks always pass --autoseed-HHMM), and the
+    /// unknown key at least keeps repeat unidentified launches from stacking.</summary>
+    private string ResolveWakeKey(string? wakeKey)
+    {
+        if (wakeKey is not null)
+        {
+            return wakeKey;
+        }
+        var stored = WakeStore.Load(_config);
+        return stored.Count == 1 ? stored[0].TimeUtc : AutoSeedState.UnknownWakeKey;
     }
 
     /// <summary>"Seed now?" prompt answered: start the auto-seed immediately, with ("true") or

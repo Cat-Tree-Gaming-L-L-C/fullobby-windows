@@ -51,7 +51,7 @@ public sealed partial class AccountViewModel : ObservableObject
         // First resolved on the UI thread (App.OnLaunched), so this captures the UI queue.
         _dispatcher = DispatcherQueue.GetForCurrentThread();
 
-        onboardingComplete = _config.GetBool("onboarding_complete");
+        onboardingComplete = _config.GetBool(ConfigKeys.OnboardingComplete);
         isGuest = _config.GetBool("guest_mode");
     }
 
@@ -911,7 +911,7 @@ public sealed partial class AccountViewModel : ObservableObject
             OnboardingComplete = true;
             NetworkGateActive = false;
         });
-        _config.SetString("onboarding_complete", "true");
+        _config.SetString(ConfigKeys.OnboardingComplete, "true");
         // Durable now, not after the 500 ms debounce — losing this flag to a crash
         // re-runs the whole wizard for an onboarded user.
         _config.FlushPendingSaves();
@@ -1003,7 +1003,7 @@ public sealed partial class AccountViewModel : ObservableObject
         });
         if (rearmOnboarding)
         {
-            _config.Remove("onboarding_complete");
+            _config.Remove(ConfigKeys.OnboardingComplete);
         }
         _config.Remove("guest_mode");
         // Removals are throttled; sign-out state must survive an immediate kill.

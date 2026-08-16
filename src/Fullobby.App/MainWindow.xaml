@@ -136,11 +136,23 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <!-- First-run onboarding overlay: covers the shell (rows 0+1) until completed/skipped.
-             Visibility is driven from code-behind (x:Bind isn't supported on a Window root). -->
+        <!-- First-run onboarding overlay: covers the nav shell until completed/skipped. Visibility
+             is driven from code-behind (x:Bind isn't supported on a Window root).
+
+             Occupies row 1 only, deliberately leaving both the titlebar and the toast row
+             uncovered. It used to span all three rows, which hid the version string and the DEV
+             BUILD badge for the whole of first run — exactly when you most want to know which build
+             you are looking at, and the state a tester is in right after swapping builds — and
+             swallowed every in-app toast raised at startup. The credential-protection warning is
+             the one that matters: it fires before onboarding and explains why the sign-in the user
+             is about to do will not stick, and it was invisible precisely when it was relevant.
+
+             Window dragging is unaffected either way: SetTitleBar registers AppTitleBar's bounds as
+             a non-client region, so caption input is resolved before XAML hit-testing and an opaque
+             overlay drawn on top of it never intercepted the drag. Verified by measurement in both
+             layouts before this was changed — don't "fix" it back on the assumption it matters. -->
         <views:OnboardingView
             x:Name="Onboarding"
-            Grid.Row="0"
-            Grid.RowSpan="3" />
+            Grid.Row="1" />
     </Grid>
 </Window>

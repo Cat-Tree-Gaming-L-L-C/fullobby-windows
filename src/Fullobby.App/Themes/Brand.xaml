@@ -107,6 +107,31 @@
     <SolidColorBrush x:Key="BrandBadgeInfoBrush" Color="#FF3B7FC4" />
     <SolidColorBrush x:Key="BrandBadgeWarningBrush" Color="#FFB7861F" />
 
+    <!-- Top-3 leaderboard row text. Colour and weight travel together as one Style rather
+         than as two separately bound properties because {x:Bind} hard-casts a converter's
+         result to the target type: a converter has no way to say "leave this property at its
+         default" — DependencyProperty.UnsetValue is an IInspectable sentinel and the cast
+         throws. A null Style is a legal value that falls back to the default, so ranks 4+ get
+         one. FontFamily is restated because an explicit Style suppresses the implicit
+         TextBlock style above. -->
+    <Style x:Key="LeaderboardRank1TextStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource BrandBodyFontFamily}" />
+        <Setter Property="Foreground" Value="{StaticResource BrandRank1Brush}" />
+        <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+
+    <Style x:Key="LeaderboardRank2TextStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource BrandBodyFontFamily}" />
+        <Setter Property="Foreground" Value="{StaticResource BrandRank2Brush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style x:Key="LeaderboardRank3TextStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource BrandBodyFontFamily}" />
+        <Setter Property="Foreground" Value="{StaticResource BrandRank3Brush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
     <ResourceDictionary.ThemeDictionaries>
 
         <!-- ===== DARK (default) ====================================================== -->

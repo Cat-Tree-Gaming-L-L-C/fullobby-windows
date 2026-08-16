@@ -31,9 +31,10 @@ public static class Branding
     /// crash-recovery flag live here).</summary>
     public const string BackupDirName = "fullobby-backup";
 
-    /// <summary>Auto-seed scheduled task names.</summary>
-    public const string ScheduledTaskNa = "Fullobby";
-    public const string ScheduledTaskEu = "Fullobby-EU";
+    /// <summary>The auto-seed scheduled task name. One task now that the server owns rotation; the
+    /// retired per-region "Fullobby-EU" name survives only as a literal in the uninstaller, which
+    /// still has to delete tasks that older builds created.</summary>
+    public const string ScheduledTaskName = "Fullobby";
 
     /// <summary>Default (production) API base URL. Hardbaked into Release builds; the
     /// <c>FULLOBBY_API_URL</c> override only applies to Debug builds (see

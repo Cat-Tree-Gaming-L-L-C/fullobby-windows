@@ -77,7 +77,7 @@ section below.
 | Config | `Core.Config.ConfigService` (STJ store, atomic temp+rename, 500ms throttle, DPAPI secrets, `icacls` hardening; no legacy-dir migration) + `Core.Security.DpapiProtector`, `Core.Config.AtomicFile`, `Core.Config.EfficiencyPreference` (per-game power-savings key `efficiency_mode.<gameId>`; one-time migration off the retired global toggle) |
 | Steam / process | `Core.Native.SteamLauncher`, `ProcessMonitor`, `SteamPaths` |
 | Window focus / input | `Core.Native.WindowFocus` (HLL window find/cache, PostMessage Esc/F13 splash bypass, AttachThreadInput force-focus), `Win11Input` (SendInput + UIA fallback) |
-| Auto-seed / scheduling | `Core.Scheduling.AutoSeedService`, `ScheduledTaskService` (schtasks `/create /xml`), `AutoSeedSlot`/`AutoSeedTime`/`AutoSeedState`, `MissedAutoseedMonitor : IHostedService` |
+| Auto-seed / scheduling | `Core.Scheduling.AutoSeedService`, `ScheduledTaskService` (schtasks `/create /xml`), `AutoSeedSlot`/`AutoSeedTime`/`AutoSeedState`, `MissedAutoseedMonitor : IHostedService`. **Wake set (per-tenant scheduling, dormant):** auto-seed is a *set* of daily wakes — `WakePlanner` (pure) derives it from per-network windows when the backend sends them, else collapses to the single fleet-derived wake (today's behaviour); one Task Scheduler task per wake, identity keyed by UTC time (`Fullobby-0600`, arg `--autoseed-0600`; `AutoSeedSlot.ForTime`); the set persists atomically under the `auto_seed_wakes` config key (`WakeStore`, legacy `auto_seed_time` adopted on first reconcile); `AutoSeedService.ReconcileAsync` diffs desired-vs-stored (triggered from app start, SSE status pushes, the 15-min config refresh, and the scheduled-pause resleep path) and only deletes a network-justified wake on *fresh* per-network evidence; the watchdog and `AutoSeedState.WasTriggeredToday` are per-wake, so a 06:00 seed doesn't eat the 22:00 wake. Design + as-built decisions: `docs/PER-TENANT-SCHEDULING.md`. **Onboarding gate:** the scheduled task lives in Windows Task Scheduler and outlives our config (reinstall, wiped config, auth reset re-arming the wizard), so every entry point refuses while `AccountViewModel.ShowOnboarding` is true — `App.StartAutoseed` (before the window is raised), `SeedingViewModel.RunAutoseedAsync` (before the desktop notification, and re-checked each countdown tick), and `MissedAutoseedMonitor.IsEligibleToFire` (on the persisted `ConfigKeys.OnboardingComplete`, checked before `RecordTriggered` so a seed still runs if onboarding finishes inside the missed window). A blocked `--autoseed[-HHMM]` launch removes the orphaned tasks (`AutoSeedService.RemoveOrphanedTasksAsync` — a prefix sweep via `schtasks /query /fo csv`, since a wiped config can't name the time-keyed tasks; after session restore settles so a crash-healed flag isn't misread) and then quits via `App.EndAutoseedLaunch` → `MainWindow.ForceQuit` — **not** `Application.Exit()`, which close-to-tray cancels into a hide. The uninstaller runs the same prefix sweep (root-folder `Fullobby`/`Fullobby-…` tasks, fixed names as fallback) and deletes the HKCU Run entry (`installer/Fullobby.iss` `[Code]`) |
 | Backup / restore | `Core.Tools.HllConfigBackupService` (efficiency-INI swap + crash-recovery flag), `ManualBackupService` (hardlink-dedup backups) |
 | Game catalog | `Core.Games.GameDefinition` + `GameCatalog` (plain data record — no per-game interface) |
 | Tray / notifications | `App` `H.NotifyIcon` `TaskbarIcon` (in `MainWindow.xaml`), `App.Services.ToastService` (AppNotificationManager + `MessageBeep`), `App.Services.InAppToastService` |
@@ -85,7 +85,7 @@ section below.
 | Startup | `Core.Platform.StartupRegistry` (HKCU Run `Fullobby`) |
 | Updater | `Core.Update.UpdaterService` + `UpdateValidation` + `UpdateSignature` + `UpdateInfo` (mandatory pinned-key ECDSA P-256 signature over `(version, sha256)` — private key offline, signing runbook in the private `fullobby-api` repo; HTTPS + trusted-domain + ext + ≤500MB + SHA-256; launches Inno setup.exe; stable/beta `update_channel`) |
 | Power | `Core.Native.PowerStatus` (powercfg modern-standby/wake-timer warnings) |
-| UI | `App.Views.*Page` + `App.ViewModels.*` (frameless 5-tab shell); onboarding is a 5-step overlay (sign-in → join network → link → nickname → done); the seed surface is a `SplitButton` on efficiency-capable games and the auto-seed countdown resolves through a "Seed now?" dialog (Seed Now / Seed with Power Savings / Cancel), falling back to the remembered per-game choice when unattended |
+| UI | `App.Views.*Page` + `App.ViewModels.*` (frameless 5-tab shell); onboarding is a 5-step overlay (sign-in → join network → link → nickname → done) occupying **row 1 only**, so the titlebar (version + DEV BUILD badge) and the toast row stay visible during first run; the credential-protection failure is a modal `ContentDialog` shown over the overlay before sign-in (`MainWindow.ShowSecretsUnprotectedDialogAsync`, once per session) rather than a toast; the seed surface is a `SplitButton` on efficiency-capable games and the auto-seed countdown resolves through a "Seed now?" dialog (Seed Now / Seed with Power Savings / Cancel), falling back to the remembered per-game choice when unattended |
 | Keep-awake | `Core.Native.KeepAwake` (`SetThreadExecutionState` re-asserting thread; held while seeding) |
 
 ## WinUI 3 gotchas (load-bearing)
@@ -123,6 +123,18 @@ These depend on the `seeding-api` backend / release infra and can't be verified 
   the private `fullobby-api` repo).
 - **Seeding score** (planned): server-authoritative reward score — design in `docs/SCORING.md`;
   the scoring engine, CRCON score-delta polling, and streak tracking are backend work.
+- **Per-tenant scheduling** (client shipped 0.3.0, dormant; backend pending): networks are
+  independent tenants, but the schedule is single-tenant on the wire — `SeedingConfig.ActiveWindows`
+  is one flat `List<TimeWindow>` for the whole fleet, so two networks with different windows have no
+  representable answer. Two additive backend changes, independently shippable: **windows per
+  network** (nullable `active_windows`/`daily_reset_hour_utc`/`missed_autoseed_window_hours` on
+  `NetworkSeedingStatus` — the client models and reconciler are already live and light up as soon
+  as these arrive; null = fleet fallback, empty list = always active) and a **network-scoped
+  directive** (`network_id` request param + echo on `DirectiveTarget` — the client plumbs both but
+  passes null and labels wakes by time until the backend supports it). Until the fields arrive the
+  client keeps exactly one server-derived wake. Wire format, reconciliation rules, and the as-built
+  client decisions: `docs/PER-TENANT-SCHEDULING.md`; the mock API serves the new fields via
+  `POST /__mock/schedule`.
 - **Multi-game generalization** (planned): game registry + per-user opt-in, Palworld first —
   product design in `docs/MULTI-GAME.md`, backend gap analysis in the API repo's
   `docs/MULTI-GAME.md`. Involves a coordinated breaking wire change (per-game struct fields →

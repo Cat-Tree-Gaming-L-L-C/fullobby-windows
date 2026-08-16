@@ -13,8 +13,7 @@
                 <ResourceDictionary Source="ms-appx:///Themes/Brand.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <converters:BoolToVisibilityConverter x:Key="BoolToVis" />
-            <converters:RankToBrushConverter x:Key="RankToBrush" />
-            <converters:RankToFontWeightConverter x:Key="RankToWeight" />
+            <converters:RankToStyleConverter x:Key="RankToStyle" />
             <converters:SessionStatusToBrushConverter x:Key="SessionStatusToBrush" />
             <converters:PeriodToStyleConverter x:Key="PeriodToStyle" />
         </ResourceDictionary>

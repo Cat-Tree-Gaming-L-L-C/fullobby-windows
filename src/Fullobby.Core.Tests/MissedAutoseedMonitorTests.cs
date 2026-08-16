@@ -43,4 +43,41 @@ public class MissedAutoseedMonitorTests
     {
         Assert.True(MissedAutoseedMonitor.IsWithinMissedWindow(Utc(9, 0), new TimeOnly(9, 0), 4));
     }
+
+    [Fact]
+    public void Eligible_OnboardedAndIdle_Fires()
+    {
+        Assert.True(MissedAutoseedMonitor.IsEligibleToFire(
+            onboardingComplete: true, inProgress: false, triggeredToday: false));
+    }
+
+    [Fact]
+    public void Eligible_OnboardingIncomplete_DoesNotFire()
+    {
+        // A scheduled task left behind by a previous install (or an auth reset that re-armed the
+        // wizard) must never notify or launch the game at a first-run app.
+        Assert.False(MissedAutoseedMonitor.IsEligibleToFire(
+            onboardingComplete: false, inProgress: false, triggeredToday: false));
+    }
+
+    [Fact]
+    public void Eligible_OnboardingIncomplete_OutranksEveryOtherCheck()
+    {
+        Assert.False(MissedAutoseedMonitor.IsEligibleToFire(
+            onboardingComplete: false, inProgress: true, triggeredToday: true));
+    }
+
+    [Fact]
+    public void Eligible_AlreadyInProgress_DoesNotFire()
+    {
+        Assert.False(MissedAutoseedMonitor.IsEligibleToFire(
+            onboardingComplete: true, inProgress: true, triggeredToday: false));
+    }
+
+    [Fact]
+    public void Eligible_AlreadyTriggeredToday_DoesNotFire()
+    {
+        Assert.False(MissedAutoseedMonitor.IsEligibleToFire(
+            onboardingComplete: true, inProgress: false, triggeredToday: true));
+    }
 }

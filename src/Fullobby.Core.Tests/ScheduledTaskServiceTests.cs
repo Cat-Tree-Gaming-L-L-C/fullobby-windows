@@ -40,6 +40,38 @@ public class ScheduledTaskServiceTests
         Assert.Equal(expected, ScheduledTaskService.ParseNextRunTime(output));
     }
 
+    [Fact]
+    public void ParseOwnedTaskNames_MatchesExactAndDashPrefixOnly()
+    {
+        // Realistic /query /fo csv /nh output: our tasks, a near-name from another vendor, and
+        // system tasks in folders. Only exact "Fullobby" and "Fullobby-…" root tasks are ours.
+        var csv = string.Join("\r\n",
+            "\"\\Fullobby\",\"3/15/2026 9:00:00 AM\",\"Ready\"",
+            "\"\\Fullobby-0600\",\"3/15/2026 6:00:00 AM\",\"Ready\"",
+            "\"\\Fullobby-EU\",\"N/A\",\"Disabled\"",
+            "\"\\FullobbyHelper\",\"N/A\",\"Ready\"",
+            "\"\\OneDrive Standalone Update Task\",\"N/A\",\"Ready\"",
+            "\"\\Microsoft\\Windows\\Fullobby-Fake\",\"N/A\",\"Ready\"",
+            "INFO: localized chatter that is not a data row");
+
+        var names = ScheduledTaskService.ParseOwnedTaskNames(csv, "Fullobby");
+        Assert.Equal(["Fullobby", "Fullobby-0600", "Fullobby-EU"], names);
+    }
+
+    [Fact]
+    public void ParseOwnedTaskNames_EmptyOutput_YieldsNothing()
+    {
+        Assert.Empty(ScheduledTaskService.ParseOwnedTaskNames("", "Fullobby"));
+    }
+
+    [Fact]
+    public void ParseOwnedTaskNames_DeduplicatesRepeatedRows()
+    {
+        // /query repeats a task row per trigger.
+        var csv = "\"\\Fullobby-0600\",\"a\",\"Ready\"\n\"\\Fullobby-0600\",\"b\",\"Ready\"";
+        Assert.Single(ScheduledTaskService.ParseOwnedTaskNames(csv, "Fullobby"));
+    }
+
     [Theory]
     [InlineData("Next Run Time: N/A")]
     [InlineData("Next Run Time:")]

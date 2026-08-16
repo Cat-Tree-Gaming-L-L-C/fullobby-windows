@@ -39,9 +39,9 @@ public class AutoSeedStateTests
         var s = new AutoSeedState();
         var today = new DateOnly(2026, 6, 10);
 
-        Assert.False(s.WasTriggeredToday(today));
-        s.RecordTriggered(today);
-        Assert.True(s.WasTriggeredToday(today));
+        Assert.False(s.WasTriggeredToday("06:00", today));
+        s.RecordTriggered("06:00", today);
+        Assert.True(s.WasTriggeredToday("06:00", today));
     }
 
     [Fact]
@@ -51,12 +51,39 @@ public class AutoSeedStateTests
         var yesterday = new DateOnly(2026, 6, 9);
         var today = new DateOnly(2026, 6, 10);
 
-        s.RecordTriggered(yesterday);
-        Assert.True(s.WasTriggeredToday(yesterday));
+        s.RecordTriggered("06:00", yesterday);
+        Assert.True(s.WasTriggeredToday("06:00", yesterday));
 
         // Recording on a new day means the previous day no longer matches.
-        s.RecordTriggered(today);
-        Assert.False(s.WasTriggeredToday(yesterday));
-        Assert.True(s.WasTriggeredToday(today));
+        s.RecordTriggered("06:00", today);
+        Assert.False(s.WasTriggeredToday("06:00", yesterday));
+        Assert.True(s.WasTriggeredToday("06:00", today));
+    }
+
+    [Fact]
+    public void TriggeredToday_IsPerWake()
+    {
+        // The whole point of per-wake keying: the 06:00 seed having run must not block the
+        // 22:00 wake the same evening.
+        var s = new AutoSeedState();
+        var today = new DateOnly(2026, 6, 10);
+
+        s.RecordTriggered("06:00", today);
+        Assert.True(s.WasTriggeredToday("06:00", today));
+        Assert.False(s.WasTriggeredToday("22:00", today));
+
+        s.RecordTriggered("22:00", today);
+        Assert.True(s.WasTriggeredToday("22:00", today));
+    }
+
+    [Fact]
+    public void UnknownWakeKey_IsItsOwnRecord()
+    {
+        var s = new AutoSeedState();
+        var today = new DateOnly(2026, 6, 10);
+
+        s.RecordTriggered(AutoSeedState.UnknownWakeKey, today);
+        Assert.True(s.WasTriggeredToday(AutoSeedState.UnknownWakeKey, today));
+        Assert.False(s.WasTriggeredToday("06:00", today));
     }
 }

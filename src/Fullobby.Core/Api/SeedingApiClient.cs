@@ -27,7 +27,8 @@ public sealed class SeedingApiClient(HttpClient http)
     /// target server, stagger/countdown timings, when to poll again, and the current config. The
     /// client identifies its current server by index in the game's rotation; null = "not seeding".</summary>
     public Task<SeedingDirective> GetDirectiveAsync(
-        string game, int? currentIndex, string? sessionId = null, CancellationToken ct = default)
+        string game, int? currentIndex, string? sessionId = null, long? networkId = null,
+        CancellationToken ct = default)
     {
         var path = $"/api/seeding/directive?game={Uri.EscapeDataString(game)}";
         if (currentIndex is not null)
@@ -37,6 +38,14 @@ public sealed class SeedingApiClient(HttpClient http)
         if (sessionId is not null)
         {
             path += $"&session_id={Uri.EscapeDataString(sessionId)}";
+        }
+        // Omitted = current behaviour exactly: the server picks across all memberships by the
+        // user's priority order. Present = restrict target selection (and scheduled_pause) to
+        // that network. Must stay omitted for a wake justified by more than one network — see
+        // "one wake, many tenants" in docs/PER-TENANT-SCHEDULING.md.
+        if (networkId is not null)
+        {
+            path += $"&network_id={networkId.Value}";
         }
         return SendAsync<SeedingDirective>(HttpMethod.Get, path, null, ct);
     }

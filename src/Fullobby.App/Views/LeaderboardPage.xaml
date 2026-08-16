@@ -182,11 +182,9 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{x:Bind Rank}"
-                                           Foreground="{x:Bind Rank, Converter={StaticResource RankToBrush}}"
-                                           FontWeight="{x:Bind Rank, Converter={StaticResource RankToWeight}}" />
+                                           Style="{x:Bind Rank, Converter={StaticResource RankToStyle}}" />
                                 <TextBlock Grid.Column="1" Text="{x:Bind Username}" TextTrimming="CharacterEllipsis"
-                                           Foreground="{x:Bind Rank, Converter={StaticResource RankToBrush}}"
-                                           FontWeight="{x:Bind Rank, Converter={StaticResource RankToWeight}}" />
+                                           Style="{x:Bind Rank, Converter={StaticResource RankToStyle}}" />
                                 <TextBlock Grid.Column="2" Text="{x:Bind Time}" Width="64" TextAlignment="Right" />
                                 <TextBlock Grid.Column="3" Text="{x:Bind Sessions}" Width="64" TextAlignment="Right" />
                             </Grid>

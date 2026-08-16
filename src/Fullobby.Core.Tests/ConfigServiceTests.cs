@@ -23,6 +23,12 @@ public class ConfigValidationTests
     [Fact]
     public void ValidKey_MaxLength() => Assert.True(ConfigService.IsValidKey(new string('a', 255)));
 
+    /// <summary>Pinned: this key is on disk in every existing install. Renaming it re-runs the
+    /// first-run wizard for everyone and (until they finish it) blocks their auto-seed.</summary>
+    [Fact]
+    public void OnboardingCompleteKey_IsStable() =>
+        Assert.Equal("onboarding_complete", ConfigKeys.OnboardingComplete);
+
     [Fact]
     public void InvalidKey_Empty() => Assert.False(ConfigService.IsValidKey(""));
 

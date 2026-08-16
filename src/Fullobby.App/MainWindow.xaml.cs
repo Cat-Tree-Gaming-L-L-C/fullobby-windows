@@ -33,6 +33,11 @@ public sealed partial class MainWindow : Window
     // handler stops minimizing to tray and lets the window close.
     private bool _forceQuit;
 
+    /// <summary>One-shot guard for the credentials-unprotected modal. The event behind it can fire
+    /// on every failed secret write, and ContentDialog throws if a second one opens while the
+    /// first is still up.</summary>
+    private bool _secretsDialogShown;
+
     public MainWindow(ConfigService config, InAppToastService toasts, AccountViewModel account)
     {
         _config = config;
@@ -73,7 +78,18 @@ public sealed partial class MainWindow : Window
             AppWindow.Resize(new Windows.Graphics.SizeInt32(
                 (int)(LogicalWidth * scale),
                 (int)(LogicalHeight * scale)));
+
+            // Only now is there a XamlRoot to host a dialog. ConfigService is constructed long
+            // before any window exists, so a protection failure raised during startup is read off
+            // the flag here rather than through the event below.
+            if (_config.HasUnprotectedSecrets)
+            {
+                _ = ShowSecretsUnprotectedDialogAsync();
+            }
         };
+
+        // Later failures (a secret that fails to encrypt mid-session) arrive by event.
+        _config.SecretProtectionUnavailable += OnSecretProtectionUnavailable;
 
         // Restore the saved theme (light / dark / system); absent → the brand default, dark.
         ApplyTheme(_config.GetString("theme"));
@@ -121,6 +137,54 @@ public sealed partial class MainWindow : Window
 
     private void UpdateOnboardingVisibility() =>
         Onboarding.Visibility = Account.ShowOnboarding ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Raised by ConfigService, possibly off the UI thread.</summary>
+    private void OnSecretProtectionUnavailable() =>
+        DispatcherQueue.TryEnqueue(() => _ = ShowSecretsUnprotectedDialogAsync());
+
+    /// <summary>
+    /// Tell the user their credentials cannot be saved on this PC.
+    ///
+    /// Modal rather than a toast because of when it lands: a ContentDialog renders above the
+    /// onboarding overlay, so on first run it has to be acknowledged before the user can reach the
+    /// sign-in buttons — and the whole point of the message is that the sign-in they are about to
+    /// do will not survive closing the app. As a toast this was the one warning guaranteed to be
+    /// missed, since it was covered by the overlay for the entire time it was relevant.
+    ///
+    /// Shown at most once per session (see <see cref="_secretsDialogShown"/>).
+    /// </summary>
+    private async Task ShowSecretsUnprotectedDialogAsync()
+    {
+        // No XamlRoot yet: the RootGrid.Loaded handler re-reads HasUnprotectedSecrets and shows it
+        // then, so an early event is deferred rather than dropped.
+        if (_secretsDialogShown || RootGrid.XamlRoot is null)
+        {
+            return;
+        }
+        _secretsDialogShown = true;
+
+        var dialog = new ContentDialog
+        {
+            Title = "Credentials can't be saved",
+            Content = "Windows couldn't encrypt your saved credentials on this PC, so they haven't "
+                      + "been saved to disk. You'll stay signed in until you close Fullobby, then "
+                      + "you'll need to sign in again.",
+            CloseButtonText = "Continue",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = RootGrid.XamlRoot,
+        };
+
+        try
+        {
+            await dialog.ShowAsync();
+        }
+        catch (Exception e)
+        {
+            // Another dialog can already be open (a page's confirm prompt). Losing the warning is
+            // bad; taking the app down over it is worse.
+            Log.Warning(e, "Could not show the credential-protection dialog");
+        }
+    }
 
     /// <summary>Show the Admin tab only while /me reports a global Admin grant. If the
     /// grant disappears (sign-out, grant revoked) while the tab is open, bounce to Seed.</summary>
@@ -221,7 +285,10 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>Quit the app through the normal shutdown path (no close-to-tray). Used by the
-    /// self-updater after launching the installer so it can replace the running exe.</summary>
+    /// self-updater after launching the installer so it can replace the running exe, and by
+    /// <c>App.EndAutoseedLaunch</c> to shut down a process that exists only to run an auto-seed.
+    /// Callers must use this rather than <c>Application.Exit()</c>, which
+    /// <see cref="OnAppWindowClosing"/> turns into a hide whenever close-to-tray is on.</summary>
     public void ForceQuit()
     {
         _forceQuit = true;

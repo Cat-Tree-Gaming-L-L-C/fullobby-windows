@@ -21,10 +21,15 @@ public record ServerDayStatus(
     int? PlayerCount, int Threshold, long? WindowStartTs);
 
 // Per-network seeding status (multi-tenant). phase: "cycling" | "all_seeded" | null.
+// The trailing three are the per-tenant schedule boundaries (docs/PER-TENANT-SCHEDULING.md):
+// null = omitted from the wire (WhenWritingNull), the pre-per-tenant shape; ActiveWindows may be
+// an empty list, which means "always active" — distinct from null.
 public record NetworkSeedingStatus(
     long NetworkId, string NetworkTag, string? DisplayName, bool Active, long? NextActiveInSecs,
     int DefaultSeedingThreshold, SeedingCandidate? Hll, SeedingCandidate? Hllv,
-    string? HllPhase, string? HllvPhase, List<ServerDayStatus> HllDay, List<ServerDayStatus> HllvDay);
+    string? HllPhase, string? HllvPhase, List<ServerDayStatus> HllDay, List<ServerDayStatus> HllvDay,
+    List<TimeWindow>? ActiveWindows = null, int? DailyResetHourUtc = null,
+    int? MissedAutoseedWindowHours = null);
 
 public record SeedingStatusResponse(List<NetworkSeedingStatus> Networks, long UpdatedAt);
 
@@ -52,7 +57,9 @@ public record SeedingConfig(
     int MissedAutoseedWindowHours, List<TimeWindow> ActiveWindows, int DailyResetHourUtc,
     int CandidateMinDwellSecs = 45);
 
-public record DirectiveTarget(string Game, int Index, ServerInfo Server, long DbId);
+// network_id: the owning network echoed back (per-tenant directive scoping); null = omitted,
+// matching a backend that hasn't shipped the scoping change.
+public record DirectiveTarget(string Game, int Index, ServerInfo Server, long DbId, long? NetworkId = null);
 
 // action: "seed" | "switch" | "stay" | "stop" (lowercase on the wire).
 // switchReason (switch only): "seeded" | "unavailable" | "higher_priority_ready" | "rotation_advanced".
@@ -81,6 +88,8 @@ public record LeaderboardEntry(
 // ── Control-plane DTOs (/__mock/...) ───────────────────────────────────────────
 
 public record AutoAdvanceRequest(bool Enabled, int? Step, int? IntervalSecs, int? DwellTicks);
+public record SetScheduleRequest(
+    List<TimeWindow>? ActiveWindows, int? DailyResetHourUtc, int? MissedAutoseedWindowHours);
 public record SetPlayersRequest(int? PlayerCount, int? MaxPlayerCount);
 public record SetFlagsRequest(bool? Offline, bool? PasswordProtected);
 public record ArmErrorRequest(int Status, int Count, int? RetryAfterSecs, string? MinimumVersion);

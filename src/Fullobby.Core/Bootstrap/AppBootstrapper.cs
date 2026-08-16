@@ -1,5 +1,6 @@
 using Fullobby.Core.Api;
 using Fullobby.Core.Config;
+using Fullobby.Core.Scheduling;
 using Fullobby.Core.Servers;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -25,6 +26,8 @@ public sealed class AppBootstrapper : IHostedService
     private readonly LiveStats _live;
     private readonly SseConnectionState _sse;
     private readonly SeedingConfigProvider _configProvider;
+    private readonly SeedingStatusCache _statusCache;
+    private readonly AutoSeedService _autoSeed;
 
     private readonly CancellationTokenSource _cts = new();
     private Task? _runLoop;
@@ -36,7 +39,9 @@ public sealed class AppBootstrapper : IHostedService
         ConfigService config,
         LiveStats live,
         SseConnectionState sse,
-        SeedingConfigProvider configProvider)
+        SeedingConfigProvider configProvider,
+        SeedingStatusCache statusCache,
+        AutoSeedService autoSeed)
     {
         _log = log;
         _api = api;
@@ -45,6 +50,8 @@ public sealed class AppBootstrapper : IHostedService
         _live = live;
         _sse = sse;
         _configProvider = configProvider;
+        _statusCache = statusCache;
+        _autoSeed = autoSeed;
     }
 
     /// <summary>Raised after the server list is (re)loaded successfully.</summary>
@@ -58,14 +65,36 @@ public sealed class AppBootstrapper : IHostedService
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        // Every fresh seeding status may carry moved per-network windows — reconcile the wake set
+        // against it. Cheap when nothing changed (in-memory compare, no process spawns), so the
+        // push cadence is fine; AutoSeedService serializes overlapping calls itself.
+        _statusCache.Updated += OnStatusUpdated;
+
         // Run init + polling off the host-start thread so the first window paint isn't
         // blocked on network I/O.
         _runLoop = Task.Run(() => RunAsync(_cts.Token));
         return Task.CompletedTask;
     }
 
+    private void OnStatusUpdated(SeedingStatusResponse status) =>
+        _ = ReconcileWakesAsync(_cts.Token);
+
+    private async Task ReconcileWakesAsync(CancellationToken ct)
+    {
+        try
+        {
+            await _autoSeed.ReconcileAsync(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) { /* shutdown */ }
+        catch (Exception e)
+        {
+            _log.LogWarning(e, "Auto-seed wake reconcile failed");
+        }
+    }
+
     public async Task StopAsync(CancellationToken cancellationToken)
     {
+        _statusCache.Updated -= OnStatusUpdated;
         try { await _cts.CancelAsync().ConfigureAwait(false); }
         catch (Exception e) { _log.LogDebug(e, "Bootstrapper cancel on shutdown failed"); }
 
@@ -87,6 +116,11 @@ public sealed class AppBootstrapper : IHostedService
     {
         _lastConfigRefreshTicks = Environment.TickCount64;
         await RefreshConfigAsync(ct).ConfigureAwait(false);
+
+        // Startup reconcile: adopts a pre-wake-set install's single "Fullobby" task into the
+        // time-keyed set, and re-arms against a fleet window that moved while the app was closed.
+        await ReconcileWakesAsync(ct).ConfigureAwait(false);
+
         await LoadServersAsync(ct).ConfigureAwait(false);
 
         while (!ct.IsCancellationRequested)
@@ -108,6 +142,8 @@ public sealed class AppBootstrapper : IHostedService
             {
                 _lastConfigRefreshTicks = Environment.TickCount64;
                 await RefreshConfigAsync(ct).ConfigureAwait(false);
+                // The refreshed config may have moved the fleet windows the fallback wake follows.
+                await ReconcileWakesAsync(ct).ConfigureAwait(false);
             }
 
             // Skip the redundant HTTP round-trip if SSE reconnected while we waited.

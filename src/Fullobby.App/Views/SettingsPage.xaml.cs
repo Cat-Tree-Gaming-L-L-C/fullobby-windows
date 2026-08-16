@@ -117,10 +117,14 @@ public sealed partial class SettingsPage : Page
             var s = await _autoseed.GetStatusAsync();
             if (s.Installed)
             {
-                var text = s.UtcTime is not null ? $"Daily at {s.UtcTime} UTC" : "Scheduled";
-                if (!string.IsNullOrEmpty(s.NextRun))
+                // Usually a single wake; per-tenant scheduling can arm several (one per network
+                // window) — list them all, they're each a real nightly wake the user should know about.
+                var times = s.Wakes.Where(w => w.Installed).Select(w => w.TimeUtc).ToList();
+                var text = times.Count > 0 ? $"Daily at {string.Join(", ", times)} UTC" : "Scheduled";
+                var next = s.Wakes.FirstOrDefault(w => !string.IsNullOrEmpty(w.NextRun))?.NextRun;
+                if (!string.IsNullOrEmpty(next))
                 {
-                    text += $" · next: {s.NextRun}";
+                    text += $" · next: {next}";
                 }
                 AutoseedStatus.Text = text;
                 AutoseedSetup.Content = "Change";

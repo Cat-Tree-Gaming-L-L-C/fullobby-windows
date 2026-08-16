@@ -21,12 +21,18 @@ public partial class App : Application
     private MainWindow? _window;
 
     /// <summary>True when this process was started specifically to run an auto-seed (a scheduled-task
-    /// or CLI <c>--autoseed</c> launch), as opposed to a normal user launch. Only then do we exit the
-    /// app after re-arming on a scheduled pause, so the machine can go back to sleep.</summary>
+    /// or CLI <c>--autoseed</c> launch), as opposed to a normal user launch. Only then does the app
+    /// shut down once that auto-seed ends without seeding — re-armed for a moved window, or refused
+    /// outright — so the machine can go back to sleep. See <see cref="EndAutoseedLaunch"/>.</summary>
     private readonly bool _launchedForAutoseed = HasAutoseedArg(Environment.GetCommandLineArgs());
 
-    /// <summary>Guards against subscribing to the VM's resleep event more than once.</summary>
-    private bool _resleepWired;
+    /// <summary>Guards against subscribing to the VM's auto-seed lifecycle events more than once.</summary>
+    private bool _autoseedEventsWired;
+
+    /// <summary>The startup session restore, kept so the auto-seed path can wait for it before
+    /// judging whether onboarding is genuinely incomplete — it heals a completion flag lost to a
+    /// crash and arms the network gate, both of which move <c>ShowOnboarding</c>.</summary>
+    private Task _sessionRestore = Task.CompletedTask;
 
     public App()
     {
@@ -163,7 +169,7 @@ public partial class App : Application
         // Restore any persisted account session in the background (guest API key or JWT),
         // then refresh linked providers/Steam IDs. Non-fatal — failures just leave us signed out.
         var account = AppHost.Services.GetRequiredService<ViewModels.AccountViewModel>();
-        _ = account.RestoreSessionAsync();
+        _sessionRestore = account.RestoreSessionAsync();
 
         // Deferred startup housekeeping. Nothing on the first frame depends on either of these, and
         // both hit the registry: PruneStaleHandlers enumerates every subkey of HKCU\Software\Classes
@@ -213,21 +219,8 @@ public partial class App : Application
             toastService.Info(notice);
         }
 
-        // Credential protection failing is silent by nature: we deliberately do NOT persist secrets
-        // we can't encrypt, so without this the user is simply signed out on the next launch with no
-        // explanation. Sticky (duration 0) because it's the reason for a later surprise, and the
-        // check covers a failure raised during construction, before anything could subscribe.
-        var config = AppHost.Services.GetRequiredService<ConfigService>();
-        config.SecretProtectionUnavailable += WarnSecretsUnprotected;
-        if (config.HasUnprotectedSecrets)
-        {
-            WarnSecretsUnprotected();
-        }
-
-        void WarnSecretsUnprotected() => toastService.Warning(
-            "Windows couldn't encrypt your saved credentials on this PC, so they haven't been saved " +
-            "to disk. You'll stay signed in until you close Fullobby, then need to sign in again.",
-            durationMs: 0);
+        // Credential protection failing is handled by MainWindow, which owns the XamlRoot the modal
+        // needs — see MainWindow.ShowSecretsUnprotectedDialogAsync.
 
         // The first instance itself may have been protocol-launched or scheduled-task-launched
         // (fullobby:// deep link, or --autoseed from a scheduled task).
@@ -236,60 +229,134 @@ public partial class App : Application
         // Fallback for a fresh scheduled-task launch where the activation args don't carry the flag.
         if (HasAutoseedArg(Environment.GetCommandLineArgs()))
         {
-            StartAutoseed();
+            StartAutoseed(WakeKeyFromArgs(Environment.GetCommandLineArgs()));
         }
     }
 
-    /// <summary>Missed-autoseed watchdog fired (off-thread) — marshal onto the UI and run it.</summary>
-    private void OnAutoseedDue() => StartAutoseed();
+    /// <summary>Missed-autoseed watchdog fired (off-thread) with the wake's "HH:MM" UTC key —
+    /// marshal onto the UI and run it.</summary>
+    private void OnAutoseedDue(string wakeKey) => StartAutoseed(wakeKey);
 
-    /// <summary>The auto-seed re-armed its wake for a moved window. If this process was launched just
-    /// to seed (not an interactive session), release keep-awake and exit so the PC returns to sleep
-    /// and the scheduled task wakes it again at the new window.</summary>
-    private void OnResleepRequested()
+    /// <summary>
+    /// An auto-seed was refused because onboarding isn't done. If the task that woke us is a leftover
+    /// from a previous install, remove it — otherwise the machine keeps waking daily for a seed that
+    /// will always be refused, and the fixed uninstaller can't reach installs already in the wild.
+    /// The removal is awaited before the launch ends: the 4s shutdown watchdog would otherwise race
+    /// the schtasks call and the orphan would survive every wake.
+    /// </summary>
+    private async Task HandleBlockedAutoseedAsync()
+    {
+        // Let session restore settle before judging. It heals a completion flag lost to a crash and
+        // arms the network gate, so the flag read a moment ago can still be wrong in both
+        // directions — and deleting a real user's task would silently end their auto-seed. Bounded,
+        // so a hung network call can't strand a process that exists only to seed.
+        try
+        {
+            await _sessionRestore.WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Session restore didn't settle before the auto-seed orphan check");
+        }
+
+        // Re-reads the persisted flag itself, so a restore that just healed it keeps the tasks.
+        try
+        {
+            await AppHost.Services.GetRequiredService<AutoSeedService>()
+                .RemoveOrphanedTasksAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Orphaned auto-seed task cleanup failed");
+        }
+
+        EndAutoseedLaunch("onboarding hasn't been completed");
+    }
+
+    /// <summary>The auto-seed re-armed its wake for a moved window — the scheduled task will wake the
+    /// machine again at the new time, so this process has nothing left to do.</summary>
+    private void OnResleepRequested() =>
+        EndAutoseedLaunch("re-armed for a moved window; letting the PC sleep");
+
+    /// <summary>The auto-seed was refused or abandoned before it seeded anything (raised by the view
+    /// model with the reason).</summary>
+    private void OnAutoseedAbandoned(string reason) => EndAutoseedLaunch(reason);
+
+    /// <summary>
+    /// The auto-seed this process was started for is over without a seed to keep it alive. Release
+    /// keep-awake and shut down so the machine can go back to sleep. No-op in an interactive
+    /// session — the user opened the app themselves, so it stays open.
+    ///
+    /// Quits through <see cref="MainWindow.ForceQuit"/>, not <c>Application.Exit()</c>: with
+    /// close-to-tray enabled (the default) <c>OnAppWindowClosing</c> cancels the close and merely
+    /// hides the window, so Exit() leaves the process alive in the tray — holding the machine awake
+    /// after a 3 a.m. wake instead of releasing it. ForceQuit sets the flag that close handler
+    /// checks, so the close goes through to Window.Closed and the real shutdown path.
+    ///
+    /// Safe to call from any thread.
+    /// </summary>
+    private void EndAutoseedLaunch(string reason)
     {
         if (!_launchedForAutoseed)
         {
-            return; // interactive session — leave the app running, just re-armed
+            return; // interactive session — leave the app running
         }
 
-        Log.Information("Auto-seed re-armed for a moved window; exiting so the PC can sleep");
+        Log.Information("Ending the auto-seed launch: {Reason}", reason);
         try { AppHost.Services.GetRequiredService<Core.Native.KeepAwake>().Release(); }
-        catch (Exception ex) { Log.Warning(ex, "Keep-awake release before resleep failed"); }
+        catch (Exception ex) { Log.Warning(ex, "Keep-awake release before exit failed"); }
 
-        var queue = _window?.DispatcherQueue;
-        if (queue is null)
+        var window = _window;
+        if (window is null)
         {
-            Exit();
+            Exit(); // no window ever came up — nothing to cancel the close
             return;
         }
-        queue.TryEnqueue(Exit);
+        window.DispatcherQueue.TryEnqueue(window.ForceQuit);
     }
 
-    /// <summary>Marshal to the UI thread and kick off the (single, region-free) auto-seed countdown.</summary>
-    private void StartAutoseed()
+    /// <summary>Marshal to the UI thread and kick off the auto-seed countdown.
+    /// <paramref name="wakeKey"/> identifies which wake fired ("HH:MM" UTC; null for a legacy
+    /// wake-less launch) so the run is recorded against the right wake.</summary>
+    private void StartAutoseed(string? wakeKey)
     {
-        Log.Information("Auto-seed requested");
+        Log.Information("Auto-seed requested (wake {Wake})", wakeKey ?? "unspecified");
+
+        // Refuse before touching the window. The scheduled task is registered with Windows and
+        // survives an uninstall or a wiped config, so it can fire at a machine that is sitting at
+        // first-run onboarding; the same is true after any auth reset that re-arms the wizard. The
+        // view model refuses too — this copy exists so a blocked request doesn't first drag the
+        // window in front of the user (potentially waking the machine at the seed hour to do it).
+        var account = AppHost.Services.GetRequiredService<ViewModels.AccountViewModel>();
+        if (account.ShowOnboarding)
+        {
+            Log.Information("Auto-seed request ignored — onboarding hasn't been completed");
+            _ = HandleBlockedAutoseedAsync();
+            return;
+        }
+
         var vm = AppHost.Services.GetRequiredService<ViewModels.SeedingViewModel>();
-        if (!_resleepWired)
+        if (!_autoseedEventsWired)
         {
             vm.ResleepRequested += OnResleepRequested;
-            _resleepWired = true;
+            vm.AutoseedAbandoned += OnAutoseedAbandoned;
+            _autoseedEventsWired = true;
         }
         var queue = _window?.DispatcherQueue;
         if (queue is null)
         {
-            _ = vm.RunAutoseedAsync();
+            _ = vm.RunAutoseedAsync(wakeKey);
             return;
         }
         queue.TryEnqueue(() =>
         {
             _window?.BringToFront();
-            _ = vm.RunAutoseedAsync();
+            _ = vm.RunAutoseedAsync(wakeKey);
         });
     }
 
-    /// <summary>Whether any token requests an auto-seed launch (--autoseed, plus legacy --autoseed-*/--seed-*).</summary>
+    /// <summary>Whether any token requests an auto-seed launch (--autoseed-HHMM, --autoseed, plus
+    /// legacy --autoseed-*/--seed-*).</summary>
     private static bool HasAutoseedArg(IReadOnlyList<string> args)
     {
         foreach (var arg in args)
@@ -300,6 +367,20 @@ public partial class App : Application
             }
         }
         return false;
+    }
+
+    /// <summary>The fired wake's "HH:MM" UTC key from a --autoseed-HHMM token, or null for the
+    /// legacy wake-less forms.</summary>
+    private static string? WakeKeyFromArgs(IReadOnlyList<string> args)
+    {
+        foreach (var arg in args)
+        {
+            if (AutoSeedSlot.TryParseWakeArg(arg, out var t))
+            {
+                return $"{t.Hour:D2}:{t.Minute:D2}";
+            }
+        }
+        return null;
     }
 
     /// <summary>Raised on a non-UI thread; marshal before touching the window.</summary>
@@ -318,9 +399,10 @@ public partial class App : Application
         if (args.Kind == ExtendedActivationKind.Launch
             && args.Data is Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs autoseedLaunch
             && autoseedLaunch.Arguments is { Length: > 0 } rawArgs
-            && HasAutoseedArg(rawArgs.Split(' ', StringSplitOptions.RemoveEmptyEntries)))
+            && rawArgs.Split(' ', StringSplitOptions.RemoveEmptyEntries) is { } tokens
+            && HasAutoseedArg(tokens))
         {
-            StartAutoseed();
+            StartAutoseed(WakeKeyFromArgs(tokens));
             return;
         }
 

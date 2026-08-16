@@ -300,6 +300,20 @@ public sealed class NetworkSeedingStatus
     public NetworkPhase? HllvPhase { get; set; }
     public List<ServerDayStatus> HllDay { get; set; } = [];
     public List<ServerDayStatus> HllvDay { get; set; } = [];
+
+    // ── Per-tenant schedule boundaries (docs/PER-TENANT-SCHEDULING.md) ──
+    // Additive backend change: authoritative per network when present; null = the backend doesn't
+    // send them yet (or this network omits them), in which case the identically named SeedingConfig
+    // fields act as fleet defaults. Null and empty are distinct: an empty ActiveWindows list means
+    // "always active", null means "no per-network data".
+
+    /// <summary>This network's daily UTC active windows. Empty = always active; null = not sent —
+    /// fall back to <see cref="SeedingConfig.ActiveWindows"/>.</summary>
+    public List<TimeWindow>? ActiveWindows { get; set; }
+    /// <summary>This network's daily reset hour (UTC); null = fall back to the fleet default.</summary>
+    public int? DailyResetHourUtc { get; set; }
+    /// <summary>This network's missed-autoseed window; null = fall back to the fleet default.</summary>
+    public int? MissedAutoseedWindowHours { get; set; }
 }
 
 /// <summary>The user's membership in a seeding network (an alliance running one rotation over
@@ -432,6 +446,10 @@ public sealed class DirectiveTarget
     public int Index { get; set; }
     public ServerInfo Server { get; set; } = new();
     public long DbId { get; set; }
+    /// <summary>The network whose server this is — the server's resolution echoed back so the
+    /// client can name who it is seeding for. Null until the backend's directive-scoping change
+    /// lands (docs/PER-TENANT-SCHEDULING.md); the client then labels by time instead.</summary>
+    public long? NetworkId { get; set; }
 }
 
 /// <summary>Full server-decided directive from <c>GET /api/seeding/directive</c>. The client polls

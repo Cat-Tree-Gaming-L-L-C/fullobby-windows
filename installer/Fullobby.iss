@@ -105,8 +105,83 @@ begin
   end;
 end;
 
+{ The auto-seed daily wake is a Windows Task Scheduler task, created at runtime by
+  Core.Scheduling.ScheduledTaskService (schtasks /create /xml) and owned by Task Scheduler, not by
+  us — nothing in [Files] or [Registry] can reach it. Left behind, it keeps waking the machine at
+  the seed hour to run an exe that no longer exists, and if the user reinstalls it fires
+  "--autoseed" at an app that is back at first-run onboarding. Delete both the current task and
+  the retired per-region "Fullobby-EU" name from older builds.
+
+  Runs non-elevated, matching how the task was created (RunLevel LeastPrivilege, current user), so
+  no UAC prompt. Uninstall-only: an upgrade must keep the task, and a reinstall over a wiped config
+  is healed by the app instead (AutoSeedService.RemoveOrphanedTaskAsync). }
+procedure DeleteScheduledTask(const TaskName: String);
+var
+  ResultCode: Integer;
+begin
+  { ResultCode is ignored — a missing task exits non-zero, which is the normal case. Only a
+    failure to launch schtasks.exe at all is worth a log line. }
+  if not Exec(ExpandConstant('{sys}\schtasks.exe'),
+              '/Delete /TN "' + TaskName + '" /F',
+              '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    Log('Could not run schtasks.exe to remove scheduled task ' + TaskName);
+end;
+
+procedure RemoveScheduledTasks;
+var
+  ResultCode, I, P: Integer;
+  CsvPath, Line, TaskName: String;
+  Lines: TArrayOfString;
+begin
+  { The wake set makes the task names dynamic — one per wake time ('{#AppName}-0600'), derived
+    from each network's schedule — so a hardcoded list can't reach them. Sweep instead: list every
+    task as CSV and delete root-folder tasks named exactly '{#AppName}' or '{#AppName}-...' (which
+    also covers the retired '{#AppName}-EU'). Matching requires the '-' — another vendor's
+    '{#AppName}Helper' must survive. Each data row looks like "\Name","Next Run Time","Status". }
+  CsvPath := ExpandConstant('{tmp}\fullobby-tasks.csv');
+  if Exec(ExpandConstant('{cmd}'), '/C schtasks /Query /FO CSV /NH > "' + CsvPath + '"',
+          '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+     and (ResultCode = 0) and LoadStringsFromFile(CsvPath, Lines) then
+  begin
+    for I := 0 to GetArrayLength(Lines) - 1 do
+    begin
+      Line := Lines[I];
+      if Copy(Line, 1, 2) <> '"\' then Continue;   { not a data row }
+      P := Pos('",', Line);
+      if P < 3 then Continue;
+      TaskName := Copy(Line, 3, P - 3);
+      if Pos('\', TaskName) > 0 then Continue;      { task folder — ours live in the root }
+      if SameText(TaskName, '{#AppName}')
+         or SameText(Copy(TaskName, 1, Length('{#AppName}') + 1), '{#AppName}-') then
+        DeleteScheduledTask(TaskName);
+    end;
+    DeleteFile(CsvPath);
+  end;
+
+  { Historic fixed names — redundant after a successful sweep, load-bearing when the listing
+    fails (schtasks quirks, a redirect that couldn't be written). }
+  DeleteScheduledTask('{#AppName}');
+  DeleteScheduledTask('{#AppName}-EU');
+end;
+
+{ "Start with Windows" is written at runtime by Core.Platform.StartupRegistry, not by setup —
+  HKCU Run value "Fullobby" holding the quoted exe path. Left behind, every logon tries to launch
+  an exe that uninstall just deleted. Done here rather than as a [Registry] entry with
+  dontcreatekey/uninsdeletevalue so that an install can never touch a value it doesn't own: this
+  runs at uninstall only. }
+procedure RemoveStartupEntry;
+begin
+  if RegDeleteValue(HKEY_CURRENT_USER,
+       'Software\Microsoft\Windows\CurrentVersion\Run', '{#AppName}') then
+    Log('Removed the "Start with Windows" entry');
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usPostUninstall then
+  begin
     RemoveStaleProtocolHandlers;
+    RemoveScheduledTasks;
+    RemoveStartupEntry;
+  end;
 end;

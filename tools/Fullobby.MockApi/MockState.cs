@@ -59,6 +59,14 @@ public sealed class MockState
     public int AutoAdvanceIntervalSecs { get; set; } = 4;
     public int DwellTicks { get; set; } = 3;   // beats to hold a freshly-seeded server before it climbs
 
+    // Per-tenant schedule boundaries served on the mock network's status entry
+    // (docs/PER-TENANT-SCHEDULING.md). All null by default = omitted from the wire, mirroring a
+    // backend that hasn't shipped the per-tenant fields — the client stays on its fleet-derived
+    // single wake. POST /__mock/schedule to light them up (an empty windows list = always active).
+    public List<TimeWindow>? NetworkActiveWindows { get; set; }
+    public int? NetworkDailyResetHourUtc { get; set; }
+    public int? NetworkMissedAutoseedWindowHours { get; set; }
+
     private int? _seedTarget;
     private int _dwellRemaining;
 
@@ -89,6 +97,9 @@ public sealed class MockState
             Armed = null;
             _seedTarget = null;
             _dwellRemaining = 0;
+            NetworkActiveWindows = null;
+            NetworkDailyResetHourUtc = null;
+            NetworkMissedAutoseedWindowHours = null;
             // Baseline: already a member of the mock network so the app works out of the box.
             // POST /__mock/networks/clear to exercise the join-a-network gate.
             _memberships.Clear();
@@ -144,7 +155,10 @@ public sealed class MockState
                 NetworkId, NetworkName, NetworkDisplayName, Active: true, NextActiveInSecs: null,
                 DefaultSeedingThreshold: 75, Hll: candidate, Hllv: null,
                 HllPhase: candidate is null ? "all_seeded" : "cycling", HllvPhase: null,
-                HllDay: DayStatuses(), HllvDay: new List<ServerDayStatus>());
+                HllDay: DayStatuses(), HllvDay: new List<ServerDayStatus>(),
+                ActiveWindows: NetworkActiveWindows,
+                DailyResetHourUtc: NetworkDailyResetHourUtc,
+                MissedAutoseedWindowHours: NetworkMissedAutoseedWindowHours);
             return new SeedingStatusResponse(new List<NetworkSeedingStatus> { network }, NowMs());
         }
     }
@@ -192,12 +206,25 @@ public sealed class MockState
 
     /// <summary>Compute the directive for a polling client: sequential seeding of the first
     /// not-yet-seeded server. <c>stay</c> when the client is already on the target, <c>switch</c>
-    /// when a different server should be seeded, <c>stop</c> when all are seeded.</summary>
-    public SeedingDirective Directive(int? currentIndex)
+    /// when a different server should be seeded, <c>stop</c> when all are seeded.
+    /// <paramref name="networkId"/> mirrors the per-tenant scoping change: omitted = pick across
+    /// all memberships (current behaviour); present = restrict to that network's servers — the mock
+    /// has one network, so any other id has none to offer. The target always echoes its owning
+    /// network id, as a scoping-capable backend would.</summary>
+    public SeedingDirective Directive(int? currentIndex, long? networkId = null)
     {
         lock (_gate)
         {
             var config = DefaultConfig();
+
+            // Scoped to a network that has no servers here → exhausted for that scope.
+            if (networkId is { } scoped && scoped != NetworkId)
+            {
+                return new SeedingDirective("stop", null, AllExhausted: true, ScheduledPause: false,
+                    NextActiveInSecs: null, StaggerSecs: 0, CountdownSecs: config.SwitchCountdownSecs,
+                    SnoozeMinSecs: config.SnoozeMinSecs, SnoozeMaxSecs: config.SnoozeMaxSecs,
+                    PollAgainInSecs: config.PollIdleSecs, MaxSessionSecs: config.MaxSessionSecs, Config: config);
+            }
 
             // Limited-beta gate: no network membership → stop + join_a_network.
             if (_memberships.Count == 0)
@@ -220,7 +247,7 @@ public sealed class MockState
                     PollAgainInSecs: config.PollIdleSecs, MaxSessionSecs: config.MaxSessionSecs, Config: config);
             }
 
-            var tgt = new DirectiveTarget(target.Info.Game, target.Index, target.Info, target.Info.BmId);
+            var tgt = new DirectiveTarget(target.Info.Game, target.Index, target.Info, target.Info.BmId, NetworkId);
 
             // Already on the target → keep seeding it.
             var action = currentIndex is { } ci && ci == target.Index ? "stay" : "switch";
@@ -248,6 +275,19 @@ public sealed class MockState
     }
 
     // ── Mutators (each broadcasts) ────────────────────────────────────────────────
+
+    /// <summary>Set (or clear, with all nulls) the mock network's per-tenant schedule fields and
+    /// push the fresh status to SSE subscribers so the client's reconciler reacts.</summary>
+    public void SetSchedule(List<TimeWindow>? windows, int? dailyResetHourUtc, int? missedWindowHours)
+    {
+        lock (_gate)
+        {
+            NetworkActiveWindows = windows;
+            NetworkDailyResetHourUtc = dailyResetHourUtc;
+            NetworkMissedAutoseedWindowHours = missedWindowHours;
+        }
+        BroadcastState();
+    }
 
     public bool SetPlayers(int index, int? players, int? max)
     {
