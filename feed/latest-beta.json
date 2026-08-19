@@ -1,7 +1,7 @@
 {
-  "version": "0.2.0",
-  "download_url": "https://github.com/Cat-Tree-Gaming-L-L-C/fullobby-windows/releases/download/v0.2.0/Fullobby-Setup-0.2.0.exe",
-  "notes": "Fullobby 0.2.0\n\nAutoseed now confirms before it starts. When a scheduled seed comes up you\nget a \"Seed now?\" prompt showing the game and target server, with Seed Now,\nSeed with Power Savings (on games that support it), and Cancel. If you are\naway, the countdown proceeds using your remembered choice for that game.\n\nThe Seed button is now a split button on capable games: the main button uses\nyour remembered choice and the flyout always offers both options explicitly.\nThe old idle-panel power savings checkbox has been removed.\n\nAlso includes groundwork for multi-game support.",
-  "sha256": "efb847269409a0f058088f980f49d7f1e4ff7a339cb17a485b6ce3e156cd28fb",
-  "signature": "MEUCIQDX6q7tV6BvhG8LjYEvC32fk8lXUnU795XiB1gPL81aUAIgafBiqbY41yQukyNER7Uwy5DLKVqvRYv0pWcf2NEBkG8="
+  "version": "0.3.0",
+  "download_url": "https://github.com/Cat-Tree-Gaming-L-L-C/fullobby-windows/releases/download/v0.3.0/Fullobby-Setup-0.3.0.exe",
+  "notes": "Fullobby 0.3.0\n\nSign-in is steadier: no more surprise re-logins, and the join-a-network\nprompt no longer appears when you are already in a network. The offline\nbanner now only shows when you are actually offline.\n\nLinking a Discord or Steam account now completes only after the account\nconfirms it, closing a window where a link could be started by someone else.\n\nAdmins get an Admin tab with the web panel built into the app.\n\nWindows 11 is now required.\n\nAlso includes idle power and layout fixes, plus groundwork for per-network\nseeding schedules.",
+  "sha256": "60962cb8c0c3a573a767b10e07faff08376488edcde9c9f447678e74edefa83a",
+  "signature": "MEUCIDBEMDaslBrOdz0Bi28YfcEqZxPHqX5clo/8o47Tjo7uAiEAkaAX0yNuPuE8HKu12aNt7VVtt7tBx8werLGy2m46GEg="
 }
