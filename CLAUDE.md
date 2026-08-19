@@ -20,7 +20,7 @@ WinUI 3 gotchas, and the open cross-repo coordination items.
 
 ## Key facts
 
-- Target: .NET 9, Windows App SDK 1.8.x, min Windows 10.0.19041
+- Target: .NET 9, Windows App SDK 1.8.x, min Windows 10.0.22000 (Windows 11)
 - Deep-link protocol: `fullobby://` (OAuth callbacks)
 - API base: `https://api.fullobby.com` (hardbaked in Release; `FULLOBBY_API_URL` overrides in Debug only)
 - No legacy config migration — app identifiers are fresh throughout

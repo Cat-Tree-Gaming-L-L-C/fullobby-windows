@@ -3,7 +3,7 @@
     <!-- Full SemVer including any pre-release suffix. AssemblyVersion/FileVersion drop it, so the
          updater compares InformationalVersion (see AppVersion.ForUpdateCheck) — otherwise the next
          beta would look like a downgrade from the numeric version alone. -->
-    <Version>0.3.0-beta.1</Version>
+    <Version>0.3.0</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
