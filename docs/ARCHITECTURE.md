@@ -120,7 +120,9 @@ These depend on the `seeding-api` backend / release infra and can't be verified 
   `version`, **and a populated `signature`**. The client refuses any manifest whose signature is
   missing/invalid. CI emits the manifest with `signature: null`; the maintainer signs `(version,
   sha256)` offline and publishes the finalized manifest to the feed (signing runbook + tooling live in
-  the private `fullobby-api` repo).
+  the private `fullobby-api` repo). The offline signing rig itself — air-gapped Pi, barcode-scanner
+  transfer of `(version, sha256)` across the gap, rack build, and the per-release operator steps — is
+  designed in `docs/RELEASE-SIGNING-RIG.md`.
 - **Seeding score** (planned): server-authoritative reward score — design in `docs/SCORING.md`;
   the scoring engine, CRCON score-delta polling, and streak tracking are backend work.
 - **Per-tenant scheduling** (client shipped 0.3.0, dormant; backend pending): networks are
