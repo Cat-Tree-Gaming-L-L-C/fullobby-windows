@@ -286,9 +286,19 @@ public sealed partial class SeedingViewModel : ObservableObject
     /// flash during the first connect, where failures is still 0).</summary>
     public bool ShowReconnect => !SseConnected && ConnectionFailures > 0;
 
-    /// <summary>Live-feed indicator label.</summary>
+    /// <summary>Local time of the newest applied stats batch, or null before the first one.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ConnectionStatusText))]
+    private DateTime? lastStatsAt;
+
+    /// <summary>Live-feed indicator label. "Live" alone reads as "these numbers are current", but
+    /// the counts are a snapshot the API refreshes on its own ~30s cadence — during a seeding surge
+    /// a healthy stream is still tens of players behind by the time it lands. Stamping the batch
+    /// time says how old the numbers actually are, and does it without a ticking clock: a wall time
+    /// only changes when a batch arrives, whereas "updated Ns ago" would need a 1Hz timer in an app
+    /// that mostly sits minimized in the tray.</summary>
     public string ConnectionStatusText => SseConnected
-        ? "Live"
+        ? (LastStatsAt is { } at ? $"Live · counts as of {at:HH:mm:ss}" : "Live")
         : (ConnectionFailures > 0 ? "Reconnecting…" : "Connecting…");
 
     // Seed All cooldown (reactive remaining seconds, ticked by the 1s timer). Drives the
@@ -1193,6 +1203,8 @@ public sealed partial class SeedingViewModel : ObservableObject
 
     private void ApplyStats(IReadOnlyList<BatchStatsResult> stats)
     {
+        LastStatsAt = _live.LastUpdateUtc?.ToLocalTime();
+
         var game = _engine.CurrentGame.Id;
         foreach (var row in Servers)
         {

@@ -15,19 +15,91 @@ public sealed class ServerStore
     private readonly HashSet<string> _offline = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (int Players, int MaxPlayers)> _playerCounts = new(StringComparer.Ordinal);
 
-    /// <summary>Replace the per-game server rotations from a /api/servers response.</summary>
-    public void Load(ServersResponse response)
+    /// <summary>Replace the per-game server rotations from a /api/servers response. Returns true
+    /// when the rotation actually moved (a server added, removed, reordered, or re-thresholded),
+    /// so callers can rebuild the UI rows only when it matters — the periodic refresh re-fetches
+    /// an identical list most of the time, and rebuilding on every fetch flickers the launch
+    /// buttons the rows exist to keep stable.</summary>
+    public bool Load(ServersResponse response)
     {
         lock (_gate)
         {
-            _gameServers.Clear();
-            _gameServers["hll"] = [.. response.Hll];
+            var next = new Dictionary<string, List<ServerInfo>>(StringComparer.Ordinal)
+            {
+                ["hll"] = [.. response.Hll],
+            };
             if (response.Hllv is { } hllv)
             {
-                _gameServers["hllv"] = [.. hllv];
+                next["hllv"] = [.. hllv];
             }
+
+            if (SameRotations(_gameServers, next))
+            {
+                return false;
+            }
+
+            _gameServers.Clear();
+            foreach (var (game, servers) in next)
+            {
+                _gameServers[game] = servers;
+            }
+
+            // Counts and offline flags are keyed by name, but a server that left the rotation can
+            // never be refreshed again — drop it rather than let a frozen count sit in the store
+            // answering for a name that may return at a different position.
+            var live = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var servers in next.Values)
+            {
+                foreach (var s in servers)
+                {
+                    live.Add(s.Name);
+                }
+            }
+            _offline.RemoveWhere(n => !live.Contains(n));
+            foreach (var name in _playerCounts.Keys.Where(n => !live.Contains(n)).ToList())
+            {
+                _playerCounts.Remove(name);
+            }
+
+            return true;
         }
     }
+
+    /// <summary>Sequence-compare two rotation sets. Position matters: the API keys every stats
+    /// batch and every seeding directive by index into the game's rotation, so a reorder is as
+    /// meaningful a change as an insertion.</summary>
+    private static bool SameRotations(
+        Dictionary<string, List<ServerInfo>> a,
+        Dictionary<string, List<ServerInfo>> b)
+    {
+        if (a.Count != b.Count)
+        {
+            return false;
+        }
+        foreach (var (game, left) in a)
+        {
+            if (!b.TryGetValue(game, out var right) || left.Count != right.Count)
+            {
+                return false;
+            }
+            for (var i = 0; i < left.Count; i++)
+            {
+                if (!SameServer(left[i], right[i]))
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private static bool SameServer(ServerInfo a, ServerInfo b) =>
+        a.Name == b.Name
+        && a.ShortName == b.ShortName
+        && a.Ip == b.Ip
+        && a.Game == b.Game
+        && a.BmId == b.BmId
+        && a.SeedingThreshold == b.SeedingThreshold;
 
     /// <summary>Get a server by game and index in its rotation, or null when out of range.</summary>
     public ServerInfo? GetServer(string game, int index)

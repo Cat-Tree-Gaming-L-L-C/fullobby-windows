@@ -110,7 +110,17 @@ public sealed class AppBootstrapper : IHostedService
     /// <summary>How often the server-decided config is re-fetched inside the poll loop.</summary>
     private const long ConfigRefreshIntervalMs = 15 * 60 * 1000;
 
+    /// <summary>How often the server rotation is re-fetched inside the poll loop. Every stats
+    /// batch and every seeding directive is keyed by <em>position</em> in that rotation, and the
+    /// API rebuilds its own list from the DB every 300s — so a client that loaded the list once at
+    /// startup silently attributes counts to the wrong server the moment an admin enables,
+    /// disables, reorders, or removes one, and keeps doing so until it's restarted. This app lives
+    /// in the tray for days, so that window is the whole uptime. Matched to the API's cadence.</summary>
+    private const long ServersRefreshIntervalMs = 5 * 60 * 1000;
+
     private long _lastConfigRefreshTicks;
+    private long _lastServersRefreshTicks;
+    private bool _lastLoadFailed;
 
     private async Task RunAsync(CancellationToken ct)
     {
@@ -146,14 +156,34 @@ public sealed class AppBootstrapper : IHostedService
                 await ReconcileWakesAsync(ct).ConfigureAwait(false);
             }
 
-            // Skip the redundant HTTP round-trip if SSE reconnected while we waited.
-            if (_sse.Connected)
+            // Re-fetch the rotation on its own slow cadence so index-keyed stats keep landing on
+            // the server they describe. LoadServersAsync only raises ServersLoaded when the
+            // rotation actually changed, so a no-op refresh costs one request and no UI churn.
+            // !HasServers keeps a failed startup load retrying at the loop's own cadence instead of
+            // waiting out a full refresh interval with an empty board.
+            if (!HasServers
+                || Environment.TickCount64 - _lastServersRefreshTicks >= ServersRefreshIntervalMs)
+            {
+                await LoadServersAsync(ct).ConfigureAwait(false);
+            }
+
+            // While SSE is connected the HTTP poll is a safety net, not a second feed: skip the
+            // round-trip unless the stream has actually gone quiet. A healthy stream pushes every
+            // ~30s, so in the steady state this costs nothing — but it stops a connected-yet-silent
+            // stream from leaving stale counts on screen with no way back.
+            if (_sse.Connected && !IsStatsStale(cfg.PollIdleSecs))
             {
                 continue;
             }
             await PollStatsAsync(ct).ConfigureAwait(false);
         }
     }
+
+    /// <summary>True when the newest applied stats batch is older than <paramref name="maxAgeSecs"/>,
+    /// or none has arrived at all.</summary>
+    private bool IsStatsStale(int maxAgeSecs) =>
+        _live.LastUpdateUtc is not { } last
+        || DateTime.UtcNow - last > TimeSpan.FromSeconds(Math.Max(1, maxAgeSecs));
 
     /// <summary>Fetch the seeding config and publish it. Non-fatal — keeps the previous (or baked-in)
     /// config on failure so the app still works when the endpoint is unreachable.</summary>
@@ -177,18 +207,41 @@ public sealed class AppBootstrapper : IHostedService
         try
         {
             var resp = await _api.GetServersAsync(ct).ConfigureAwait(false);
-            _servers.Load(resp);
+            var rotationChanged = _servers.Load(resp);
+            var firstLoad = !HasServers;
             HasServers = true;
-            _log.LogInformation("Loaded {Count} servers", resp.Hll.Count);
-            ServersLoaded?.Invoke();
+            _lastServersRefreshTicks = Environment.TickCount64;
 
-            // Seed the banner immediately rather than waiting a full poll interval.
-            await PollStatsAsync(ct).ConfigureAwait(false);
+            // Announce only a load that changes what the UI shows: the first one, one that moved
+            // the rotation, or one that recovers from a failure (the row rebuild is what clears
+            // the "couldn't load servers" state). A no-op periodic refresh stays silent so the
+            // launch buttons don't rebuild under the user every five minutes.
+            if (rotationChanged || firstLoad || _lastLoadFailed)
+            {
+                _lastLoadFailed = false;
+                _log.LogInformation("Loaded {Count} servers (rotation changed: {Changed})",
+                    resp.Hll.Count, rotationChanged);
+                ServersLoaded?.Invoke();
+
+                // Seed the banner immediately rather than waiting a full poll interval — and when
+                // the indices moved, re-key the counts against the new rotation right away instead
+                // of leaving misattributed ones on screen until the next push.
+                await PollStatsAsync(ct).ConfigureAwait(false);
+            }
         }
         catch (Exception e)
         {
             _log.LogWarning(e, "Failed to load server list");
-            ServersLoadFailed?.Invoke();
+            if (!HasServers)
+            {
+                // Nothing to show yet — surface the error and let the loop retry on its next pass.
+                _lastLoadFailed = true;
+                ServersLoadFailed?.Invoke();
+                return;
+            }
+            // A periodic refresh failed but the rotation we already have is still serviceable.
+            // Keep it (and the UI out of its load-error state) and try again next interval.
+            _lastServersRefreshTicks = Environment.TickCount64;
         }
     }
 
