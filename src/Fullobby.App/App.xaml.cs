@@ -26,6 +26,11 @@ public partial class App : Application
     /// outright — so the machine can go back to sleep. See <see cref="EndAutoseedLaunch"/>.</summary>
     private readonly bool _launchedForAutoseed = HasAutoseedArg(Environment.GetCommandLineArgs());
 
+    /// <summary>True when this process was launched by the "Start with Windows" entry, which passes
+    /// <see cref="Branding.MinimizedArg"/> — the app comes up in the tray and the window is left
+    /// unshown. Nothing else passes the flag: a launch the user asked for gets a window.</summary>
+    private readonly bool _startMinimized = HasMinimizedArg(Environment.GetCommandLineArgs());
+
     /// <summary>Guards against subscribing to the VM's auto-seed lifecycle events more than once.</summary>
     private bool _autoseedEventsWired;
 
@@ -164,7 +169,21 @@ public partial class App : Application
             // tear down the process once the last window and the tray icon are gone.
             Environment.Exit(0);
         };
-        _window.Activate();
+        // A "Start with Windows" launch stays in the tray — never activating the window is what
+        // keeps it off screen (a WinUI window is created hidden and Activate() is what shows it), so
+        // there's no show-then-hide flash at sign-in. The tray icon is live regardless: MainWindow's
+        // constructor ForceCreate()s it, and its left-click / "Show" command runs BringToFront,
+        // which is then the window's first Activate(). What that defers is RootGrid.Loaded — and
+        // with it the unprotected-secrets dialog, which already re-checks there because it can't
+        // show without a XamlRoot. An auto-seed launch shows the window through StartAutoseed.
+        if (_startMinimized)
+        {
+            Log.Information("Launched with {Arg} — starting in the tray", Branding.MinimizedArg);
+        }
+        else
+        {
+            _window.Activate();
+        }
 
         // Restore any persisted account session in the background (guest API key or JWT),
         // then refresh linked providers/Steam IDs. Non-fatal — failures just leave us signed out.
@@ -353,6 +372,19 @@ public partial class App : Application
             _window?.BringToFront();
             _ = vm.RunAutoseedAsync(wakeKey);
         });
+    }
+
+    /// <summary>Whether any token asks for a tray-only start (--minimized).</summary>
+    private static bool HasMinimizedArg(IReadOnlyList<string> args)
+    {
+        foreach (var arg in args)
+        {
+            if (string.Equals(arg, Branding.MinimizedArg, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>Whether any token requests an auto-seed launch (--autoseed-HHMM, --autoseed, plus

@@ -5,8 +5,12 @@ namespace Fullobby.Core.Platform;
 
 /// <summary>
 /// "Start with Windows" via the HKCU Run key, using <see cref="Microsoft.Win32.Registry"/>.
-/// The value name is <see cref="Branding.StartupRunValueName"/>;
-/// the data is the quoted current-exe path. Registered as a DI singleton.
+/// The value name is <see cref="Branding.StartupRunValueName"/>; the data is the quoted current-exe
+/// path followed by <see cref="Branding.MinimizedArg"/>, so a sign-in launch lands in the tray
+/// rather than opening the window. Registered as a DI singleton.
+/// <para>The installer's startup task writes the same value (<c>installer/Fullobby.iss</c>) — the
+/// two must produce a byte-identical string, or <see cref="UpdatePathIfNeeded"/> rewrites setup's
+/// entry on every launch.</para>
 /// </summary>
 public sealed class StartupRegistry
 {
@@ -34,7 +38,7 @@ public sealed class StartupRegistry
     /// <summary>Add (or refresh) the startup entry pointing at the current executable.</summary>
     public void Enable()
     {
-        var value = QuotedExePath();
+        var value = StartupCommand();
         using var key = Registry.CurrentUser.CreateSubKey(RunKey, writable: true)
             ?? throw new InvalidOperationException("Could not open HKCU Run key for writing");
         key.SetValue(Branding.StartupRunValueName, value, RegistryValueKind.String);
@@ -61,9 +65,10 @@ public sealed class StartupRegistry
     }
 
     /// <summary>
-    /// If startup is enabled but points at a stale path (e.g. after the installer moved the exe),
-    /// rewrite it to the current location. No-op when startup is disabled. Port of
-    /// <c>update_startup_path_if_needed</c>; called once at launch.
+    /// If startup is enabled but the command is stale — a path from before an update moved the exe,
+    /// or an entry written by a build that predates <see cref="Branding.MinimizedArg"/> — rewrite it.
+    /// No-op when startup is disabled. Port of <c>update_startup_path_if_needed</c>; called once at
+    /// launch.
     /// </summary>
     public void UpdatePathIfNeeded()
     {
@@ -75,10 +80,10 @@ public sealed class StartupRegistry
                 return; // not enabled — nothing to update
             }
 
-            var expected = QuotedExePath();
+            var expected = StartupCommand();
             if (!string.Equals(current, expected, StringComparison.OrdinalIgnoreCase))
             {
-                _log.LogInformation("Updating startup path: {Old} -> {New}", current, expected);
+                _log.LogInformation("Updating startup command: {Old} -> {New}", current, expected);
                 Enable();
             }
         }
@@ -88,10 +93,11 @@ public sealed class StartupRegistry
         }
     }
 
-    private static string QuotedExePath()
+    /// <summary>The Run value data: the quoted exe path plus the tray flag.</summary>
+    private static string StartupCommand()
     {
         var exe = Environment.ProcessPath
             ?? throw new InvalidOperationException("Could not determine current executable path");
-        return $"\"{exe}\"";
+        return $"\"{exe}\" {Branding.MinimizedArg}";
     }
 }

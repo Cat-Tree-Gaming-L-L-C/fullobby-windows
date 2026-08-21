@@ -21,6 +21,13 @@ public static class Branding
     /// <summary>HKCU Run value name for "Start with Windows".</summary>
     public const string StartupRunValueName = "Fullobby";
 
+    /// <summary>CLI flag that starts the app in the tray without showing the window. Only the
+    /// "Start with Windows" launch passes it (<see cref="Platform.StartupRegistry"/> and the
+    /// installer's startup task both append it to the Run value) — a sign-in shouldn't put a window
+    /// in front of someone who was opening something else. The installer writes this literal, so it
+    /// can't change here alone: <c>installer/Fullobby.iss</c> has the matching string.</summary>
+    public const string MinimizedArg = "--minimized";
+
     /// <summary>Config directory name under %APPDATA%.</summary>
     public const string ConfigDirName = "com.fullobby.app";
 

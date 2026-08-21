@@ -17,6 +17,8 @@
 #define AppPublisher "Cat Tree Gaming LLC"
 #define ExeName "Fullobby.exe"
 #define Scheme "fullobby"
+; Tray-only start, passed by the "Start with Windows" entry. Must match Branding.MinimizedArg.
+#define MinimizedArg "--minimized"
 #define RepoUrl "https://github.com/Cat-Tree-Gaming-L-L-C/fullobby-windows"
 
 [Setup]
@@ -56,6 +58,11 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+; Opt-out: no "unchecked" flag, so it is pre-ticked on a first install. On a reinstall or update
+; InitializeWizard re-seeds it from the HKCU Run value, so an update can never resurrect a
+; "Start with Windows" the user turned off in Settings — the self-updater launches setup.exe
+; interactively (UpdaterService.LaunchInstaller), so this page is shown on every update.
+Name: "startup"; Description: "Start {#AppName} in the tray when I sign in to Windows"; GroupDescription: "Additional options:"
 
 [Files]
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -71,6 +78,16 @@ Root: HKA; Subkey: "Software\Classes\{#Scheme}"; ValueType: string; ValueName: "
 Root: HKA; Subkey: "Software\Classes\{#Scheme}"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
 Root: HKA; Subkey: "Software\Classes\{#Scheme}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#ExeName},0"
 Root: HKA; Subkey: "Software\Classes\{#Scheme}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#ExeName}"" ""%1"""
+
+; "Start with Windows", when the opt-out task is left ticked. Shares one entry with the Settings
+; toggle, so the value name and the data must stay byte-identical to what
+; Core.Platform.StartupRegistry writes — including the {#MinimizedArg} flag, which starts the app
+; in the tray instead of opening a window at sign-in (Branding.MinimizedArg / App.OnLaunched).
+; UpdatePathIfNeeded compares the whole string and rewrites anything that differs, so a mismatch
+; here means the app quietly overwrites setup's entry on first launch. SettingsPage reads the value
+; back to position its toggle. HKCU (not HKA) because StartupRegistry always writes the per-user
+; key. Removal when the box is cleared is in [Code] — a [Registry] entry can only add.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#AppName}"; ValueData: """{app}\{#ExeName}"" {#MinimizedArg}"; Tasks: startup
 
 [Run]
 Filename: "{app}\{#ExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
@@ -164,16 +181,49 @@ begin
   DeleteScheduledTask('{#AppName}-EU');
 end;
 
-{ "Start with Windows" is written at runtime by Core.Platform.StartupRegistry, not by setup —
-  HKCU Run value "Fullobby" holding the quoted exe path. Left behind, every logon tries to launch
-  an exe that uninstall just deleted. Done here rather than as a [Registry] entry with
-  dontcreatekey/uninsdeletevalue so that an install can never touch a value it doesn't own: this
-  runs at uninstall only. }
+{ "Start with Windows" — HKCU Run value "Fullobby" holding the quoted exe path. Two writers share
+  it: the [Registry] entry above (when the setup task is ticked) and Core.Platform.StartupRegistry
+  at runtime (the Settings toggle). Deleted unconditionally rather than via uninsdeletevalue, which
+  would only reach a value setup itself created and would leave the app-written one behind — every
+  logon then tries to launch an exe uninstall just deleted. }
 procedure RemoveStartupEntry;
 begin
   if RegDeleteValue(HKEY_CURRENT_USER,
        'Software\Microsoft\Windows\CurrentVersion\Run', '{#AppName}') then
     Log('Removed the "Start with Windows" entry');
+end;
+
+function StartupEntryExists: Boolean;
+var
+  Existing: String;
+begin
+  Result := RegQueryStringValue(HKEY_CURRENT_USER,
+    'Software\Microsoft\Windows\CurrentVersion\Run', '{#AppName}', Existing);
+end;
+
+{ Whether Fullobby has been installed under this account before, keyed off setup's own
+  fullobby:// class key (uninsdeletekey, so a real uninstall clears it and a later reinstall
+  counts as fresh again). }
+function PreviousInstallExists: Boolean;
+begin
+  Result := RegKeyExists(HKEY_CURRENT_USER, 'Software\Classes\{#Scheme}');
+end;
+
+procedure InitializeWizard;
+begin
+  { Pre-ticked on a first install (the opt-out), but on a reinstall or update the user's existing
+    choice wins: if there is no Run value, they either never wanted startup or turned it off in
+    Settings, and re-offering it ticked would quietly switch it back on at the next update. }
+  if PreviousInstallExists and not StartupEntryExists then
+    WizardSelectTasks('!startup');
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  { The [Registry] entry adds the value when the task is ticked; nothing there can remove it when
+    it isn't. Without this, clearing the box on a reinstall would silently leave startup enabled. }
+  if (CurStep = ssPostInstall) and not WizardIsTaskSelected('startup') then
+    RemoveStartupEntry;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);

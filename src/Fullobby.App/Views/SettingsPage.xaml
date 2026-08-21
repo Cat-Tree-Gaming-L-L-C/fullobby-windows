@@ -352,7 +352,7 @@
                     Header="Start with Windows"
                     Toggled="StartupToggle_Toggled" />
                 <TextBlock
-                    Text="When on, Fullobby launches automatically at sign-in."
+                    Text="When on, Fullobby starts in the tray when you sign in to Windows."
                     FontSize="12"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     TextWrapping="Wrap" />
