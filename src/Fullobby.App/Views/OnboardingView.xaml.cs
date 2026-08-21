@@ -10,8 +10,12 @@ namespace Fullobby.App.Views;
 /// First-run onboarding wizard overlay (sign-in → join network → link → nickname → done),
 /// hosted in the shell and shown while <see cref="AccountViewModel.ShowOnboarding"/> is true. The
 /// step panels are toggled in code-behind from the VM's <c>OnboardingStep</c> so we don't need an
-/// int→visibility converter. The network step doubles as the limited-beta re-arm portal for
-/// already-onboarded users with zero memberships (<see cref="AccountViewModel.NetworkGateActive"/>).
+/// int→visibility converter.
+///
+/// First run only. The limited-beta network gate used to re-open this overlay for already-onboarded
+/// users holding no membership; it is now a banner in the shell
+/// (<see cref="AccountViewModel.NetworkGateActive"/>), so nothing re-enters the wizard except a
+/// user who has genuinely never finished it.
 /// </summary>
 public sealed partial class OnboardingView : UserControl
 {
@@ -37,7 +41,8 @@ public sealed partial class OnboardingView : UserControl
     private void OnAccountPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(AccountViewModel.OnboardingStep) or nameof(AccountViewModel.User)
-            or nameof(AccountViewModel.HasNetworkMembership) or nameof(AccountViewModel.NetworkGateActive))
+            or nameof(AccountViewModel.HasNetworkMembership)
+            or nameof(AccountViewModel.HasLinkConflict) or nameof(AccountViewModel.ShowReauthOnly))
         {
             UpdateStep();
         }
@@ -47,9 +52,10 @@ public sealed partial class OnboardingView : UserControl
     {
         var step = Account.OnboardingStep;
         StepLabel.Text = $"Step {step + 1} of 5";
-        // The re-armed network gate isn't a wizard walk-through — hide the step counter.
-        StepLabel.Visibility = Vis(!Account.NetworkGateActive);
+        // A plain re-authentication is not a wizard walk-through — hide the step counter.
+        StepLabel.Visibility = Vis(!Account.ShowReauthOnly);
         StepSignIn.Visibility = Vis(step == 0);
+        UpdateSignInCopy();
         StepNetwork.Visibility = Vis(step == 1);
         StepLink.Visibility = Vis(step == 2);
         StepNickname.Visibility = Vis(step == 3);
@@ -79,12 +85,23 @@ public sealed partial class OnboardingView : UserControl
         _lastStep = step;
     }
 
-    /// <summary>Reflect membership state into the network step: Continue unlocks at ≥1 membership;
-    /// a re-armed gate (already onboarded) labels the button Done since no wizard follows.</summary>
+    /// <summary>Word the sign-in step for why it is being shown. A configured install whose
+    /// credentials went missing is not being onboarded — it is being asked to sign in, and telling
+    /// that user "Welcome to Fullobby" is what made this read as starting over.</summary>
+    private void UpdateSignInCopy()
+    {
+        var reauth = Account.ShowReauthOnly;
+        SignInHeading.Text = reauth ? "Welcome back" : "Welcome to Fullobby";
+        SignInSubtext.Text = reauth
+            ? "Your session expired. Sign in again to pick up where you left off — your setup is still here."
+            : "Sign in to track your seeding contributions, or continue as a guest.";
+    }
+
+    /// <summary>Reflect membership state into the network step: Continue unlocks at ≥1 membership.
+    /// First-run only now — the post-onboarding gate is a shell banner, not a wizard step.</summary>
     private void UpdateNetworkStep()
     {
         NetworkContinueButton.IsEnabled = Account.HasNetworkMembership;
-        NetworkContinueButton.Content = Account.NetworkGateActive ? "Done" : "Continue";
         NetworkListHeader.Visibility = Vis(Account.Networks.Count > 0);
     }
 
@@ -110,6 +127,24 @@ public sealed partial class OnboardingView : UserControl
         var anyLinked = steam || discord;
         LinkContinueButton.Content = anyLinked ? "Continue" : "Skip for now";
         LinkLaterHint.Visibility = Vis(!anyLinked);
+
+        UpdateLinkConflictPanel();
+    }
+
+    /// <summary>Show the recovery panel for a refused link, labelled with the provider the user
+    /// has to sign in with instead.</summary>
+    private void UpdateLinkConflictPanel()
+    {
+        var conflict = Account.HasLinkConflict;
+        LinkConflictPanel.Visibility = Vis(conflict);
+        if (!conflict)
+        {
+            return;
+        }
+        LinkConflictText.Text = Account.LinkConflictMessage;
+        var provider = Account.LinkConflictProvider ?? "discord";
+        LinkConflictSignInButton.Content =
+            $"Sign in with {char.ToUpperInvariant(provider[0])}{provider[1..]} instead";
     }
 
     /// <summary>Apply guest/OAuth copy and seed the leaderboard opt-out toggle.</summary>
@@ -189,6 +224,20 @@ public sealed partial class OnboardingView : UserControl
     }
 
     private void NetworkContinue_Click(object sender, RoutedEventArgs e) => Account.ContinueFromNetworkStep();
+
+    // ── Escape hatches ──────────────────────────────────────────────────────
+
+    /// <summary>Discard the account this run created and return to step 0. The overlay covers the
+    /// whole shell (Settings and its Sign Out included), so without this the only way out of a
+    /// wrong identity choice was reinstalling.</summary>
+    private void StartOver_Click(object sender, RoutedEventArgs e) => Account.StartOverCommand.Execute(null);
+
+    /// <summary>Act on a refused link: leave this account and sign in as the one that owns the
+    /// identity.</summary>
+    private void LinkConflictSignIn_Click(object sender, RoutedEventArgs e) =>
+        Account.SwitchAccountCommand.Execute(Account.LinkConflictProvider ?? "discord");
+
+    private void DismissLinkConflict_Click(object sender, RoutedEventArgs e) => Account.ClearLinkConflict();
 
     // ── Navigation ──────────────────────────────────────────────────────────
 

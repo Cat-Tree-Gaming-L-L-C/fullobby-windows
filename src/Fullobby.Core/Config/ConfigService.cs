@@ -74,7 +74,9 @@ public sealed class ConfigService
     // ── Public API ────────────────────────────────────────────────────────
 
     /// <summary>Get a string value, transparently decrypting sensitive keys.
-    /// Returns <c>null</c> when absent or not a JSON string.</summary>
+    /// Returns <c>null</c> when absent, not a JSON string, or — for a sensitive key — when the
+    /// stored ciphertext cannot be decrypted on this machine/profile (see
+    /// <see cref="DpapiProtector.MaybeDecrypt"/>).</summary>
     public string? GetString(string key)
     {
         JsonElement el;
@@ -89,7 +91,17 @@ public sealed class ConfigService
         {
             return null;
         }
-        return DpapiProtector.MaybeDecrypt(key, el.GetString()!);
+        var decrypted = DpapiProtector.MaybeDecrypt(key, el.GetString()!);
+        if (decrypted is null)
+        {
+            // An undecryptable secret is reported the same way an unprotectable one is: the user
+            // is about to be asked to sign in again and would otherwise have no way to know why.
+            _log.LogError(
+                "Could not decrypt config value for key '{Key}' on this profile — treating it as "
+                + "absent. Sign-in will be required again.", key);
+            SecretProtectionUnavailable?.Invoke();
+        }
+        return decrypted;
     }
 
     /// <summary>Get a strongly-typed value, or <paramref name="fallback"/> when absent or undeserializable.</summary>

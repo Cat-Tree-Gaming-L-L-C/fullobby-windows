@@ -204,3 +204,69 @@ public class ConfigServiceRoundtripTests : IDisposable
         Assert.Equal("eu", reopened.GetString("region"));
     }
 }
+
+/// <summary>
+/// What a configured install does when its stored secrets cannot be decrypted on this profile.
+///
+/// The old behaviour handed the raw <c>dpapi:…</c> string back as if it were the token. It went
+/// out as a bearer credential, 401'd, took the refresh down with it, and the next launch — finding
+/// no credentials at all — re-armed the whole onboarding wizard. Absent is the honest answer, and
+/// the one the caller can recover from by asking for a sign-in.
+/// </summary>
+public class UndecryptableSecretTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(
+        Path.GetTempPath(), "fullobby-cfgtest-" + Guid.NewGuid().ToString("N"));
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_dir, recursive: true); } catch { /* best effort */ }
+        GC.SuppressFinalize(this);
+    }
+
+    private ConfigService LoadWithStoredToken(string stored)
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(
+            Path.Combine(_dir, "config.json"),
+            $$"""{"auth_token":{{System.Text.Json.JsonSerializer.Serialize(stored)}},"onboarding_complete":"true"}""");
+        return new ConfigService(NullLogger<ConfigService>.Instance, _dir);
+    }
+
+    [Fact]
+    public void UndecryptableSecret_ReadsAsAbsent()
+    {
+        var config = LoadWithStoredToken(
+            "dpapi:" + Convert.ToBase64String(new byte[] { 9, 9, 9, 9, 9, 9, 9, 9 }));
+        Assert.Null(config.GetString("auth_token"));
+    }
+
+    [Fact]
+    public void UndecryptableSecret_ReportsProtectionUnavailable()
+    {
+        // The user is about to be asked to sign in again; the shell needs to be able to say why.
+        var config = LoadWithStoredToken(
+            "dpapi:" + Convert.ToBase64String(new byte[] { 9, 9, 9, 9, 9, 9, 9, 9 }));
+        var raised = false;
+        config.SecretProtectionUnavailable += () => raised = true;
+        _ = config.GetString("auth_token");
+        Assert.True(raised);
+    }
+
+    [Fact]
+    public void UndecryptableSecret_LeavesUnrelatedKeysAlone()
+    {
+        // Critically, onboarding state is NOT a secret and must survive a decrypt failure — losing
+        // it is what turned "sign in again" into "set the app up again".
+        var config = LoadWithStoredToken(
+            "dpapi:" + Convert.ToBase64String(new byte[] { 9, 9, 9, 9, 9, 9, 9, 9 }));
+        Assert.True(config.GetBool(ConfigKeys.OnboardingComplete));
+    }
+
+    [Fact]
+    public void DecryptableSecret_StillRoundTrips()
+    {
+        var config = LoadWithStoredToken(DpapiProtector.Encrypt("jwt.token.value"));
+        Assert.Equal("jwt.token.value", config.GetString("auth_token"));
+    }
+}

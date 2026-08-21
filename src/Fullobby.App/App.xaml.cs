@@ -343,13 +343,14 @@ public partial class App : Application
 
         // Refuse before touching the window. The scheduled task is registered with Windows and
         // survives an uninstall or a wiped config, so it can fire at a machine that is sitting at
-        // first-run onboarding; the same is true after any auth reset that re-arms the wizard. The
-        // view model refuses too — this copy exists so a blocked request doesn't first drag the
-        // window in front of the user (potentially waking the machine at the seed hour to do it).
+        // first-run onboarding; the same is true after a session is lost or a network membership
+        // goes away. The view model refuses too — this copy exists so a blocked request doesn't
+        // first drag the window in front of the user (potentially waking the machine at the seed
+        // hour to do it).
         var account = AppHost.Services.GetRequiredService<ViewModels.AccountViewModel>();
-        if (account.ShowOnboarding)
+        if (account.SeedingBlocked)
         {
-            Log.Information("Auto-seed request ignored — onboarding hasn't been completed");
+            Log.Information("Auto-seed request ignored — the account isn't ready to seed");
             _ = HandleBlockedAutoseedAsync();
             return;
         }

@@ -158,21 +158,39 @@ public sealed partial class MainWindow : Window
         // on a Window root, so drive visibility from the VM here).
         UpdateOnboardingVisibility();
         UpdateAdminVisibility();
+        UpdateNetworkGateBar();
         Account.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(AccountViewModel.ShowOnboarding))
             {
                 UpdateOnboardingVisibility();
+                // The banner is suppressed behind the overlay, so it has to be re-evaluated
+                // when the overlay closes — otherwise a gate armed during onboarding stays down.
+                UpdateNetworkGateBar();
             }
             else if (e.PropertyName == nameof(AccountViewModel.IsAdminUser))
             {
                 UpdateAdminVisibility();
+            }
+            else if (e.PropertyName == nameof(AccountViewModel.NetworkGateActive))
+            {
+                UpdateNetworkGateBar();
             }
         };
     }
 
     private void UpdateOnboardingVisibility() =>
         Onboarding.Visibility = Account.ShowOnboarding ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Raise or lower the join-a-network banner. Held down while the onboarding overlay is
+    /// up: first run has its own network step, and a banner stacked behind an opaque overlay would
+    /// only appear from nowhere the moment that overlay closed.</summary>
+    private void UpdateNetworkGateBar() =>
+        NetworkGateBar.IsOpen = Account.NetworkGateActive && !Account.ShowOnboarding;
+
+    /// <summary>Open the shared join dialog from the banner — the same one Settings uses.</summary>
+    private async void NetworkGateJoin_Click(object sender, RoutedEventArgs e) =>
+        await Views.NetworkJoinDialog.ShowAsync(Account, RootGrid.XamlRoot);
 
     /// <summary>Raised by ConfigService, possibly off the UI thread.</summary>
     private void OnSecretProtectionUnavailable() =>

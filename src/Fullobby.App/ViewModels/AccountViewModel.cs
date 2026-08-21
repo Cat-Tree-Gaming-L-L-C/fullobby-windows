@@ -82,18 +82,47 @@ public sealed partial class AccountViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowOnboarding))]
+    [NotifyPropertyChangedFor(nameof(ShowReauthOnly))]
+    [NotifyPropertyChangedFor(nameof(SeedingBlocked))]
     private bool onboardingComplete;
 
     /// <summary>Current onboarding step (0 sign-in, 1 network, 2 link, 3 nickname, 4 done).</summary>
     [ObservableProperty]
     private int onboardingStep;
 
-    /// <summary>Re-opens the onboarding overlay at the network step for an already-onboarded user
-    /// with zero network memberships (the limited-beta hard gate) — set on session restore and when
-    /// a directive arrives with <c>join_a_network</c>. Cleared once the user holds a membership.</summary>
+    /// <summary>
+    /// The limited-beta hard gate: an already-onboarded user is holding zero network memberships,
+    /// so nothing can be seeded until they join one. Set on session restore and when a directive
+    /// arrives with <c>join_a_network</c>; cleared the moment a membership is confirmed.
+    ///
+    /// Surfaced as a banner over the running app, NOT as the onboarding overlay. It used to re-open
+    /// that full-bleed overlay, which replaced the entire shell — Settings, the leaderboard and the
+    /// sign-out button included — for a configured user whose only problem was a missing
+    /// membership. Since the gate arms on any transient membership loss (a network rebuilt or
+    /// renamed server-side, a blipped fetch), that read as being thrown back into onboarding.
+    /// Seeding is what the gate exists to stop, and the server stops it regardless — the client's
+    /// job is to say so and offer the fix, not to take the app away.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SeedingBlocked))]
+    private bool networkGateActive;
+
+    /// <summary>
+    /// The user has completed onboarding but their stored credentials are gone or were rejected,
+    /// so they need to sign in again — and nothing more.
+    ///
+    /// This used to be expressed by clearing <c>onboarding_complete</c>, which conflated "we do not
+    /// know who you are" with "you have never set this app up" and walked a configured user back
+    /// through the entire five-step wizard. Credentials are lost for ordinary reasons — the API
+    /// rejecting a session after a backend reset, the 14-day stale-guest sweep, a DPAPI blob that
+    /// will not decrypt on this profile — and none of them mean the setup is gone. Onboarding state
+    /// now survives; only the sign-in step comes back.
+    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowOnboarding))]
-    private bool networkGateActive;
+    [NotifyPropertyChangedFor(nameof(ShowReauthOnly))]
+    [NotifyPropertyChangedFor(nameof(SeedingBlocked))]
+    private bool reauthRequired;
 
     /// <summary>True when the user belongs to at least one seeding network (gates onboarding
     /// Continue and the seeding directive).</summary>
@@ -106,6 +135,24 @@ public sealed partial class AccountViewModel : ObservableObject
     /// <summary>The provider currently mid-flight in a login/link (disables buttons + spins).</summary>
     [ObservableProperty]
     private string? busyProvider;
+
+    /// <summary>Why a link was refused because the identity belongs to — or is owed to — another
+    /// account: the "already linked to a different user" conflict, and the staff-permissions guard
+    /// that stops an admin's Discord being grafted onto a fresh account. Null when there is none.
+    ///
+    /// Held as state rather than raised as a toast because the answer is an action, not an
+    /// acknowledgement: the user has to leave this account and sign in as the other one, and a
+    /// toast that vanishes in four seconds cannot offer that. This is the case that was stranding
+    /// admins — they were told "already linked to a different user" (or, before the API carried a
+    /// message on the permissions guard, the literal word "Forbidden") with no way to act on it.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasLinkConflict))]
+    private string? linkConflictMessage;
+
+    /// <summary>The provider the outstanding <see cref="LinkConflictMessage"/> is about, so the
+    /// recovery button knows which sign-in to start.</summary>
+    [ObservableProperty]
+    private string? linkConflictProvider;
 
     /// <summary>Linked auth providers (Steam / Discord / Guest) for the signed-in user,
     /// pre-formatted for display.</summary>
@@ -129,8 +176,29 @@ public sealed partial class AccountViewModel : ObservableObject
     // ── Derived UI state ────────────────────────────────────────────────────────
 
     /// <summary>The onboarding overlay shows until the user completes (or skips) first-run, and
-    /// re-opens (at the network step) while the limited-beta network gate is armed.</summary>
-    public bool ShowOnboarding => !OnboardingComplete || NetworkGateActive;
+    /// comes back as a bare sign-in prompt when a configured user's credentials are gone. The
+    /// network gate is deliberately NOT here — see <see cref="NetworkGateActive"/>.</summary>
+    public bool ShowOnboarding => !OnboardingComplete || ReauthRequired;
+
+    /// <summary>
+    /// Nothing may be seeded right now: the user is mid-onboarding, needs to sign in again, or
+    /// holds no network membership.
+    ///
+    /// The unattended paths need this as one question. They used to ask <c>ShowOnboarding</c>,
+    /// which happened to cover the network gate only because the gate re-opened the overlay —
+    /// so decoupling the two would have quietly let an auto-seed fire for a user with no network
+    /// had this not been made explicit.
+    /// </summary>
+    public bool SeedingBlocked => ShowOnboarding || NetworkGateActive;
+
+    /// <summary>The overlay is up only to ask a configured user to sign in again — so it shows the
+    /// sign-in step and nothing else: no step counter, no wizard to walk, and "welcome back"
+    /// rather than "welcome".</summary>
+    public bool ShowReauthOnly => ReauthRequired && OnboardingComplete;
+
+    /// <summary>True while a link conflict is waiting to be resolved (drives the recovery panel in
+    /// the onboarding wizard and in Settings).</summary>
+    public bool HasLinkConflict => LinkConflictMessage is { Length: > 0 };
 
     public bool HasAccountName => User is not null;
 
@@ -216,10 +284,12 @@ public sealed partial class AccountViewModel : ObservableObject
                 }
                 if (meResult == MeLoadResult.Rejected)
                 {
-                    // Server actively rejected the key (guest deleted / DB reset) — clear stale creds
-                    // so guest-OK endpoints aren't poisoned, and re-arm onboarding.
-                    _log.LogWarning("Stored credentials rejected; resetting auth state");
-                    ResetAllAuth(rearmOnboarding: true);
+                    // Server actively rejected the key (guest swept after 14 idle days, account
+                    // deleted, backend reset) — clear stale creds so guest-OK endpoints aren't
+                    // poisoned, then ask for a sign-in. Not a re-onboard: the rejection says
+                    // nothing about whether this install was configured.
+                    _log.LogWarning("Stored credentials rejected; sign-in required");
+                    RequireReauth();
                     return;
                 }
 
@@ -230,23 +300,43 @@ public sealed partial class AccountViewModel : ObservableObject
                 return;
             }
 
-            // No stored credentials at all. A completed-onboarding flag with no backing
-            // identity isn't real (e.g. left over from an older build's skip button, or the
-            // server was wiped while the client kept its config) — re-arm onboarding so an
-            // unverified user can't land on the main screen. Gated on hadStoredCreds so a
-            // transient failure to load a genuine session doesn't bounce the user to onboarding:
-            // a real guest keeps an api_key and a real OAuth user keeps a JWT, so this only
-            // fires when the config truly holds neither.
+            // No stored credentials at all. A completed-onboarding flag with no backing identity
+            // isn't real (an older build's skip button, a wiped server, or — the common one — a
+            // DPAPI blob that won't decrypt on this profile), so an unverified user must not land
+            // on the main screen. Ask for a sign-in, but keep the onboarding state: this install
+            // WAS configured, and re-running the wizard over it is the "had to onboard again after
+            // updating" complaint. Gated on hadStoredCreds so a transient failure to load a genuine
+            // session doesn't bounce the user here — a real guest keeps an api_key and a real OAuth
+            // user keeps a JWT, so this only fires when the config truly holds neither.
             if (!hadStoredCreds && OnboardingComplete)
             {
-                _log.LogInformation("No stored credentials; re-arming onboarding");
-                ResetAllAuth(rearmOnboarding: true);
+                _log.LogInformation("No stored credentials; sign-in required");
+                RequireReauth();
             }
         }
         finally
         {
             RunOnUi(() => AuthLoading = false);
         }
+    }
+
+    /// <summary>
+    /// Drop the unusable credentials and ask the user to sign in, preserving everything else about
+    /// their setup.
+    ///
+    /// The counterpart to <see cref="ResetAllAuth"/> with <c>rearmOnboarding: true</c>, which is now
+    /// reserved for the cases where starting over is genuinely what the user asked for (account
+    /// deletion, "use a different account"). Losing a session is not one of them.
+    /// </summary>
+    private void RequireReauth()
+    {
+        ResetAllAuth(rearmOnboarding: false);
+        RunOnUi(() =>
+        {
+            ReauthRequired = true;
+            // The overlay opens on the sign-in step; with ShowReauthOnly set, that is all it shows.
+            OnboardingStep = 0;
+        });
     }
 
     /// <summary>Outcome of a <c>/me</c> load. Lets callers treat a genuine credential rejection
@@ -357,8 +447,7 @@ public sealed partial class AccountViewModel : ObservableObject
                 return;
             }
             ApplyGuestRegistration(resp);
-            // A brand-new account has no memberships — the network step is the beta hard gate.
-            SetOnboardingStep(1);
+            EnterNetworkStepForNewAccount();
         }
         catch (Exception e)
         {
@@ -371,6 +460,27 @@ public sealed partial class AccountViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Route a just-created account to the network step, which is the limited-beta hard gate — it
+    /// has no memberships yet by definition.
+    ///
+    /// Which mechanism holds the overlay open depends on how we got here. Mid-wizard, the step
+    /// alone does it. For a user who had already onboarded and was only asked to sign in again,
+    /// <c>onboarding_complete</c> is still set, so the step would leave the overlay closed and let
+    /// a membership-less account straight through — the gate has to be armed explicitly.
+    /// </summary>
+    private void EnterNetworkStepForNewAccount()
+    {
+        if (OnboardingComplete)
+        {
+            OpenNetworkGate();
+        }
+        else
+        {
+            SetOnboardingStep(1);
+        }
+    }
+
     /// <summary>Apply a successful <c>RegisterResponse</c> to auth/UI state (shared by the direct
     /// path and the post-challenge retry in <see cref="HandleRegisterCallbackAsync"/>).</summary>
     private void ApplyGuestRegistration(RegisterResponse resp)
@@ -380,6 +490,7 @@ public sealed partial class AccountViewModel : ObservableObject
         _config.SetString("auth_provider", "guest");
         RunOnUi(() =>
         {
+            ReauthRequired = false; // they are signed in again, whatever brought them here
             IsGuest = true;
             IsLoggedIn = true;
             User = new UserInfo
@@ -432,6 +543,8 @@ public sealed partial class AccountViewModel : ObservableObject
             {
                 _log.LogInformation("Signed in via OAuth callback");
                 _toast.Success("Signed in");
+                // Whatever sent the user to the sign-in step, they are past it.
+                RunOnUi(() => ReauthRequired = false);
                 // Mid first-run: continue the wizard (network → link → nickname → done). A re-login
                 // from Settings (already onboarded) just signs in — unless the account holds no
                 // network membership, in which case the beta gate re-opens the portal.
@@ -479,8 +592,7 @@ public sealed partial class AccountViewModel : ObservableObject
         {
             var resp = await _api.RegisterGuestAsync(turnstileToken: token).ConfigureAwait(false);
             ApplyGuestRegistration(resp);
-            // A brand-new account has no memberships — the network step is the beta hard gate.
-            SetOnboardingStep(1);
+            EnterNetworkStepForNewAccount();
         }
         catch (Exception e)
         {
@@ -518,7 +630,10 @@ public sealed partial class AccountViewModel : ObservableObject
             catch (Exception e)
             {
                 _log.LogError(e, "Failed to confirm staged {Provider} link", provider);
-                _toast.Error(ApiValidation.FriendlyError(e.Message));
+                if (!TryRaiseLinkConflict(provider, e))
+                {
+                    _toast.Error(ApiValidation.FriendlyError(e.Message));
+                }
                 return;
             }
         }
@@ -682,6 +797,7 @@ public sealed partial class AccountViewModel : ObservableObject
         RunOnUi(() => BusyProvider = provider);
         try
         {
+            ClearLinkConflict();
             var resp = await _api.GetLinkRedirectUrlAsync(provider).ConfigureAwait(false);
             // Mark the link as pending only once we're about to hand off to the browser, so a forged
             // link-callback the user never initiated is rejected (see HandleLinkCallbackAsync).
@@ -691,12 +807,93 @@ public sealed partial class AccountViewModel : ObservableObject
         catch (Exception e)
         {
             _log.LogError(e, "Failed to start {Provider} linking", provider);
-            _toast.Error($"Failed to start {Capitalize(provider)} linking");
+            if (!TryRaiseLinkConflict(provider, e))
+            {
+                _toast.Error($"Failed to start {Capitalize(provider)} linking");
+            }
         }
         finally
         {
             RunOnUi(() => BusyProvider = null);
         }
+    }
+
+    /// <summary>
+    /// Turn a link failure that means "this identity belongs to another account" into the
+    /// recovery panel, and report whether it did.
+    ///
+    /// Both refusals arrive as 409 Conflict: the identity is already in <c>user_providers</c> under
+    /// a different user, or it holds staff permission grants and this account is not a global admin.
+    /// Either way the fix is the same and the message already says so — the user has to sign in
+    /// with that provider instead of linking it, which is precisely what
+    /// <see cref="SwitchAccountAsync"/> does. 403 is accepted too so an older API build (which
+    /// returned a bare Forbidden for the permissions guard) still lands here rather than toasting
+    /// the word "Forbidden".
+    /// </summary>
+    private bool TryRaiseLinkConflict(string provider, Exception e)
+    {
+        if (e is not ApiException { StatusCode: HttpStatusCode.Conflict or HttpStatusCode.Forbidden })
+        {
+            return false;
+        }
+        var message = ApiValidation.FriendlyError(e.Message);
+        // A bare "Forbidden" body (pre-guard-message API) carries no explanation of its own.
+        if (message.Equals("Forbidden", StringComparison.OrdinalIgnoreCase))
+        {
+            message = $"That {Capitalize(provider)} account belongs to another Fullobby account.";
+        }
+        RunOnUi(() =>
+        {
+            LinkConflictProvider = provider;
+            LinkConflictMessage = message;
+        });
+        return true;
+    }
+
+    /// <summary>Dismiss the link-conflict panel. Called when the user acts on it, and whenever the
+    /// wizard moves, so a stale conflict can't follow them to another step.</summary>
+    public void ClearLinkConflict() => RunOnUi(() =>
+    {
+        LinkConflictMessage = null;
+        LinkConflictProvider = null;
+    });
+
+    /// <summary>
+    /// Abandon the current account and sign in with <paramref name="provider"/> instead — the
+    /// resolution to a link conflict.
+    ///
+    /// Clears local auth before opening the browser, so the callback lands on a clean slate and
+    /// takes the login path (which resolves the existing account) rather than the link path that
+    /// just refused. Nothing of value is discarded: the account being left is a guest or a
+    /// sign-in from moments ago, and the server sweeps abandoned guests on its own.
+    ///
+    /// Onboarding is re-armed only when it had not finished — i.e. this came from the wizard,
+    /// where step 0 is where the user needs to land. Invoked from Settings by an established user
+    /// it must not re-arm, or switching accounts would walk them through all five steps again.
+    /// </summary>
+    [RelayCommand]
+    public void SwitchAccount(string provider)
+    {
+        _log.LogInformation("Leaving the current account to sign in with {Provider}", provider);
+        ClearLinkConflict();
+        ResetAllAuth(rearmOnboarding: !OnboardingComplete);
+        Login(provider);
+    }
+
+    /// <summary>
+    /// Return the wizard to the sign-in step, discarding whatever account the current run created.
+    ///
+    /// The wizard is otherwise one-way (0 → 1 → 2 → 3 → 4) and its overlay covers the whole shell,
+    /// including Settings and its Sign Out button — so someone who picked the wrong identity at
+    /// step 0 had no route back to it at all. That is what left admins stranded on a fresh account
+    /// after the client lost its session.
+    /// </summary>
+    [RelayCommand]
+    public void StartOver()
+    {
+        _log.LogInformation("Restarting onboarding at the sign-in step");
+        ClearLinkConflict();
+        ResetAllAuth(rearmOnboarding: true);
     }
 
     [RelayCommand]
@@ -821,24 +1018,16 @@ public sealed partial class AccountViewModel : ObservableObject
         }
     }
 
-    /// <summary>Re-open the onboarding overlay at the network step (the limited-beta portal) for a
-    /// user who has already completed onboarding. Used on session restore with zero memberships and
-    /// when a directive arrives flagged <c>join_a_network</c>.</summary>
-    public void OpenNetworkGate() => RunOnUi(() =>
-    {
-        OnboardingStep = 1;
-        NetworkGateActive = true;
-    });
+    /// <summary>Raise the join-a-network banner for a user who has already completed onboarding.
+    /// Used on session restore with zero memberships and when a directive arrives flagged
+    /// <c>join_a_network</c>. Cleared by <see cref="ApplyMemberships"/> once one is confirmed.</summary>
+    public void OpenNetworkGate() => RunOnUi(() => NetworkGateActive = true);
 
-    /// <summary>Advance past the network step: a re-armed gate just dismisses the overlay; during
-    /// first-run, guests finish here (they skip link/nickname) and OAuth users continue to linking.</summary>
+    /// <summary>Advance past the wizard's network step: guests finish here (they skip link and
+    /// nickname), OAuth users continue to linking. The post-onboarding gate no longer routes
+    /// through the wizard at all — it is a banner, so there is no step to advance from.</summary>
     public void ContinueFromNetworkStep()
     {
-        if (OnboardingComplete)
-        {
-            RunOnUi(() => NetworkGateActive = false);
-            return;
-        }
         if (IsGuest)
         {
             CompleteOnboarding();
@@ -861,7 +1050,7 @@ public sealed partial class AccountViewModel : ObservableObject
         }
         if (!HasNetworkMembership)
         {
-            _log.LogInformation("No network memberships; opening the join-a-network portal");
+            _log.LogInformation("No network memberships; raising the join-a-network banner");
             OpenNetworkGate();
         }
     }
@@ -887,30 +1076,38 @@ public sealed partial class AccountViewModel : ObservableObject
             Networks.Add(new NetworkMembershipRow(m));
         }
         HasNetworkMembership = Networks.Count > 0;
-        // A confirmed membership releases a re-armed gate on its own: the portal
-        // exists to make the user join, and they are joined — without this, a gate
-        // armed by a stale or blipped check sat over the app until the user found
-        // the Done button. Mid-wizard (!OnboardingComplete) the wizard still owns
-        // the overlay; only the post-onboarding portal is released here.
-        if (HasNetworkMembership && NetworkGateActive && OnboardingComplete)
+        // A confirmed membership lowers the banner on its own: it exists to make the user join,
+        // and they are joined. Without this, a gate armed by a stale or blipped check stayed up
+        // until the user went looking for a way to dismiss it.
+        if (HasNetworkMembership && NetworkGateActive)
         {
-            _log.LogInformation("Membership confirmed; releasing the join-a-network portal");
+            _log.LogInformation("Membership confirmed; lowering the join-a-network banner");
             NetworkGateActive = false;
         }
     });
 
     // ── Onboarding helpers ──────────────────────────────────────────────────────
 
-    public void SetOnboardingStep(int step) => RunOnUi(() => OnboardingStep = step);
+    /// <summary>Move the wizard to <paramref name="step"/>. Drops any outstanding link conflict —
+    /// it is about the step being left, and a panel that followed the user forward would offer to
+    /// abandon an account they have since resolved.</summary>
+    public void SetOnboardingStep(int step) => RunOnUi(() =>
+    {
+        LinkConflictMessage = null;
+        LinkConflictProvider = null;
+        OnboardingStep = step;
+    });
 
-    /// <summary>Mark first-run complete (dismisses the overlay) and persist it.</summary>
+    /// <summary>Mark first-run complete (dismisses the overlay) and persist it.
+    ///
+    /// Deliberately does NOT lower the network gate. That used to be necessary because the gate and
+    /// the wizard shared one overlay, but the gate tracks whether the account holds a membership —
+    /// a fact finishing the wizard doesn't change. It clears itself in <see cref="ApplyMemberships"/>
+    /// as soon as one is confirmed. (Completing normally implies a membership anyway: the wizard's
+    /// network step won't let anyone past without one.)</summary>
     public void CompleteOnboarding()
     {
-        RunOnUi(() =>
-        {
-            OnboardingComplete = true;
-            NetworkGateActive = false;
-        });
+        RunOnUi(() => OnboardingComplete = true);
         _config.SetString(ConfigKeys.OnboardingComplete, "true");
         // Durable now, not after the 500 ms debounce — losing this flag to a crash
         // re-runs the whole wizard for an onboarded user.
@@ -995,6 +1192,12 @@ public sealed partial class AccountViewModel : ObservableObject
             Networks.Clear();
             HasNetworkMembership = false;
             NetworkGateActive = false;
+            // The conflict was about the account being torn down here.
+            LinkConflictMessage = null;
+            LinkConflictProvider = null;
+            // Callers that want the sign-in prompt set this straight after (RequireReauth);
+            // clearing it here keeps a stale prompt off an explicit sign-out or start-over.
+            ReauthRequired = false;
             if (rearmOnboarding)
             {
                 OnboardingComplete = false;

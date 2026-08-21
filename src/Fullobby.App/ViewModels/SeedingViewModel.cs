@@ -673,17 +673,19 @@ public sealed partial class SeedingViewModel : ObservableObject
     /// </summary>
     public async Task RunAutoseedAsync(string? wakeKey = null)
     {
-        // Hard gate: nothing unattended runs while the onboarding overlay owns the window (first run,
-        // or the limited-beta network gate re-opening it). The overlay covers the whole shell, so the
-        // countdown prompt below would be invisible and the desktop notification would be the user's
-        // only warning before the game launched. Checked before the slot is claimed and before the
-        // notification fires, so a blocked auto-seed leaves no trace and disturbs no state. This is
-        // the shared backstop — every caller (scheduled-task launch and missed-seed watchdog alike)
-        // funnels through here.
-        if (_account.ShowOnboarding)
+        // Hard gate: nothing unattended runs while the account isn't ready to seed — mid first-run,
+        // needing to sign in again, or holding no network membership. The first two put the
+        // onboarding overlay over the whole shell, so the countdown prompt below would be invisible
+        // and the desktop notification would be the user's only warning before the game launched;
+        // the third has nothing to seed for. Asks SeedingBlocked rather than ShowOnboarding, which
+        // covered the network gate only while that gate still hijacked the overlay. Checked before
+        // the slot is claimed and before the notification fires, so a blocked auto-seed leaves no
+        // trace and disturbs no state. This is the shared backstop — every caller (scheduled-task
+        // launch and missed-seed watchdog alike) funnels through here.
+        if (_account.SeedingBlocked)
         {
-            _log.LogInformation("Auto-seed suppressed — onboarding hasn't been completed");
-            AutoseedAbandoned?.Invoke("onboarding hasn't been completed");
+            _log.LogInformation("Auto-seed suppressed — the account isn't ready to seed");
+            AutoseedAbandoned?.Invoke("setup isn't finished");
             return;
         }
 
@@ -733,13 +735,13 @@ public sealed partial class SeedingViewModel : ObservableObject
                 }
                 // The gate above reads state that startup is still settling: a scheduled-task launch
                 // starts this countdown while RestoreSessionAsync is in flight, and a rejected session
-                // (or a revoked network membership) re-arms onboarding seconds later. Re-check every
-                // tick so the overlay appearing mid-countdown stops the seed instead of launching the
-                // game underneath it.
-                if (_account.ShowOnboarding)
+                // (or a revoked network membership) blocks seeding seconds later. Re-check every tick
+                // so a gate arming mid-countdown stops the seed instead of launching the game
+                // underneath it.
+                if (_account.SeedingBlocked)
                 {
-                    _log.LogInformation("Auto-seed aborted — onboarding re-armed during the countdown");
-                    AutoseedAbandoned?.Invoke("onboarding re-armed during the countdown");
+                    _log.LogInformation("Auto-seed aborted — seeding was blocked during the countdown");
+                    AutoseedAbandoned?.Invoke("setup stopped being complete during the countdown");
                     return;
                 }
             }

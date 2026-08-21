@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Fullobby.App.ViewModels;
 using Fullobby.Core.Api;
 using Fullobby.Core.Config;
@@ -36,7 +37,48 @@ public sealed partial class SettingsPage : Page
         _updater = App.AppHost.Services.GetRequiredService<UpdaterService>();
         Account = App.AppHost.Services.GetRequiredService<AccountViewModel>();
         InitializeComponent();
+
+        // The link-conflict bar appears while the user is standing on this page (they just pressed
+        // Link Discord), so its action label has to track the VM live rather than only being seeded
+        // on navigation. The VM is a singleton — unsubscribe or the handler outlives the page.
+        Loaded += (_, _) =>
+        {
+            Account.PropertyChanged += OnAccountPropertyChanged;
+            UpdateLinkConflictAction();
+        };
+        Unloaded += (_, _) => Account.PropertyChanged -= OnAccountPropertyChanged;
     }
+
+    private void OnAccountPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(AccountViewModel.HasLinkConflict)
+            or nameof(AccountViewModel.LinkConflictProvider))
+        {
+            UpdateLinkConflictAction();
+        }
+    }
+
+    /// <summary>Label the conflict bar's action with the provider the user must sign in with.</summary>
+    private void UpdateLinkConflictAction()
+    {
+        var provider = Account.LinkConflictProvider;
+        if (provider is not { Length: > 0 })
+        {
+            return;
+        }
+        LinkConflictSignInButton.Content =
+            $"Sign in with {char.ToUpperInvariant(provider[0])}{provider[1..]}";
+    }
+
+    /// <summary>Leave this account and sign in as the one that owns the identity.</summary>
+    private void LinkConflictSignIn_Click(object sender, RoutedEventArgs e) =>
+        Account.SwitchAccountCommand.Execute(Account.LinkConflictProvider ?? "discord");
+
+    /// <summary>Dismissing the bar clears the VM state too — IsOpen is a one-way binding, so
+    /// without this the bar would stay suppressed while the conflict was still outstanding and
+    /// would not reopen on the next refused link.</summary>
+    private void LinkConflictBar_Closed(InfoBar sender, InfoBarClosedEventArgs args) =>
+        Account.ClearLinkConflict();
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
@@ -424,64 +466,10 @@ public sealed partial class SettingsPage : Page
     }
 
     /// <summary>Join-a-network dialog: tag + join code. The code is sent and forgotten — never
-    /// stored. On failure the dialog stays open with the API's uniform error inline.</summary>
-    private async void NetworkJoin_Click(object sender, RoutedEventArgs e)
-    {
-        var tagBox = new TextBox { PlaceholderText = "Network name", MaxLength = 64 };
-        var codeBox = new PasswordBox { PlaceholderText = "Join code", MaxLength = 128 };
-        var errorText = new TextBlock
-        {
-            FontSize = 12,
-            TextWrapping = TextWrapping.Wrap,
-            Visibility = Visibility.Collapsed,
-        };
-        if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush)
-            && brush is Microsoft.UI.Xaml.Media.Brush critical)
-        {
-            errorText.Foreground = critical;
-        }
-
-        var content = new StackPanel { Spacing = 8 };
-        content.Children.Add(new TextBlock
-        {
-            Text = "Enter the network name and join code you received from a participating network.",
-            TextWrapping = TextWrapping.Wrap,
-            FontSize = 12,
-            Opacity = 0.7,
-        });
-        content.Children.Add(tagBox);
-        content.Children.Add(codeBox);
-        content.Children.Add(errorText);
-
-        var dialog = new ContentDialog
-        {
-            Title = "Join a Network",
-            Content = content,
-            PrimaryButtonText = "Join",
-            CloseButtonText = "Cancel",
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = XamlRoot,
-        };
-        dialog.PrimaryButtonClick += async (_, args) =>
-        {
-            var deferral = args.GetDeferral();
-            try
-            {
-                var error = await Account.JoinNetworkAsync(tagBox.Text, codeBox.Password);
-                if (error is not null)
-                {
-                    args.Cancel = true; // keep the dialog open with the inline error
-                    errorText.Text = error;
-                    errorText.Visibility = Visibility.Visible;
-                }
-            }
-            finally
-            {
-                deferral.Complete();
-            }
-        };
-        await dialog.ShowAsync();
-    }
+    /// stored. Shared with the shell's join-a-network banner (see <see cref="NetworkJoinDialog"/>),
+    /// so both entry points behave identically.</summary>
+    private async void NetworkJoin_Click(object sender, RoutedEventArgs e) =>
+        await NetworkJoinDialog.ShowAsync(Account, XamlRoot);
 
     // ── Settings toggles ────────────────────────────────────────────────────
 

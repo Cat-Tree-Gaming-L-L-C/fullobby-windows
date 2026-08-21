@@ -81,6 +81,24 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
+                <!-- Link refused because the identity belongs to another account (already linked,
+                     or it carries staff permissions). Same recovery as the onboarding wizard: the
+                     way through is to sign in as that account, not to retry the link. Settings has
+                     its own Sign Out, so this is about naming the fix, not about escape. -->
+                <InfoBar
+                    x:Name="LinkConflictBar"
+                    IsOpen="{x:Bind Account.HasLinkConflict, Mode=OneWay}"
+                    IsClosable="True"
+                    Closed="LinkConflictBar_Closed"
+                    Severity="Warning"
+                    Title="Can't link that account"
+                    Message="{x:Bind Account.LinkConflictMessage, Mode=OneWay}"
+                    Margin="0,2">
+                    <InfoBar.ActionButton>
+                        <Button x:Name="LinkConflictSignInButton" Click="LinkConflictSignIn_Click" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
+
                 <!-- Link buttons -->
                 <StackPanel Spacing="4" Margin="0,2" HorizontalAlignment="Center">
                     <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
