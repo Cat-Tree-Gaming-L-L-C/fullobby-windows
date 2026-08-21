@@ -128,9 +128,22 @@ public class DpapiProtectorTests
     }
 
     [Fact]
-    public void MaybeDecrypt_Malformed_ReturnsRaw()
+    public void MaybeDecrypt_Malformed_IsAbsentNotRaw()
     {
-        const string raw = "dpapi:not-valid-base64!!!";
-        Assert.Equal(raw, DpapiProtector.MaybeDecrypt("auth_token", raw));
+        // Must NOT hand back the ciphertext. Doing so sent "dpapi:…" out as a bearer token: the
+        // request 401'd, the refresh (with an equally undecryptable refresh token) 401'd, the
+        // session was cleared, and the next launch — finding no credentials — re-armed the entire
+        // onboarding wizard on a configured install. Null means absent, which is both true and
+        // recoverable: the app asks for a sign-in.
+        Assert.Null(DpapiProtector.MaybeDecrypt("auth_token", "dpapi:not-valid-base64!!!"));
+    }
+
+    [Fact]
+    public void MaybeDecrypt_UndecryptableBlob_IsAbsent()
+    {
+        // Well-formed base64 that this profile's DPAPI cannot open — the shape of a config copied
+        // between machines, a roaming profile, or an administrator password reset.
+        var foreign = "dpapi:" + Convert.ToBase64String(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 });
+        Assert.Null(DpapiProtector.MaybeDecrypt("auth_token", foreign));
     }
 }

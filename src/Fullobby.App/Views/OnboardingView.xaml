@@ -25,8 +25,11 @@
                 <!-- Step 0: Sign in -->
                 <StackPanel x:Name="StepSignIn" Spacing="10">
                     <Image Source="ms-appx:///Assets/logo_no_text.png" Width="56" Height="56" HorizontalAlignment="Center" />
-                    <TextBlock Text="Welcome to Fullobby" Style="{StaticResource SubtitleTextBlockStyle}" HorizontalAlignment="Center" TextAlignment="Center" />
+                    <!-- Heading and blurb switch to "welcome back" when the overlay is up only to
+                         re-authenticate a configured install (see AccountViewModel.ShowReauthOnly). -->
+                    <TextBlock x:Name="SignInHeading" Text="Welcome to Fullobby" Style="{StaticResource SubtitleTextBlockStyle}" HorizontalAlignment="Center" TextAlignment="Center" />
                     <TextBlock
+                        x:Name="SignInSubtext"
                         Text="Sign in to track your seeding contributions, or continue as a guest."
                         Opacity="0.7" TextWrapping="Wrap" TextAlignment="Center" />
 
@@ -55,6 +58,12 @@
                     <Button Content="Continue as Guest"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             Command="{x:Bind Account.RegisterGuestCommand}" />
+                    <!-- Staff used to hit a wall further in: guest mints a NEW account, and their
+                         Discord already belongs to the one holding their permissions, so linking it
+                         afterwards is refused. Say so here, while the choice is still free. -->
+                    <TextBlock Text="Guest is for players. If you run a community or network, sign in with Discord so your permissions come with you."
+                               FontSize="11" Opacity="0.5" TextWrapping="Wrap"
+                               TextAlignment="Center" HorizontalAlignment="Center" />
                 </StackPanel>
 
                 <!-- Step 1: Join a seeding network (limited-beta hard gate) -->
@@ -94,6 +103,11 @@
                     <TextBlock Text="No join code? Ask the staff of a community that runs Fullobby."
                                FontSize="11" Opacity="0.4" TextWrapping="Wrap"
                                TextAlignment="Center" HorizontalAlignment="Center" />
+                    <!-- Escape hatch. Hidden on the re-armed network gate, where the account is
+                         already established and the only task is joining a network. -->
+                    <HyperlinkButton x:Name="NetworkStartOverLink" Content="Use a different account"
+                                     HorizontalAlignment="Center" FontSize="12"
+                                     Click="StartOver_Click" />
                 </StackPanel>
 
                 <!-- Step 2: Link accounts -->
@@ -102,6 +116,25 @@
                     <TextBlock
                         Text="Link your Steam and Discord accounts to track your seeding sessions."
                         Opacity="0.7" TextWrapping="Wrap" TextAlignment="Center" />
+
+                    <!-- Link refused because the identity belongs to another account (already
+                         linked, or it carries staff permissions). The recovery IS the resolution,
+                         so it gets a button rather than a toast: leave this account and sign in as
+                         the one that owns the identity. -->
+                    <Border x:Name="LinkConflictPanel" Visibility="Collapsed"
+                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                            BorderBrush="{ThemeResource SystemFillColorCautionBrush}"
+                            BorderThickness="1" CornerRadius="8" Padding="12,10">
+                        <StackPanel Spacing="8">
+                            <TextBlock x:Name="LinkConflictText" FontSize="12" TextWrapping="Wrap" />
+                            <Button x:Name="LinkConflictSignInButton"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                    Click="LinkConflictSignIn_Click" />
+                            <HyperlinkButton Content="Not now" HorizontalAlignment="Center"
+                                             FontSize="12" Click="DismissLinkConflict_Click" />
+                        </StackPanel>
+                    </Border>
 
                     <!-- Steam: already-linked status row, then the (re-)link button + helper copy. -->
                     <Grid x:Name="SteamLinkedRow" Visibility="Collapsed"
@@ -153,6 +186,8 @@
                             HorizontalAlignment="Center" Margin="0,6,0,0" Click="ToNickname_Click" />
                     <TextBlock x:Name="LinkLaterHint" Text="You can link accounts later from Settings"
                                FontSize="11" Opacity="0.4" TextAlignment="Center" HorizontalAlignment="Center" />
+                    <HyperlinkButton Content="Use a different account" HorizontalAlignment="Center"
+                                     FontSize="12" Click="StartOver_Click" />
                 </StackPanel>
 
                 <!-- Step 3: Nickname -->

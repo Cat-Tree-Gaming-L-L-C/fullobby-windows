@@ -11,6 +11,9 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="36" />
             <RowDefinition Height="*" />
+            <!-- Join-a-network banner. Its own Auto row for the same reason as the toast stack
+                 below: overlaying the content would cover SeedPage's bottom buttons. -->
+            <RowDefinition Height="Auto" />
             <!-- Toast stack gets its own row rather than overlaying the content. Anchored over
                  the page it sat directly on top of SeedPage's bottom Seed / Stop Seeding buttons
                  and, being hit-test visible, swallowed the click — the user saw the button, hit
@@ -117,10 +120,32 @@
             <Frame x:Name="ContentFrame" />
         </NavigationView>
 
+        <!-- Join-a-network banner: the limited-beta hard gate, shown OVER the running app rather
+             than instead of it. This used to re-open the full onboarding overlay, so a configured
+             user who lost a membership — often to a network being rebuilt or renamed server-side —
+             had the entire shell replaced and read it as being sent back through onboarding.
+             Seeding is what the gate blocks (AccountViewModel.SeedingBlocked, and the server
+             refuses regardless); everything else stays reachable. Not closable: it reflects a live
+             condition rather than announcing an event, and it lowers itself the moment a
+             membership is confirmed. -->
+        <InfoBar
+            x:Name="NetworkGateBar"
+            Grid.Row="2"
+            IsOpen="False"
+            IsClosable="False"
+            Severity="Warning"
+            Margin="12,0,12,6"
+            Title="Join a seeding network"
+            Message="Fullobby is in limited beta — seeding runs inside community networks. You won't be able to seed until you join one.">
+            <InfoBar.ActionButton>
+                <Button Content="Join a network" Click="NetworkGateJoin_Click" />
+            </InfoBar.ActionButton>
+        </InfoBar>
+
         <!-- In-app toast stack: occupies its own row beneath the content (see RowDefinitions). -->
         <ItemsControl
             x:Name="ToastHost"
-            Grid.Row="2"
+            Grid.Row="3"
             HorizontalAlignment="Stretch"
             Margin="12,0,12,12">
             <ItemsControl.ItemTemplate>

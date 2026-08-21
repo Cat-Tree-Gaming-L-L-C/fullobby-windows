@@ -117,10 +117,20 @@ public static class DpapiProtector
     }
 
     /// <summary>
-    /// Decrypt when the key is sensitive and the value is non-empty; on failure return
-    /// the raw value (never throws).
+    /// Decrypt when the key is sensitive and the value is non-empty. Never throws.
+    ///
+    /// A ciphertext we cannot decrypt yields <c>null</c> — the value is treated as absent
+    /// rather than handed back as-is. Returning the raw <c>dpapi:…</c> blob meant the
+    /// undecryptable string went out as a bearer token: the request 401'd, the refresh with
+    /// the equally-undecryptable refresh token 401'd, and the session was cleared. The next
+    /// launch then found no credentials at all and re-armed the whole onboarding wizard, so a
+    /// single failed decrypt cost the user their setup with nothing in the UI explaining it.
+    /// Absent is both true and recoverable: the app asks them to sign in again.
+    ///
+    /// DPAPI fails here for ordinary reasons — a roaming profile (the config store lives under
+    /// %APPDATA%, which roams), a restored or copied config, an administrator password reset.
     /// </summary>
-    public static string MaybeDecrypt(string key, string value)
+    public static string? MaybeDecrypt(string key, string value)
     {
         if (!IsSensitive(key) || value.Length == 0)
         {
@@ -132,7 +142,7 @@ public static class DpapiProtector
         }
         catch (Exception ex) when (ex is CryptographicException or FormatException)
         {
-            return value;
+            return null;
         }
     }
 }

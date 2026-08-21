@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Fullobby.App.Services;
 using Fullobby.App.ViewModels;
 using Fullobby.Core;
@@ -19,9 +20,23 @@ namespace Fullobby.App;
 
 public sealed partial class MainWindow : Window
 {
-    // Window footprint (500x520 content + titlebar/nav chrome)
+    // Window footprint (500x520 content + titlebar/nav chrome). Also the floor the window can be
+    // dragged to: the shell was laid out against these numbers, so they double as the resize
+    // minimum rather than letting the nav rail and seed board clip.
     private const double LogicalWidth = 500;
     private const double LogicalHeight = 600;
+
+    /// <summary>Persisted window size as a single <c>"WxH"</c> value in logical units — logical so
+    /// the window keeps its physical size across monitors of different DPI, and *one* key because
+    /// ConfigService coalesces writes on a debounce: a width and a height written as two keys land
+    /// on disk at different times, so a hide-to-tray or a crash between them leaves a mismatched
+    /// pair that restores the window to a shape the user never chose. One key can't tear.
+    /// Single call site, so it stays a literal here (see <see cref="ConfigKeys"/>).</summary>
+    private const string SizeKey = "window_size";
+
+    /// <summary>Set while <see cref="RootGrid"/>'s Loaded handler applies the restored size, so the
+    /// resulting AppWindow.Changed doesn't immediately write back what we just read.</summary>
+    private bool _applyingRestoredSize;
 
     private readonly ConfigService _config;
     private readonly InAppToastService _toasts;
@@ -61,8 +76,8 @@ public sealed partial class MainWindow : Window
 
         if (AppWindow.Presenter is OverlappedPresenter presenter)
         {
-            presenter.IsResizable = false;
-            presenter.IsMaximizable = false;
+            presenter.IsResizable = true;
+            presenter.IsMaximizable = true;
         }
 
         // Native Mica material as the window base. The brand surfaces sit on top as
@@ -71,13 +86,30 @@ public sealed partial class MainWindow : Window
         // (decision 2026-08-12), and it always supports Mica — no fallback.
         SystemBackdrop = new MicaBackdrop { Kind = MicaKind.BaseAlt };
 
-        // Size in logical units once the XAML root (and its DPI scale) exists
+        // Size in logical units once the XAML root (and its DPI scale) exists. A "Start with
+        // Windows" launch never activates the window, so this does not run at startup — it runs
+        // when the tray first shows the window. Everything size-related therefore lives here, not
+        // in the constructor, or a tray start would come up unsized and unconstrained.
         RootGrid.Loaded += (_, _) =>
         {
             var scale = RootGrid.XamlRoot.RasterizationScale;
+
+            if (AppWindow.Presenter is OverlappedPresenter p)
+            {
+                p.PreferredMinimumWidth = (int)(LogicalWidth * scale);
+                p.PreferredMinimumHeight = (int)(LogicalHeight * scale);
+            }
+
+            // Restore the last size the user chose, never below the design floor — a config written
+            // by hand, or carried over from a build with a larger minimum, must not be able to pin
+            // the window smaller than the layout supports.
+            var (width, height) = ParseSize(_config.GetString(SizeKey));
+
+            _applyingRestoredSize = true;
             AppWindow.Resize(new Windows.Graphics.SizeInt32(
-                (int)(LogicalWidth * scale),
-                (int)(LogicalHeight * scale)));
+                (int)(width * scale),
+                (int)(height * scale)));
+            _applyingRestoredSize = false;
 
             // Only now is there a XamlRoot to host a dialog. ConfigService is constructed long
             // before any window exists, so a protection failure raised during startup is read off
@@ -115,6 +147,10 @@ public sealed partial class MainWindow : Window
         // Close-to-tray (default on): intercept the X and hide instead of exiting.
         AppWindow.Closing += OnAppWindowClosing;
 
+        // Remember the size the user drags to. ConfigService coalesces writes on a 500ms debounce,
+        // so firing this for every frame of a drag-resize costs one write at the end of it.
+        AppWindow.Changed += OnAppWindowSizeChanged;
+
         // In-app toast stack.
         ToastHost.ItemsSource = _toasts.Toasts;
 
@@ -122,21 +158,39 @@ public sealed partial class MainWindow : Window
         // on a Window root, so drive visibility from the VM here).
         UpdateOnboardingVisibility();
         UpdateAdminVisibility();
+        UpdateNetworkGateBar();
         Account.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(AccountViewModel.ShowOnboarding))
             {
                 UpdateOnboardingVisibility();
+                // The banner is suppressed behind the overlay, so it has to be re-evaluated
+                // when the overlay closes — otherwise a gate armed during onboarding stays down.
+                UpdateNetworkGateBar();
             }
             else if (e.PropertyName == nameof(AccountViewModel.IsAdminUser))
             {
                 UpdateAdminVisibility();
+            }
+            else if (e.PropertyName == nameof(AccountViewModel.NetworkGateActive))
+            {
+                UpdateNetworkGateBar();
             }
         };
     }
 
     private void UpdateOnboardingVisibility() =>
         Onboarding.Visibility = Account.ShowOnboarding ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Raise or lower the join-a-network banner. Held down while the onboarding overlay is
+    /// up: first run has its own network step, and a banner stacked behind an opaque overlay would
+    /// only appear from nowhere the moment that overlay closed.</summary>
+    private void UpdateNetworkGateBar() =>
+        NetworkGateBar.IsOpen = Account.NetworkGateActive && !Account.ShowOnboarding;
+
+    /// <summary>Open the shared join dialog from the banner — the same one Settings uses.</summary>
+    private async void NetworkGateJoin_Click(object sender, RoutedEventArgs e) =>
+        await Views.NetworkJoinDialog.ShowAsync(Account, RootGrid.XamlRoot);
 
     /// <summary>Raised by ConfigService, possibly off the UI thread.</summary>
     private void OnSecretProtectionUnavailable() =>
@@ -267,6 +321,52 @@ public sealed partial class MainWindow : Window
     }
 
     // ── Close-to-tray / quit / restart ──────────────────────────────────────
+
+    /// <summary>Persist the window size after a resize. Only the restored state is recorded: saving
+    /// while maximized would store the screen-sized bounds as the size to come back to, so
+    /// un-maximizing (or the next launch) would have nothing smaller to restore to, and minimized
+    /// reports a size that isn't one the user chose.</summary>
+    private void OnAppWindowSizeChanged(AppWindow sender, AppWindowChangedEventArgs args)
+    {
+        if (!args.DidSizeChange || _applyingRestoredSize)
+        {
+            return;
+        }
+        if (sender.Presenter is OverlappedPresenter { State: not OverlappedPresenterState.Restored })
+        {
+            return;
+        }
+
+        // Null before the first Loaded; the size we'd record then isn't the user's anyway.
+        if (RootGrid.XamlRoot is not { RasterizationScale: > 0 } root)
+        {
+            return;
+        }
+
+        var width = (int)Math.Round(sender.Size.Width / root.RasterizationScale);
+        var height = (int)Math.Round(sender.Size.Height / root.RasterizationScale);
+        _config.SetString(SizeKey, string.Create(CultureInfo.InvariantCulture, $"{width}x{height}"));
+    }
+
+    /// <summary>Parse a stored <c>"WxH"</c> size, clamped to the design floor. Anything unparseable
+    /// — absent, hand-edited, or written by a future build in another format — falls back to the
+    /// default footprint rather than throwing on a path that runs before the window is ever shown.</summary>
+    private static (double Width, double Height) ParseSize(string? stored)
+    {
+        if (stored is not null)
+        {
+            // Invariant on both ends: the value is written as plain integers, and a config file that
+            // travels to a comma-decimal locale must still read back as the same size.
+            var parts = stored.Split('x', 2);
+            if (parts.Length == 2
+                && int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var w)
+                && int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var h))
+            {
+                return (Math.Max(w, LogicalWidth), Math.Max(h, LogicalHeight));
+            }
+        }
+        return (LogicalWidth, LogicalHeight);
+    }
 
     private void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
     {
