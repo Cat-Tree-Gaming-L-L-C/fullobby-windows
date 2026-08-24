@@ -108,10 +108,21 @@ public sealed class UserInfo
     public long CreatedAt { get; set; }
     public long LastSeenAt { get; set; }
     public bool LeaderboardOptOut { get; set; }
-    /// <summary>Whether the user holds a global Admin grant (server-computed from the
-    /// grants system, independent of which provider they signed in with) — gates the
-    /// app's embedded Admin tab.</summary>
+    /// <summary>Whether the user holds a <b>global</b> Admin grant (server-computed from
+    /// the grants system, independent of which provider they signed in with).
+    /// <para>This is NOT the gate for the Admin tab — see <see cref="CanManageServers"/>.
+    /// Gating on it locked out every community admin, who is precisely who the server
+    /// management surface exists for.</para></summary>
     public bool IsAdmin { get; set; }
+
+    /// <summary>Whether this user may reach the server-management surface at all: a global
+    /// grant, or Admin over at least one community. The server computes it with the same
+    /// rule its own endpoints enforce, so this flag and a 403 cannot disagree.</summary>
+    public bool CanManageServers { get; set; }
+
+    /// <summary>Whether this user may reach network management: a global grant, or Admin
+    /// over at least one network.</summary>
+    public bool CanManageNetworks { get; set; }
 }
 
 public sealed class AuthRefreshResponse

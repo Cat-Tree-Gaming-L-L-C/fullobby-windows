@@ -79,6 +79,38 @@ public class ApiModelsTests
         Assert.Equal(AuthProvider.Steam, u.AuthProvider);
         Assert.Null(u.DisplayName);
         Assert.Null(u.SteamId);
+        // A user the server said nothing about reaches nothing.
+        Assert.False(u.IsAdmin);
+        Assert.False(u.CanManageServers);
+        Assert.False(u.CanManageNetworks);
+    }
+
+    /// <summary>
+    /// The Admin tab is gated on these, so a naming mismatch would not throw — it would
+    /// silently deserialize to false and hide the tab from exactly the people this
+    /// release exists to let in. Pin the wire names.
+    /// </summary>
+    [Fact]
+    public void UserInfo_ScopedReachFlags_MapFromSnakeCase()
+    {
+        var u = Parse<UserInfo>(
+            """
+            {"user_id":"3","username":"vidaro","is_admin":false,
+             "can_manage_servers":true,"can_manage_networks":false}
+            """);
+        Assert.False(u.IsAdmin);
+        Assert.True(u.CanManageServers);
+        Assert.False(u.CanManageNetworks);
+    }
+
+    /// <summary>A community Admin is not a global Admin — the whole point of the split.</summary>
+    [Fact]
+    public void UserInfo_CommunityAdminIsNotGlobalAdmin()
+    {
+        var u = Parse<UserInfo>(
+            """{"user_id":"3","username":"vidaro","can_manage_servers":true}""");
+        Assert.False(u.IsAdmin);
+        Assert.True(u.CanManageServers);
     }
 
     [Fact]

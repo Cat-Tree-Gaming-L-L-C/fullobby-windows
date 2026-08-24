@@ -168,7 +168,7 @@ public sealed partial class MainWindow : Window
                 // when the overlay closes — otherwise a gate armed during onboarding stays down.
                 UpdateNetworkGateBar();
             }
-            else if (e.PropertyName == nameof(AccountViewModel.IsAdminUser))
+            else if (e.PropertyName == nameof(AccountViewModel.CanReachAdminPanel))
             {
                 UpdateAdminVisibility();
             }
@@ -240,13 +240,16 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>Show the Admin tab only while /me reports a global Admin grant. If the
-    /// grant disappears (sign-out, grant revoked) while the tab is open, bounce to Seed.</summary>
+    /// <summary>Show the Admin tab while /me reports the user can reach any panel surface —
+    /// a global grant, community Admin, or network Admin. If that disappears (sign-out,
+    /// grant revoked) while the tab is open, bounce to Seed.
+    /// <para>This gated on a <i>global</i> grant until 0.4.1, which hid the tab from every
+    /// community admin — the people the server-management surface is for.</para></summary>
     private void UpdateAdminVisibility()
     {
-        var admin = Account.IsAdminUser;
-        AdminNavItem.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
-        if (!admin && ContentFrame.CurrentSourcePageType == typeof(Views.AdminPage))
+        var reachable = Account.CanReachAdminPanel;
+        AdminNavItem.Visibility = reachable ? Visibility.Visible : Visibility.Collapsed;
+        if (!reachable && ContentFrame.CurrentSourcePageType == typeof(Views.AdminPage))
         {
             NavView.SelectedItem = SeedNavItem;
         }
