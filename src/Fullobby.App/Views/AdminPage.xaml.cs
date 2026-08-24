@@ -15,8 +15,14 @@ namespace Fullobby.App.Views;
 /// automatically from the app's session via a one-time exchange code
 /// (<c>POST /api/auth/panel-code</c>). The web panel stays the single admin
 /// surface (alongside the DM console) — every panel feature appears here with
-/// no client change, and the gate (<c>/me.is_admin</c>) is grant-derived, so
-/// future sign-in methods (email/password, tokens) inherit it untouched.
+/// no client change, and the gate (<c>/me.can_manage_servers</c>) is
+/// grant-derived, so future sign-in methods (email/password, tokens) inherit it
+/// untouched.
+///
+/// Because the panel is embedded rather than reimplemented, it also decides what
+/// each tier sees once loaded: a community Admin gets the Servers tab for their
+/// own community's servers, a network Admin gets Networks. The client only
+/// decides whether the door exists.
 /// </summary>
 public sealed partial class AdminPage : Page
 {

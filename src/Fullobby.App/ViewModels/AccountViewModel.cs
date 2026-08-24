@@ -78,6 +78,7 @@ public sealed partial class AccountViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsSteamSignedIn))]
     [NotifyPropertyChangedFor(nameof(IsDiscordSignedIn))]
     [NotifyPropertyChangedFor(nameof(IsAdminUser))]
+    [NotifyPropertyChangedFor(nameof(CanReachAdminPanel))]
     private UserInfo? user;
 
     [ObservableProperty]
@@ -202,9 +203,18 @@ public sealed partial class AccountViewModel : ObservableObject
 
     public bool HasAccountName => User is not null;
 
-    /// <summary>Whether the signed-in user holds a global Admin grant (server-computed
-    /// on <c>/me</c>, provider-agnostic) — shows the embedded Admin tab.</summary>
+    /// <summary>Whether the signed-in user holds a <b>global</b> Admin grant
+    /// (server-computed on <c>/me</c>, provider-agnostic).</summary>
     public bool IsAdminUser => User?.IsAdmin == true;
+
+    /// <summary>Whether to show the embedded Admin tab: the user can reach at least one
+    /// surface the panel offers.
+    /// <para>Deliberately wider than <see cref="IsAdminUser"/>. The tab used to gate on a
+    /// global grant, so a community Admin — who can manage their own community's servers,
+    /// and is who that surface is built for — never saw it. The panel itself decides what
+    /// to show once it loads; this only decides whether the door exists.</para></summary>
+    public bool CanReachAdminPanel =>
+        User is { } u && (u.IsAdmin || u.CanManageServers || u.CanManageNetworks);
 
     public string DisplayName =>
         User?.DisplayName is { Length: > 0 } d ? d
