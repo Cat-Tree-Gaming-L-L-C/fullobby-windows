@@ -1,7 +1,7 @@
 {
-  "version": "0.4.0",
-  "download_url": "https://github.com/Cat-Tree-Gaming-L-L-C/fullobby-windows/releases/download/v0.4.0/Fullobby-Setup-0.4.0.exe",
-  "notes": "Fullobby 0.4.0\n\nOnboarding no longer traps users or punishes them for losing a session.\n\n- The first-run wizard has a way back out. Picking the wrong identity at the\n  sign-in step used to be unrecoverable: the overlay covers the whole shell,\n  including Settings and Sign Out, and the steps only went forward. An admin\n  whose client had lost its session would sign in as someone new, reach the\n  link step, be told their Discord belongs to a different user, and have no\n  route back.\n- A refused provider link now offers the sign-in that resolves it, instead of a\n  toast that says (literally) \"Forbidden\".\n- Losing a session asks for a sign-in rather than replaying all five onboarding\n  steps. Credentials go away for ordinary reasons; none of them mean the setup\n  is gone.\n- An undecryptable stored secret is treated as absent rather than handed back\n  as ciphertext, which used to cost the user their entire setup silently.\n- The limited-beta network gate is a banner over the app, not a wall in front\n  of it. Seeding stays blocked; the rest of the app stays reachable.\n\nRequires the API changes in fullobby-api#20 for the refused-link message.",
-  "sha256": "df80e9693d6b116bd142a5fe4869a29958bf544342e350a60e186895752974b4",
-  "signature": "MEUCIB6kopkkg8MS3uJ1Layo5qgtDdEMFu5R/8Mrkz0Svl5BAiEAzPoVMOyEr4YHcn6P2tkhDGrwRUyqsxR84l9FJyc2HFI="
+  "version": "0.4.1",
+  "download_url": "https://github.com/Cat-Tree-Gaming-L-L-C/fullobby-windows/releases/download/v0.4.1/Fullobby-Setup-0.4.1.exe",
+  "notes": "Fullobby 0.4.1\n\nThe Admin tab now appears if you administer a community or a network, not only\nif you hold a platform-wide grant. If you run your community's servers, you can\nmanage them from the app again — previously the tab stayed hidden and the panel\ntold you to ask an admin for access you already had.\n\nNothing else changes in this build.",
+  "sha256": "43fc5b9a8a8e14e8c82ae6182733162c4338c79680455532abebbf1632599e12",
+  "signature": "MEUCIQDACeuukeYa67Ony/hK3sL2C47Y+gXDscIohCeQ4OkecgIgGaZhQf9YyiIsbiY6H6k8n4pGbtNIBSyjryV5pu6d4SY="
 }
