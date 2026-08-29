@@ -197,6 +197,15 @@ public sealed class SeedingApiClient(HttpClient http)
             $"/api/seeding/stats/{userId}?days={days}", null, ct);
     }
 
+    /// <summary>Ready checks waiting on this user, soonest window first (auth required).
+    ///
+    /// <para>A ready check gates its server out of the rotation until an operator confirms. Discord
+    /// DMs are the only push the platform has otherwise, and they need an install, a bot in the
+    /// right guild, and open DMs — this is the surface that does not. Only checks this caller may
+    /// answer are returned, so an empty list means nothing is waiting on them.</para></summary>
+    public Task<MyReadyChecksResponse> GetMyReadyChecksAsync(CancellationToken ct = default) =>
+        SendAsync<MyReadyChecksResponse>(HttpMethod.Get, "/api/seeding/ready-checks", null, ct);
+
     // ── Seeding networks (auth required) ──────────────────────────────────
 
     /// <summary>Join a seeding network by name + join code. The API returns a uniform 400 for any

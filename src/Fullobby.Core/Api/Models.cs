@@ -331,6 +331,28 @@ public sealed class NetworkSeedingStatus
 /// its member communities' servers — networks are their own entity server-side, distinct from
 /// the communities that administer servers). Ordered by <see cref="Priority"/> (lower =
 /// preferred).</summary>
+/// <summary>A ready check waiting on this user, from <c>GET /api/seeding/ready-checks</c>.
+/// Only checks the caller may answer and that are still open are listed.</summary>
+public sealed class ReadyCheckNotice
+{
+    public long ReadyCheckId { get; set; }
+    public string ServerName { get; set; } = "";
+    public string ShortName { get; set; } = "";
+    /// <summary>Tag of the community that operates the server — the ready check is theirs.</summary>
+    public string? CommunityTag { get; set; }
+    public long NetworkId { get; set; }
+    /// <summary>"pending" (created, nobody told yet) or "notified" (a DM went out).</summary>
+    public string State { get; set; } = "";
+    public long WindowStartTs { get; set; }
+    /// <summary>Seconds until the seed window opens. Treat a non-positive value as "now".</summary>
+    public long SecondsUntilWindow { get; set; }
+}
+
+public sealed class MyReadyChecksResponse
+{
+    public List<ReadyCheckNotice> Checks { get; set; } = new();
+}
+
 public sealed class NetworkMembership
 {
     public long Id { get; set; }

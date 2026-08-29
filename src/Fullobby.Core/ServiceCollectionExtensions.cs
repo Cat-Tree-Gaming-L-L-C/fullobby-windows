@@ -48,6 +48,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<AutoSeedState>();
         services.AddSingleton<MissedAutoseedMonitor>();
         services.AddHostedService(sp => sp.GetRequiredService<MissedAutoseedMonitor>());
+        services.AddSingleton<ReadyCheckMonitor>();
+        services.AddHostedService(sp => sp.GetRequiredService<ReadyCheckMonitor>());
 
         // Seeding engine: the state machine that orchestrates the native + API layers.
         services.AddSingleton<SeedingState>();
