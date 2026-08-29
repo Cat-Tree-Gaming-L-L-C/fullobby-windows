@@ -1,5 +1,6 @@
 using Fullobby.Core;
 using Fullobby.Core.Activation;
+using Fullobby.Core.Api;
 using Fullobby.Core.Config;
 using Fullobby.Core.Platform;
 using Fullobby.Core.Scheduling;
@@ -84,6 +85,11 @@ public partial class App : Application
 
         // Fire a missed (scheduler-skipped or post-wake) auto-seed when the watchdog detects one.
         AppHost.Services.GetRequiredService<MissedAutoseedMonitor>().AutoseedDue += OnAutoseedDue;
+
+        // Tell an operator a ready check is waiting on them. Without this the only notice is the
+        // bot's Discord DM, so a community running no Discord — or an operator with closed DMs —
+        // never hears about a check that is blocking their own server from being seeded.
+        AppHost.Services.GetRequiredService<ReadyCheckMonitor>().ChecksDue += OnReadyChecksDue;
 
         // Register the fullobby:// protocol for this exe (refreshes the
         // installer's bootstrap registration with the WAS activation marker so
@@ -255,6 +261,30 @@ public partial class App : Application
     /// <summary>Missed-autoseed watchdog fired (off-thread) with the wake's "HH:MM" UTC key —
     /// marshal onto the UI and run it.</summary>
     private void OnAutoseedDue(string wakeKey) => StartAutoseed(wakeKey);
+
+    /// <summary>Ready checks are waiting on this operator — toast them. Answering happens on the
+    /// Admin tab's hub, which the toast click brings the window forward for; the notice itself is
+    /// the whole job here, because being told is the part that was missing.</summary>
+    private void OnReadyChecksDue(IReadOnlyList<ReadyCheckNotice> checks)
+    {
+        try
+        {
+            var toasts = AppHost.Services.GetRequiredService<Services.ToastService>();
+            var first = checks[0];
+            var minutes = Math.Max(0, first.SecondsUntilWindow / 60);
+            var body = checks.Count == 1
+                ? $"{first.ServerName} seeds in {minutes} min and needs a ready confirmation. "
+                  + "Open Fullobby to confirm — unconfirmed servers lose their seed priority."
+                : $"{checks.Count} servers need a ready confirmation, the first in {minutes} min. "
+                  + "Open Fullobby to confirm.";
+            toasts.PlayAttentionSound();
+            toasts.Show("Ready check", body);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to show ready-check notification");
+        }
+    }
 
     /// <summary>
     /// An auto-seed was refused because onboarding isn't done. If the task that woke us is a leftover
