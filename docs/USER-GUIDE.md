@@ -3,9 +3,9 @@
 For players. Install the app, join a seeding network, and help fill your
 community's servers.
 
-If you run servers or answer ready checks, you want
-[OPERATOR-GUIDE.md](OPERATOR-GUIDE.md) or [ADMIN-GUIDE.md](ADMIN-GUIDE.md)
-as well — this guide covers what everyone needs.
+If you run servers or answer ready checks, you'll also have a **Manage** tab in
+the app — see [OPERATOR-GUIDE.md](OPERATOR-GUIDE.md) or
+[ADMIN-GUIDE.md](ADMIN-GUIDE.md). This guide covers what everyone needs.
 
 ## What you need
 

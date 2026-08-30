@@ -78,7 +78,7 @@ public sealed partial class AccountViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsSteamSignedIn))]
     [NotifyPropertyChangedFor(nameof(IsDiscordSignedIn))]
     [NotifyPropertyChangedFor(nameof(IsAdminUser))]
-    [NotifyPropertyChangedFor(nameof(CanReachAdminPanel))]
+    [NotifyPropertyChangedFor(nameof(CanReachManagePanel))]
     private UserInfo? user;
 
     [ObservableProperty]
@@ -207,14 +207,18 @@ public sealed partial class AccountViewModel : ObservableObject
     /// (server-computed on <c>/me</c>, provider-agnostic).</summary>
     public bool IsAdminUser => User?.IsAdmin == true;
 
-    /// <summary>Whether to show the embedded Admin tab: the user can reach at least one
+    /// <summary>Whether to show the embedded Manage tab: the user can reach at least one
     /// surface the panel offers.
-    /// <para>Deliberately wider than <see cref="IsAdminUser"/>. The tab used to gate on a
-    /// global grant, so a community Admin — who can manage their own community's servers,
-    /// and is who that surface is built for — never saw it. The panel itself decides what
-    /// to show once it loads; this only decides whether the door exists.</para></summary>
-    public bool CanReachAdminPanel =>
-        User is { } u && (u.IsAdmin || u.CanManageServers || u.CanManageNetworks);
+    /// <para>Deliberately wider than <see cref="IsAdminUser"/>, and widened twice. It first
+    /// gated on a <i>global</i> grant, hiding the tab from every community Admin — the
+    /// people the server surface is built for. It then gated on the <c>CanManage*</c>
+    /// flags, which still hid it from <b>operators</b>, whose whole job (answering ready
+    /// checks, taking a downed server out of the rotation, setting its seed window) the
+    /// panel now serves. The panel itself decides what to show once it loads; this only
+    /// decides whether the door exists.</para></summary>
+    public bool CanReachManagePanel =>
+        User is { } u
+        && (u.IsAdmin || u.CanOperateServers || u.CanManageServers || u.CanManageNetworks);
 
     public string DisplayName =>
         User?.DisplayName is { Length: > 0 } d ? d

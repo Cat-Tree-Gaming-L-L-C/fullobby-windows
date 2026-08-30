@@ -35,9 +35,10 @@ always eligible and never produces a check.
 A check opens **30 minutes before** the window. You can answer it three ways, and
 any one of them settles it:
 
-1. **The panel** — [api.fullobby.com/admin](https://api.fullobby.com/admin),
-   Hub tab. Works with no Discord involved, and keeps working when your DMs are
-   closed.
+1. **The panel** — the app's **Manage** tab, or
+   [api.fullobby.com/admin](https://api.fullobby.com/admin) in a browser. Same
+   thing either way. Works with no Discord involved, and keeps working when your
+   DMs are closed.
 2. **A Discord DM** from the bot, with a button.
 3. **The hub channel**, if your community registered one — a button per window
    awaiting confirmation.
@@ -63,7 +64,8 @@ it, or the window has passed.
 
 ### Your Servers tab
 
-The panel's **Servers** tab lists the servers of the communities you operate,
+Open **Manage** in the app (or the panel in a browser) and pick **Servers**. It
+lists the servers of the communities you operate,
 with **Enable/Disable** and **Window** on each. Adding, editing, removing and
 re-tagging servers are Admin, so those controls aren't shown to you — the page
 says as much rather than offering buttons that would be refused.

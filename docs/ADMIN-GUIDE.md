@@ -43,8 +43,9 @@ Sign in with Discord. As a Community Admin you get two tabs:
 The other tabs (Networks, Communities, Grants, Discord, Client versions) are
 Global-Admin-only and stay hidden.
 
-The desktop app's **Admin** tab opens this same panel in-app, so you don't need
-a browser. It appears for admins; operators use the browser panel.
+The desktop app's **Manage** tab opens this same panel in-app, so you don't need
+a browser. Your operators get it too — it's gated on being able to reach *any*
+panel surface, not on being an admin.
 
 ### The DM console — `/config`
 
@@ -178,7 +179,7 @@ invisible from inside Discord itself.
 **Everything went quiet overnight.** A network pauses itself if its public lead
 invite stops resolving. That's a network-level fix.
 
-**An operator can't see the Servers tab.** They should — operators get it, with
+**An operator can't see the Manage tab.** They should — operators get it, with
 Enable/Disable and Window on each server they operate. If it's missing, they're
 on the wrong account (see the permissions note above) or hold no grant in a
 community that owns servers.
