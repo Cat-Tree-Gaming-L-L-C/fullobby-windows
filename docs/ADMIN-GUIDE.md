@@ -67,8 +67,9 @@ Panel → **Servers**, or the DM console's `servers`.
 - **Threshold** — the player count at which a server counts as seeded. Below it
   the server is a candidate; above it, done for the cycle.
 - **Enable / disable** — takes a server in or out of the rotation immediately.
-- **CRCON key** — per-server, stored encrypted, for authenticated stats.
-- **Seed window** — see below.
+  Operator-level: your operators can do this without you.
+- **CRCON key** — per-server, stored encrypted, for authenticated stats. Admin.
+- **Seed window** — see below. Also Operator-level.
 
 ### Seed windows, and what they switch on
 
@@ -177,7 +178,7 @@ invisible from inside Discord itself.
 **Everything went quiet overnight.** A network pauses itself if its public lead
 invite stops resolving. That's a network-level fix.
 
-**An operator can't toggle a server from the panel.** Correct today: toggling and
-seed windows are operator-level through Discord, but the panel's Servers tab and
-its endpoints require Admin. Either you make the change, or they use the slash
-command.
+**An operator can't see the Servers tab.** They should — operators get it, with
+Enable/Disable and Window on each server they operate. If it's missing, they're
+on the wrong account (see the permissions note above) or hold no grant in a
+community that owns servers.

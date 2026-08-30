@@ -58,24 +58,25 @@ it, or the window has passed.
 |---|---|
 | See today's rotation, current target, leaderboard | Panel → Hub |
 | Answer ready checks | Panel → Hub, Discord DM, or hub channel |
-| Enable / disable one of your servers | Discord only — see below |
-| Set or clear a server's seed window | Discord only — see below |
+| Enable / disable one of your servers | Panel → Servers, or Discord `/toggle` |
+| Set or clear a server's seed window | Panel → Servers → Window, or Discord `/window` |
 
-### The Discord-only bit
+### Your Servers tab
 
-Toggling a server and setting its seed window are operator-level **through
-Discord** (the `/toggle` and `/window` slash commands, or the DM console's
-`server` topic). The panel's Servers tab and the HTTP endpoints behind it
-currently require **Admin**, so those two jobs aren't available to you there yet.
+The panel's **Servers** tab lists the servers of the communities you operate,
+with **Enable/Disable** and **Window** on each. Adding, editing, removing and
+re-tagging servers are Admin, so those controls aren't shown to you — the page
+says as much rather than offering buttons that would be refused.
 
-If your community runs no Discord, ask your Community Admin to make the change —
-they can do it from the panel.
+Nothing here needs Discord. The slash commands do the same two jobs if you
+prefer them.
 
 ## What you can't do
 
 Not restrictions on you personally, just the boundary of the operator level:
 
-- Add, edit, remove or reorder servers → your Community Admin
+- Add, edit, remove or reorder servers, change a threshold, set a CRCON key →
+  your Community Admin
 - Appoint or remove staff → your Community Admin
 - Register the hub channel, map Discord roles, move the community's Discord →
   your Community Admin
