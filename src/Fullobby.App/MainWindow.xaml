@@ -104,11 +104,14 @@
                         <FontIcon Glyph="&#xE946;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <!-- Admin tab: hidden unless /me reports a global Admin grant
-                     (visibility driven from code-behind, like the onboarding overlay). -->
+                <!-- Manage tab: hidden unless /me says the user can reach a panel surface
+                     (visibility driven from code-behind, like the onboarding overlay).
+                     Called "Admin" until operators could use it — a label that told the
+                     people it was built for that it wasn't for them. The `admin` tag and
+                     AdminPage type are the original internal names. -->
                 <NavigationViewItem
-                    x:Name="AdminNavItem"
-                    Content="Admin"
+                    x:Name="ManageNavItem"
+                    Content="Manage"
                     Tag="admin"
                     Visibility="Collapsed">
                     <NavigationViewItem.Icon>

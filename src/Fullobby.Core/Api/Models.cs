@@ -110,7 +110,7 @@ public sealed class UserInfo
     public bool LeaderboardOptOut { get; set; }
     /// <summary>Whether the user holds a <b>global</b> Admin grant (server-computed from
     /// the grants system, independent of which provider they signed in with).
-    /// <para>This is NOT the gate for the Admin tab — see <see cref="CanManageServers"/>.
+    /// <para>This is NOT the gate for the Manage tab — see <see cref="CanOperateServers"/>.
     /// Gating on it locked out every community admin, who is precisely who the server
     /// management surface exists for.</para></summary>
     public bool IsAdmin { get; set; }
@@ -119,6 +119,16 @@ public sealed class UserInfo
     /// grant, or Admin over at least one community. The server computes it with the same
     /// rule its own endpoints enforce, so this flag and a 403 cannot disagree.</summary>
     public bool CanManageServers { get; set; }
+
+    /// <summary>Whether this user may reach the server list at all, and the two things an
+    /// <b>Operator</b> may do there: enable/disable a server, and set its seed window.
+    /// A superset of <see cref="CanManageServers"/> — every admin operates too.
+    ///
+    /// <para>This is the gate for the Manage tab. Operators run a community's servers day
+    /// to day and answer its ready checks; gating on the <c>CanManage*</c> flags hid the
+    /// tab from them, and their only remaining route to those jobs was Discord.</para>
+    /// </summary>
+    public bool CanOperateServers { get; set; }
 
     /// <summary>Whether this user may reach network management: a global grant, or Admin
     /// over at least one network.</summary>

@@ -157,7 +157,7 @@ public sealed partial class MainWindow : Window
         // First-run onboarding overlay: shown until completed/skipped (x:Bind isn't available
         // on a Window root, so drive visibility from the VM here).
         UpdateOnboardingVisibility();
-        UpdateAdminVisibility();
+        UpdateManageVisibility();
         UpdateNetworkGateBar();
         Account.PropertyChanged += (_, e) =>
         {
@@ -168,9 +168,9 @@ public sealed partial class MainWindow : Window
                 // when the overlay closes — otherwise a gate armed during onboarding stays down.
                 UpdateNetworkGateBar();
             }
-            else if (e.PropertyName == nameof(AccountViewModel.CanReachAdminPanel))
+            else if (e.PropertyName == nameof(AccountViewModel.CanReachManagePanel))
             {
-                UpdateAdminVisibility();
+                UpdateManageVisibility();
             }
             else if (e.PropertyName == nameof(AccountViewModel.NetworkGateActive))
             {
@@ -240,15 +240,17 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>Show the Admin tab while /me reports the user can reach any panel surface —
-    /// a global grant, community Admin, or network Admin. If that disappears (sign-out,
-    /// grant revoked) while the tab is open, bounce to Seed.
-    /// <para>This gated on a <i>global</i> grant until 0.4.1, which hid the tab from every
-    /// community admin — the people the server-management surface is for.</para></summary>
-    private void UpdateAdminVisibility()
+    /// <summary>Show the Manage tab while /me reports the user can reach any panel surface —
+    /// a global grant, community Admin, network Admin, or an <b>operator</b>. If that
+    /// disappears (sign-out, grant revoked) while the tab is open, bounce to Seed.
+    /// <para>Widened twice: it gated on a <i>global</i> grant until 0.4.1, hiding it from
+    /// every community admin, then on the manage flags, which still hid it from operators
+    /// — who answer ready checks and toggle servers, both of which the panel serves.</para>
+    /// </summary>
+    private void UpdateManageVisibility()
     {
-        var reachable = Account.CanReachAdminPanel;
-        AdminNavItem.Visibility = reachable ? Visibility.Visible : Visibility.Collapsed;
+        var reachable = Account.CanReachManagePanel;
+        ManageNavItem.Visibility = reachable ? Visibility.Visible : Visibility.Collapsed;
         if (!reachable && ContentFrame.CurrentSourcePageType == typeof(Views.AdminPage))
         {
             NavView.SelectedItem = SeedNavItem;

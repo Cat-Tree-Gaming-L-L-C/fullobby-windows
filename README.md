@@ -9,6 +9,12 @@ connect / server query support on the way.
 
 Built by [Cat Tree Gaming L.L.C.](https://github.com/Cat-Tree-Gaming-L-L-C). Native C# + WinUI 3 — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## Guides
+
+- **[User guide](docs/USER-GUIDE.md)** — install, join a network, seed. Start here.
+- **[Operator guide](docs/OPERATOR-GUIDE.md)** — answering ready checks and keeping your community's servers in the rotation.
+- **[Admin guide](docs/ADMIN-GUIDE.md)** — running a community: servers, staff, your Discord, schedules.
+
 ## Download
 
 Grab the latest installer (`Fullobby-Setup-<ver>.exe`) from [GitHub Releases](https://github.com/Cat-Tree-Gaming-L-L-C/fullobby-windows/releases).
@@ -177,6 +183,9 @@ src/
   Fullobby.Core.Tests/  xUnit tests
 tools/Fullobby.MockApi/ Local mock API for offline dev
 installer/                Inno Setup script
+docs/USER-GUIDE.md        Player guide (install, join, seed)
+docs/OPERATOR-GUIDE.md    Community Operator guide (ready checks)
+docs/ADMIN-GUIDE.md       Community Admin guide (servers, staff, Discord)
 docs/ARCHITECTURE.md      Architecture reference
 ```
 

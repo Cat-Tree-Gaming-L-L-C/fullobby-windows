@@ -81,14 +81,15 @@ public class ApiModelsTests
         Assert.Null(u.SteamId);
         // A user the server said nothing about reaches nothing.
         Assert.False(u.IsAdmin);
+        Assert.False(u.CanOperateServers);
         Assert.False(u.CanManageServers);
         Assert.False(u.CanManageNetworks);
     }
 
     /// <summary>
-    /// The Admin tab is gated on these, so a naming mismatch would not throw — it would
-    /// silently deserialize to false and hide the tab from exactly the people this
-    /// release exists to let in. Pin the wire names.
+    /// The Manage tab is gated on these, so a naming mismatch would not throw — it would
+    /// silently deserialize to false and hide the tab from exactly the people each
+    /// widening exists to let in. Pin the wire names.
     /// </summary>
     [Fact]
     public void UserInfo_ScopedReachFlags_MapFromSnakeCase()
@@ -96,10 +97,24 @@ public class ApiModelsTests
         var u = Parse<UserInfo>(
             """
             {"user_id":"3","username":"vidaro","is_admin":false,
-             "can_manage_servers":true,"can_manage_networks":false}
+             "can_operate_servers":true,"can_manage_servers":true,"can_manage_networks":false}
             """);
         Assert.False(u.IsAdmin);
+        Assert.True(u.CanOperateServers);
         Assert.True(u.CanManageServers);
+        Assert.False(u.CanManageNetworks);
+    }
+
+    /// <summary>An operator manages nothing and operates something — the case the Manage
+    /// tab used to hide from, and the reason it is gated on the wider flag.</summary>
+    [Fact]
+    public void UserInfo_OperatorOperatesButDoesNotManage()
+    {
+        var u = Parse<UserInfo>(
+            """{"user_id":"7","username":"op","can_operate_servers":true}""");
+        Assert.False(u.IsAdmin);
+        Assert.True(u.CanOperateServers);
+        Assert.False(u.CanManageServers);
         Assert.False(u.CanManageNetworks);
     }
 
