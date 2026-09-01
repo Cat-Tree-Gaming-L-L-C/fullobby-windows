@@ -1,7 +1,7 @@
 {
-  "version": "0.4.1",
-  "download_url": "https://github.com/Cat-Tree-Gaming-L-L-C/fullobby-windows/releases/download/v0.4.1/Fullobby-Setup-0.4.1.exe",
-  "notes": "Fullobby 0.4.1\n\nThe Admin tab now appears if you administer a community or a network, not only\nif you hold a platform-wide grant. If you run your community's servers, you can\nmanage them from the app again — previously the tab stayed hidden and the panel\ntold you to ask an admin for access you already had.\n\nNothing else changes in this build.",
-  "sha256": "43fc5b9a8a8e14e8c82ae6182733162c4338c79680455532abebbf1632599e12",
-  "signature": "MEUCIQDACeuukeYa67Ony/hK3sL2C47Y+gXDscIohCeQ4OkecgIgGaZhQf9YyiIsbiY6H6k8n4pGbtNIBSyjryV5pu6d4SY="
+  "version": "0.4.2",
+  "download_url": "https://github.com/Cat-Tree-Gaming-L-L-C/fullobby-windows/releases/download/v0.4.2/Fullobby-Setup-0.4.2.exe",
+  "notes": "Fullobby 0.4.2\n\nIf you help run a community's servers, there's now a Manage tab in the app —\ntoday's rotation, what's seeding right now, and your servers' settings. It's\nopen to operators too, not just admins.\n\nReady checks now reach you as a desktop notification, so a server no longer\nloses its place in the rotation just because a Discord DM went unseen. You can\nanswer them from the app, and none of it needs Discord any more.\n\nNew guides for players, operators and admins are linked from the README.",
+  "sha256": "a3dc990889a71cabceb9f461df345acb5fbbab6445db53c41f7868d3d9a3a625",
+  "signature": "MEUCIQDv6RiAV+4TjM9u/FIPylVUgOf57PjoHmY3huKoJbNDHQIgGM3UrweAIt7eBrcHkkeb2wYSJOwQECkRTZTyKLmu6VI="
 }
