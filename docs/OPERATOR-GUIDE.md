@@ -83,7 +83,7 @@ Not restrictions on you personally, just the boundary of the operator level:
 - Register the hub channel, map Discord roles, move the community's Discord →
   your Community Admin
 - The network's join code, its seeding hours, pausing it, rotation order across
-  communities → the network's operator (Cat Tree, for the PF network)
+  communities → an Admin of the community that owns the network
 
 ## When something looks wrong
 

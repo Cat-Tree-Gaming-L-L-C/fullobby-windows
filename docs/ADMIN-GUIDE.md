@@ -147,19 +147,36 @@ network join <name> <code>           redeem a join code
 network leave                        detach — your servers stop rotating
 ```
 
-Membership is a handshake, not a lock-in: the network's operator issues a code,
+Membership is a handshake, not a lock-in: a network admin issues a code,
 you redeem it, and joining another network moves you. Leaving is yours to do.
 
-## Not yours
+## Network-level settings
 
-These belong to whoever operates the network. For the PF network that's Cat Tree
-Gaming:
+These sit above your community, on the network itself. If your community **owns**
+the network, they're yours — you hold Network Admin automatically, and you drive
+them from Discord with `/network ...`. If another community owns it, they belong
+to that community's Admins.
 
-- The network's join code — rotating or disabling it
+- The network's join code — `/network code rotate` to set or replace it,
+  `/network code show` for its standing, `/network code disable` to close joining
 - Pausing or resuming the network
 - The network's seeding hours and daily reset hour
 - Rotation order across member communities
 - Moving a server to a different community
+
+### Join codes are write-only
+
+Nobody can read an existing code back, including you — they're stored only as
+hashes. `/network code show` reports whether joining is on and when the code was
+last rotated, never the code itself.
+
+The plaintext appears **exactly once**, in the ephemeral reply to
+`/network code rotate`. Put it somewhere your staff can find it before you dismiss
+that message. If it's lost, rotating again is the only way to get a working code:
+that invalidates the old one, but existing members keep their membership.
+
+## Not yours
+
 - Global client-version gating and platform config
 
 ## Troubleshooting
