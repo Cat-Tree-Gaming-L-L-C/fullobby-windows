@@ -82,8 +82,10 @@ Not restrictions on you personally, just the boundary of the operator level:
 - Appoint or remove staff → your Community Admin
 - Register the hub channel, map Discord roles, move the community's Discord →
   your Community Admin
-- The network's join code, its seeding hours, pausing it, rotation order across
-  communities → a Network Admin (a role in the network's own Discord)
+- *Changing* the network's join code, its seeding hours, pausing it, rotation
+  order across communities → a Network Admin (a role in the network's own
+  Discord). You can **read** the join code yourself with
+  `/network code show <network>` — you're the one handing it to players.
 
 ## When something looks wrong
 

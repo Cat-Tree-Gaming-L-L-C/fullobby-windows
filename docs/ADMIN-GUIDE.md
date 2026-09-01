@@ -165,16 +165,20 @@ network's Discord. If you hold Network Admin you drive these from Discord with
 - Rotation order across member communities
 - Moving a server to a different community
 
-### Join codes are write-only
+### Reading a join code
 
-Nobody can read an existing code back, including you — they're stored only as
-hashes. `/network code show` reports whether joining is on and when the code was
-last rotated, never the code itself.
+`/network code show <network>` prints the current code, along with whether
+joining is open and when it was last rotated. Reading it takes Operator or Admin
+**on the network, or in any community that has joined it** — deliberately wider
+than rotating, because the people onboarding players are usually member
+communities' staff rather than network staff.
 
-The plaintext appears **exactly once**, in the ephemeral reply to
-`/network code rotate`. Put it somewhere your staff can find it before you dismiss
-that message. If it's lost, rotating again is the only way to get a working code:
-that invalidates the old one, but existing members keep their membership.
+Rotating stays Admin-only, and still retires the code in circulation. So reach
+for `show` when someone has simply lost the code, and `rotate` only when it has
+actually leaked or you want to close the door on whoever has it.
+
+Codes set before this landed have no readable copy and say so; rotating once
+issues one that can be read back afterwards.
 
 ## Not yours
 
