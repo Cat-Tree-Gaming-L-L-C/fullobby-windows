@@ -83,7 +83,7 @@ Not restrictions on you personally, just the boundary of the operator level:
 - Register the hub channel, map Discord roles, move the community's Discord →
   your Community Admin
 - The network's join code, its seeding hours, pausing it, rotation order across
-  communities → an Admin of the community that owns the network
+  communities → a Network Admin (a role in the network's own Discord)
 
 ## When something looks wrong
 

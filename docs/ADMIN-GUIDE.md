@@ -152,10 +152,11 @@ you redeem it, and joining another network moves you. Leaving is yours to do.
 
 ## Network-level settings
 
-These sit above your community, on the network itself. If your community **owns**
-the network, they're yours — you hold Network Admin automatically, and you drive
-them from Discord with `/network ...`. If another community owns it, they belong
-to that community's Admins.
+These sit above your community, on the network itself. Network authority is its
+**own scope**, granted by roles in the network's own Discord — no community
+confers it, including one whose servers fill the rotation or one that hosts the
+network's Discord. If you hold Network Admin you drive these from Discord with
+`/network ...`; otherwise they belong to whoever does.
 
 - The network's join code — `/network code rotate` to set or replace it,
   `/network code show` for its standing, `/network code disable` to close joining
