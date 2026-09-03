@@ -80,11 +80,18 @@ public sealed partial class MainWindow : Window
             presenter.IsMaximizable = true;
         }
 
-        // Native Mica material as the window base. The brand surfaces sit on top as
-        // solid layers; the deep, slightly translucent backdrop gives the dark
-        // palette a premium native feel. Windows 11 is the only supported platform
-        // (decision 2026-08-12), and it always supports Mica — no fallback.
-        SystemBackdrop = new MicaBackdrop { Kind = MicaKind.BaseAlt };
+        // Native Mica material as the window base (Win11). The brand surfaces sit on
+        // top as solid layers; the deep, slightly translucent backdrop gives the
+        // dark palette a premium native feel. On Win10 (or anywhere Mica is
+        // unsupported) we fall back to a solid brand background.
+        if (MicaController.IsSupported())
+        {
+            SystemBackdrop = new MicaBackdrop { Kind = MicaKind.BaseAlt };
+        }
+        else
+        {
+            RootGrid.Background = (Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"];
+        }
 
         // Size in logical units once the XAML root (and its DPI scale) exists. A "Start with
         // Windows" launch never activates the window, so this does not run at startup — it runs
