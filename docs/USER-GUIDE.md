@@ -9,7 +9,7 @@ the app — see [OPERATOR-GUIDE.md](OPERATOR-GUIDE.md) or
 
 ## What you need
 
-- **Windows 11.** Windows 10 is not supported; the installer refuses to run on it.
+- **Windows 10 (version 2004 / build 19041) or Windows 11.**
 - **Steam, with Hell Let Loose installed.** The app launches your existing copy.
 - **A network name and join code**, from the community that invited you. Fullobby
   is in limited beta and seeding happens inside networks — the app can't finish
@@ -117,7 +117,7 @@ verified against a signed manifest before it runs — see
 | "That network name or code isn't valid" | The message is deliberately vague so codes can't be guessed at. Check the name, re-paste the code with its dashes. Still failing? Ask staff to rotate it — codes are stored hashed and nobody can read yours back. |
 | Nothing to seed | Outside the network's hours, or every server is already full. The app says which. |
 | Signed in but nothing works / no permissions | You're probably on a different account than the one holding your access — see below. |
-| Installer won't run | Windows 11 is required. There's no workaround. |
+| Installer won't run | Windows 10 build 19041 (version 2004) or newer is required. Check Winver. |
 | SmartScreen warning | Expected. **More info → Run anyway**; don't disable Defender. |
 
 ### "I had permissions and now I don't"

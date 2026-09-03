@@ -45,9 +45,11 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-; Windows 11 only (decision 2026-08-12): refuse Win10 installs at the door
-; rather than shipping accommodations (e.g. a WebView2 runtime bootstrap).
-MinVersion=10.0.22000
+; Windows 10 2004 (19041) is the floor, matching the csproj min platform version.
+; Note: Win10 does not ship the WebView2 runtime, so the Admin tab degrades to an
+; install-the-runtime message there (AdminPage handles this) unless the installer
+; grows a WebView2 bootstrap.
+MinVersion=10.0.19041
 ; Gracefully close a running Fullobby (Restart Manager) before updating
 CloseApplications=yes
 RestartApplications=no

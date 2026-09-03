@@ -38,3 +38,44 @@ jobs:
         with:
           name: Fullobby-Setup
           path: installer/Output/*.exe
+
+  downlevel:
+    name: Build & Test (sub-Win11)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+
+      # The windows-2022 image is build 20348: above our 10.0.19041 floor but
+      # below the 22000 Win11 line. That makes it the closest a GitHub-hosted
+      # runner gets to Windows 10, and it is the only leg where the downlevel
+      # branches actually execute -- MicaController.IsSupported() is false, so
+      # MainWindow takes the solid-background fallback, and
+      # Win11Input.IsWindows11OrLater() is false, so SeedingEngine takes the
+      # PostMessage-only input path.
+      #
+      # The whole point of this leg is the build number, and nothing else in CI
+      # would notice if GitHub re-based the image onto 22000+ -- the leg would
+      # keep passing while silently covering nothing. So assert the range.
+      - name: Assert runner is sub-Win11
+        shell: pwsh
+        run: |
+          $build = [Environment]::OSVersion.Version.Build
+          Write-Host "Runner OS build: $build"
+          if ($build -lt 19041 -or $build -ge 22000) {
+            Write-Error "Expected a sub-Win11 runner in [19041, 22000), got $build. This leg no longer covers the Windows 10 code path -- pin a different image or drop the job."
+            exit 1
+          }
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore src/Fullobby.sln
+
+      - name: Build (Release)
+        run: dotnet build src/Fullobby.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test src/Fullobby.Core.Tests -c Release --no-build
