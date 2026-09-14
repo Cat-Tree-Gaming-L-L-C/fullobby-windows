@@ -531,14 +531,30 @@ public sealed partial class SeedingViewModel : ObservableObject
         {
             IsSeeding = false;
             StartSeedAllCooldown();
-            if (autoSeed && directive.ScheduledPause)
+
+            // A rotation that is merely waiting — the network is inside its hours but every
+            // remaining server is gated on its own later seed window — is a scheduled pause, not
+            // an exhausted day. Current APIs say so (scheduled_pause + next_active_in_secs at the
+            // server window); older ones said "all exhausted". Either way the day boards carry
+            // the window start, so read it from there and name the window — unless the pause is
+            // the network's own hours and those open first, which is the plainer message.
+            var nextWindowTs = NextServerWindowTs();
+            if (nextWindowTs is { } w
+                && directive is { ScheduledPause: true, NextActiveInSecs: { } resumeSecs }
+                && DateTimeOffset.UtcNow.ToUnixTimeSeconds() + resumeSecs < w)
             {
-                await RescheduleAndResleepAsync(directive).ConfigureAwait(true);
+                nextWindowTs = null;
+            }
+            if (autoSeed && (directive.ScheduledPause || nextWindowTs is not null))
+            {
+                await RescheduleAndResleepAsync(directive, nextWindowTs).ConfigureAwait(true);
                 return;
             }
-            SetSeedError(directive.ScheduledPause
-                ? "Seeding is paused — outside the scheduled window."
-                : "All servers are seeded — no seeding needed right now.");
+            SetSeedError(nextWindowTs is { } ts
+                ? $"Nothing to seed yet — the next server window opens at {LocalHm(ts)}."
+                : directive.ScheduledPause
+                    ? "Seeding is paused — outside the scheduled window."
+                    : "All servers are seeded — no seeding needed right now.");
             return;
         }
 
@@ -607,6 +623,13 @@ public sealed partial class SeedingViewModel : ObservableObject
                 }
                 _inAppToast.Info("Seeding paused — outside the scheduled window.");
             }
+            else if (NextServerWindowTs() is { } nextTs)
+            {
+                // Exhausted for now, not for the day: a windowed server is still to come. The
+                // wake set already covers its window (see WakePlanner), so this is just honest.
+                _inAppToast.Success(
+                    $"Seeding done for now — the next server window opens at {LocalHm(nextTs)}.");
+            }
             else
             {
                 _inAppToast.Success("Seeding complete — every server is seeded.");
@@ -629,10 +652,24 @@ public sealed partial class SeedingViewModel : ObservableObject
         _account.OpenNetworkGate();
     }
 
-    /// <summary>An auto-seed wake landed outside every scheduled window: reconcile the wake set
-    /// against the directive's fresh config and ask the host to resleep, so the machine learns a
-    /// moved window and goes back to sleep instead of idling.</summary>
-    private async Task RescheduleAndResleepAsync(SeedingDirective directive)
+    /// <summary>The earliest server seed window still ahead today for the current game, from the
+    /// cached seeding status — or null when none is (or the cache is empty/stale, in which case the
+    /// caller has nothing to promise and falls back to the plain messaging).</summary>
+    private long? NextServerWindowTs() =>
+        ServerWindows.NextOpeningTs(
+            _statusCache.GetCached()?.Networks,
+            _engine.CurrentGame.Id,
+            DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+
+    private static string LocalHm(long unixTs) =>
+        DateTimeOffset.FromUnixTimeSeconds(unixTs).ToLocalTime().ToString("HH:mm");
+
+    /// <summary>An auto-seed wake landed with nothing to seed yet — outside every scheduled window,
+    /// or (<paramref name="nextWindowTs"/> set) inside the hours but ahead of every remaining
+    /// server's own window: reconcile the wake set against the directive's fresh config and the
+    /// cached day boards, then ask the host to resleep, so the machine learns the moved or later
+    /// window and goes back to sleep instead of idling.</summary>
+    private async Task RescheduleAndResleepAsync(SeedingDirective directive, long? nextWindowTs = null)
     {
         try
         {
@@ -656,8 +693,20 @@ public sealed partial class SeedingViewModel : ObservableObject
             var (h, m) = AutoSeedService.WakeTimeUtc(directive.Config);
             armed = $"{h:D2}:{m:D2} UTC";
         }
-        _log.LogInformation("Auto-seed outside the window; re-armed for {Armed}, resleeping", armed);
-        SetSeedError($"Outside the seed window — re-armed for {armed}. Your computer will sleep and wake for it.");
+        if (nextWindowTs is { } ts)
+        {
+            _log.LogInformation(
+                "Auto-seed ahead of the next server window ({Next}); re-armed for {Armed}, resleeping",
+                LocalHm(ts), armed);
+            SetSeedError(
+                $"Nothing to seed yet — the next server window opens at {LocalHm(ts)}. " +
+                $"Re-armed for {armed}; your computer will sleep and wake for it.");
+        }
+        else
+        {
+            _log.LogInformation("Auto-seed outside the window; re-armed for {Armed}, resleeping", armed);
+            SetSeedError($"Outside the seed window — re-armed for {armed}. Your computer will sleep and wake for it.");
+        }
         ResleepRequested?.Invoke();
     }
 

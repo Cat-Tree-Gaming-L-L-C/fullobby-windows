@@ -32,6 +32,11 @@ rotation**. Answered late, it goes to the back of the queue.
 They only exist for servers that have a **seed window**. A server without one is
 always eligible and never produces a check.
 
+Answering a check confirms the server; it does **not** start anyone's game. Seeders'
+clients launch on their own auto-seed wakes (which include your server's window
+start) or when someone presses Seed, and the rotation hands them your server once
+its window is open.
+
 A check opens **30 minutes before** the window. You can answer it three ways, and
 any one of them settles it:
 

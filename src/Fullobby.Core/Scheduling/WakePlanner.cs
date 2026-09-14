@@ -9,8 +9,9 @@ namespace Fullobby.Core.Scheduling;
 /// (docs/PER-TENANT-SCHEDULING.md, "one wake, many tenants").
 /// </summary>
 /// <param name="TimeUtc">The daily wake time (UTC).</param>
-/// <param name="NetworkIds">Networks whose windows cover this wake (sorted, distinct). Empty when
-/// the wake is derived from the fleet-wide config with no membership attribution.</param>
+/// <param name="NetworkIds">Networks that justify this wake — their hours open at it, or one of
+/// their servers' seed windows does (sorted, distinct). Empty when the wake is derived from the
+/// fleet-wide config with no membership attribution.</param>
 /// <param name="MissedWindowHours">How long past the wake the missed-seed watchdog may still fire.
 /// The maximum across the justifying networks: the watchdog guards the machine having slept
 /// through a wake, so the most patient tenant's window governs.</param>
@@ -27,9 +28,11 @@ public sealed record WakePlan(IReadOnlyList<PlannedWake> Wakes, IReadOnlyList<Pl
 
 /// <summary>
 /// Pure derivation of the daily wake set from per-network schedule boundaries, with the fleet-wide
-/// <see cref="SeedingConfig"/> as fallback. Until the backend exposes per-network windows
-/// (<see cref="NetworkSeedingStatus.ActiveWindows"/> stays null everywhere) this collapses to
-/// exactly the single server-derived wake the client has always kept.
+/// <see cref="SeedingConfig"/> as fallback, plus one wake per server seed window on the day boards
+/// (<see cref="ServerWindows"/>). Until the backend exposes per-network windows
+/// (<see cref="NetworkSeedingStatus.ActiveWindows"/> stays null everywhere) the network part
+/// collapses to exactly the single server-derived wake the client has always kept; the server
+/// windows are live today, because the day boards already carry them.
 /// </summary>
 public static class WakePlanner
 {
@@ -43,11 +46,21 @@ public static class WakePlanner
     /// <summary>
     /// Derive the wake set.
     ///
-    /// Per network: its own windows when sent; the fleet windows when it omits them (permanent
-    /// fallback, not transitional). An empty window list means "always active", which needs the
-    /// machine up from the daily reset hour. Wakes are deduplicated by time — two networks opening
-    /// at 06:00 produce one wake justified by both. When no network reports boundaries at all (or
-    /// there are no memberships) the result is the single unattributed fleet wake.
+    /// Two kinds of boundary feed it, merged by time:
+    /// <list type="bullet">
+    /// <item><b>Network hours.</b> Per network: its own windows when sent; the fleet windows when it
+    /// omits them (permanent fallback, not transitional). An empty window list means "always
+    /// active", which needs the machine up from the daily reset hour. When no network reports
+    /// boundaries at all (or there are no memberships) this part is the single unattributed fleet
+    /// wake.</item>
+    /// <item><b>Server windows.</b> Every windowed server on a network's day boards adds a wake at
+    /// its daily window start, justified by that network (<see cref="ServerWindows"/>). Without
+    /// these, a client wakes at the network's opening, finds every remaining server still gated on
+    /// its own later window, is told "all exhausted", and sleeps through the window it was meant
+    /// to fill.</item>
+    /// </list>
+    /// Wakes are deduplicated by time — two networks opening at 06:00, or a server window that
+    /// coincides with a network opening, produce one wake justified by all of them.
     ///
     /// Wakes beyond <paramref name="maxWakes"/> are dropped earliest-time-first-kept — deterministic
     /// and inspectable via <see cref="WakePlan.Dropped"/>.
@@ -56,33 +69,58 @@ public static class WakePlanner
         IReadOnlyList<NetworkSeedingStatus>? networks, SeedingConfig fleet, int maxWakes = MaxWakes)
     {
         networks ??= [];
+
+        // time → (ids, missed-hours max). An empty id set is the unattributed fleet wake.
+        var byTime = new SortedDictionary<TimeOnly, (SortedSet<long> Ids, int MissedHours)>();
+        void Add(TimeOnly time, long? networkId, int missedHours)
+        {
+            if (byTime.TryGetValue(time, out var existing))
+            {
+                if (networkId is { } id)
+                {
+                    existing.Ids.Add(id);
+                }
+                byTime[time] = (existing.Ids, Math.Max(existing.MissedHours, missedHours));
+            }
+            else
+            {
+                var ids = new SortedSet<long>();
+                if (networkId is { } id)
+                {
+                    ids.Add(id);
+                }
+                byTime[time] = (ids, missedHours);
+            }
+        }
+
         if (networks.Count == 0 || networks.All(n => n.ActiveWindows is null))
         {
             // Dormant mode: no per-network boundaries anywhere — the single fleet wake,
             // unattributed, exactly as before per-tenant scheduling.
             var (h, m) = FleetWakeTimeUtc(fleet);
-            return new WakePlan(
-                [new PlannedWake(new TimeOnly(h, m), [], Math.Max(1, fleet.MissedAutoseedWindowHours))],
-                []);
+            Add(new TimeOnly(h, m), null, Math.Max(1, fleet.MissedAutoseedWindowHours));
+        }
+        else
+        {
+            foreach (var network in networks)
+            {
+                var windows = network.ActiveWindows ?? fleet.ActiveWindows;
+                var missedHours = MissedHoursFor(network, fleet);
+                foreach (var time in NetworkWakeTimes(windows, network.DailyResetHourUtc ?? fleet.DailyResetHourUtc))
+                {
+                    Add(time, network.NetworkId, missedHours);
+                }
+            }
         }
 
-        // time → (ids, missed-hours max)
-        var byTime = new SortedDictionary<TimeOnly, (SortedSet<long> Ids, int MissedHours)>();
+        // Server windows ride on whichever mode is active: the boards arrive with every status
+        // push today, independent of the per-network schedule fields.
         foreach (var network in networks)
         {
-            var windows = network.ActiveWindows ?? fleet.ActiveWindows;
-            var missedHours = Math.Max(1, network.MissedAutoseedWindowHours ?? fleet.MissedAutoseedWindowHours);
-            foreach (var time in NetworkWakeTimes(windows, network.DailyResetHourUtc ?? fleet.DailyResetHourUtc))
+            var missedHours = MissedHoursFor(network, fleet);
+            foreach (var time in ServerWindows.StartTimesUtc(network))
             {
-                if (byTime.TryGetValue(time, out var existing))
-                {
-                    existing.Ids.Add(network.NetworkId);
-                    byTime[time] = (existing.Ids, Math.Max(existing.MissedHours, missedHours));
-                }
-                else
-                {
-                    byTime[time] = (new SortedSet<long> { network.NetworkId }, missedHours);
-                }
+                Add(time, network.NetworkId, missedHours);
             }
         }
 
@@ -91,6 +129,9 @@ public static class WakePlanner
             .ToList();
         return new WakePlan(all.Take(maxWakes).ToList(), all.Skip(maxWakes).ToList());
     }
+
+    private static int MissedHoursFor(NetworkSeedingStatus network, SeedingConfig fleet) =>
+        Math.Max(1, network.MissedAutoseedWindowHours ?? fleet.MissedAutoseedWindowHours);
 
     /// <summary>One network's wake times: each window's start, or the daily reset hour when the
     /// window list is empty (always active — the machine still has to be up for the day's cycle).</summary>
