@@ -256,6 +256,22 @@ questions. Code map: `WakePlanner` (pure wake-set derivation),
 - **Timezone presentation** stays point-in-time: each wake displays via the
   existing `AutoSeedTime.UtcToLocalDisplay`. Range presentation is a picker
   problem, deferred with the picker.
+- **Server seed windows are wakes too.** Network hours say when a
+  rotation runs; a server's own window says when *it* may be seeded, usually
+  later, and the API answered `all_exhausted` (not `scheduled_pause`) while the
+  network is inside its hours but every remaining server is window-gated (fixed
+  API-side in the same change; the client no longer depends on it). A
+  client that woke only for the network opening therefore seeded nothing, read
+  "all servers are seeded", and slept through the window it existed to fill.
+  `WakePlanner` now also adds one daily wake per distinct
+  `ServerDayStatus.WindowStartTs` on a network's day boards (`ServerWindows`),
+  attributed to that network with its missed-window hours, merged by time with
+  the network wakes and counted against the cap. The boards carry the window
+  start all day (the API computes it from the server's configured window, not
+  from the ready-check row), so this is live in dormant mode. The view model
+  uses the same helper to say "nothing to seed yet — next server window opens
+  at HH:MM" instead of "all seeded", and an auto-seed launch in that state
+  re-arms and resleeps exactly like a scheduled pause.
 - **Mock API** serves the per-network fields (off by default = dormant wire
   shape); `POST /__mock/schedule` with e.g.
   `{"active_windows":[{"start_min":360,"end_min":540}]}` lights them up and

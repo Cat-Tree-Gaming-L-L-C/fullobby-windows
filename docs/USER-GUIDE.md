@@ -89,8 +89,13 @@ already above its target — both are the system working.
 
 The app can wake your machine and start seeding at the right time. The wake times
 come from your networks' seeding hours, so a network that seeds 12:00–16:00 UTC
-produces a wake at 12:00 UTC. If you're in several networks, one wake can cover
-more than one.
+produces a wake at 12:00 UTC, and from any seed windows set on individual servers,
+so a server whose window opens at 14:30 UTC produces a wake then too. If you're
+in several networks, one wake can cover more than one.
+
+Waking early is normal: if the app comes up and every remaining server is still
+waiting for its own window, it says "Nothing to seed yet — the next server window
+opens at HH:MM", re-arms, and lets the machine sleep until then.
 
 If the machine slept through a wake, a watchdog can still fire the seed for a
 while afterwards.
