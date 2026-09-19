@@ -111,12 +111,12 @@ public sealed class UserInfo
     /// <summary>Whether the user holds a <b>global</b> Admin grant (server-computed from
     /// the grants system, independent of which provider they signed in with).
     /// <para>This is NOT the gate for the Manage tab — see <see cref="CanOperateServers"/>.
-    /// Gating on it locked out every community admin, who is precisely who the server
+    /// Gating on it locked out every org admin, who is precisely who the server
     /// management surface exists for.</para></summary>
     public bool IsAdmin { get; set; }
 
     /// <summary>Whether this user may reach the server-management surface at all: a global
-    /// grant, or Admin over at least one community. The server computes it with the same
+    /// grant, or Admin over at least one org. The server computes it with the same
     /// rule its own endpoints enforce, so this flag and a 403 cannot disagree.</summary>
     public bool CanManageServers { get; set; }
 
@@ -124,7 +124,7 @@ public sealed class UserInfo
     /// <b>Operator</b> may do there: enable/disable a server, and set its seed window.
     /// A superset of <see cref="CanManageServers"/> — every admin operates too.
     ///
-    /// <para>This is the gate for the Manage tab. Operators run a community's servers day
+    /// <para>This is the gate for the Manage tab. Operators run an org's servers day
     /// to day and answer its ready checks; gating on the <c>CanManage*</c> flags hid the
     /// tab from them, and their only remaining route to those jobs was Discord.</para>
     /// </summary>
@@ -276,7 +276,7 @@ public sealed class ServerDayStatus
     public long DbId { get; set; }
     public string Name { get; set; } = "";
     public string ShortName { get; set; } = "";
-    public string? CommunityTag { get; set; }
+    public string? OrgTag { get; set; }
     public DayStatus Status { get; set; }
     public int? PlayerCount { get; set; }
     public int Threshold { get; set; }
@@ -338,8 +338,8 @@ public sealed class NetworkSeedingStatus
 }
 
 /// <summary>The user's membership in a seeding network (an alliance running one rotation over
-/// its member communities' servers — networks are their own entity server-side, distinct from
-/// the communities that administer servers). Ordered by <see cref="Priority"/> (lower =
+/// its member orgs' servers — networks are their own entity server-side, distinct from
+/// the orgs that administer servers). Ordered by <see cref="Priority"/> (lower =
 /// preferred).</summary>
 /// <summary>A ready check waiting on this user, from <c>GET /api/seeding/ready-checks</c>.
 /// Only checks the caller may answer and that are still open are listed.</summary>
@@ -348,8 +348,8 @@ public sealed class ReadyCheckNotice
     public long ReadyCheckId { get; set; }
     public string ServerName { get; set; } = "";
     public string ShortName { get; set; } = "";
-    /// <summary>Tag of the community that operates the server — the ready check is theirs.</summary>
-    public string? CommunityTag { get; set; }
+    /// <summary>Tag of the org that operates the server — the ready check is theirs.</summary>
+    public string? OrgTag { get; set; }
     public long NetworkId { get; set; }
     /// <summary>"pending" (created, nobody told yet) or "notified" (a DM went out).</summary>
     public string State { get; set; } = "";

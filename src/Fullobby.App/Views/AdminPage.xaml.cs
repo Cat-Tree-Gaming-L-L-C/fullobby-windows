@@ -20,8 +20,8 @@ namespace Fullobby.App.Views;
 /// untouched.
 ///
 /// Because the panel is embedded rather than reimplemented, it also decides what
-/// each tier sees once loaded: a community Admin gets the Servers tab for their
-/// own community's servers, a network Admin gets Networks. The client only
+/// each tier sees once loaded: an org Admin gets the Servers tab for their
+/// own org's servers, a network Admin gets Networks. The client only
 /// decides whether the door exists.
 /// </summary>
 public sealed partial class AdminPage : Page

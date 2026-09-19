@@ -72,7 +72,7 @@ section below.
 |---|---|
 | Seeding state machine | `Core.Seeding.SeedingEngine` (+ `SeedingState`, `SeedingEvent`) |
 | API client | `Core.Api.SeedingApiClient`, `Models`/`ApiJson`, `RetryPolicy`/`ResilienceHandler`, `AuthHandler` + `AuthRefresher` + `AuthHeaders` |
-| Seeding networks | Multi-tenant communities (limited-beta gate): membership via `SeedingApiClient` (`JoinNetworkAsync`/`GetMyNetworksAsync`/`LeaveNetworkAsync`/`SetNetworkPrioritiesAsync`), state + hard gate in `AccountViewModel` (onboarding network step; re-armed portal on session restore with zero memberships or a `join_a_network` directive — fails open on fetch errors). Seeding status is per network (`NetworkSeedingStatus`); the seed board flattens/groups by network. Join codes are sent and forgotten — never stored client-side. |
+| Seeding networks | Multi-tenant orgs (limited-beta gate): membership via `SeedingApiClient` (`JoinNetworkAsync`/`GetMyNetworksAsync`/`LeaveNetworkAsync`/`SetNetworkPrioritiesAsync`), state + hard gate in `AccountViewModel` (onboarding network step; re-armed portal on session restore with zero memberships or a `join_a_network` directive — fails open on fetch errors). Seeding status is per network (`NetworkSeedingStatus`); the seed board flattens/groups by network. Join codes are sent and forgotten — never stored client-side. |
 | Live stats / SSE | `Core.Api.SseStreamClient : IHostedService` + `SseFrameParser`, `SseConnectionState`, `SeedingStatusCache`, `Core.Servers.LiveStats` |
 | Config | `Core.Config.ConfigService` (STJ store, atomic temp+rename, 500ms throttle, DPAPI secrets, `icacls` hardening; no legacy-dir migration) + `Core.Security.DpapiProtector`, `Core.Config.AtomicFile`, `Core.Config.EfficiencyPreference` (per-game power-savings key `efficiency_mode.<gameId>`; one-time migration off the retired global toggle) |
 | Steam / process | `Core.Native.SteamLauncher`, `ProcessMonitor`, `SteamPaths` |
@@ -109,7 +109,14 @@ section below.
 
 ## ⚠ Cross-repo coordination (outside this repo)
 
-These depend on the `seeding-api` backend / release infra and can't be verified from this repo:
+These depend on the `fullobby-api` backend / release infra and can't be verified from this repo:
+
+- **Org vocabulary (0.4.3, breaking wire change).** The backend renamed *community* to
+  *org* everywhere: `community_tag` → `org_tag` on `ServerDayStatus` and `ReadyCheckNotice`,
+  `community_id` → `org_id` on grants, and `/api/communities` → `/api/orgs` (this client never
+  called the old path). Models, mock API and guides follow. Discord roles are no longer a
+  permission source on the backend — grants are explicit — so the guides no longer mention
+  role mappings.
 
 - OAuth redirect target must be `fullobby://` (auth + provider-link callbacks).
 - API base host `https://api.fullobby.com` (configurable via the `api_host` config key).

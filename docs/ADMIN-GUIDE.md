@@ -1,6 +1,6 @@
 # Fullobby — admin guide
 
-For **Community Admins**: you run your community on Fullobby. Your servers, your
+For **Org Admins**: you run your org on Fullobby. Your servers, your
 staff, your Discord, your schedule — configured by you, without asking anyone.
 
 Read [USER-GUIDE.md](USER-GUIDE.md) for install and sign-in, and
@@ -10,16 +10,16 @@ Read [USER-GUIDE.md](USER-GUIDE.md) for install and sign-in, and
 
 Three levels, and knowing which you're touching saves a lot of confusion:
 
-- A **server** is one game server, administered by exactly one community.
-- A **community** is you: your servers, your staff, your Discord.
+- A **server** is one game server, administered by exactly one org.
+- A **org** is you: your servers, your staff, your Discord.
 - A **network** is an alliance running **one rotation** over its member
-  communities' servers, on its own schedule. It's the thing a customer buys. Your
-  community belongs to at most one at a time.
+  orgs' servers, on its own schedule. It's the thing a customer buys. Your
+  org belongs to at most one at a time.
 
-Permissions are a **level** (operator / admin) × a **scope** (community, network,
-global). You're `admin` scoped to your community.
+Permissions are a **level** (operator / admin) × a **scope** (org, network,
+global). You're `admin` scoped to your org.
 
-Network authority reaches no member community's servers, and community authority
+Network authority reaches no member org's servers, and org authority
 reaches no network setting. That's enforced, not a convention.
 
 > **Everything resolves through your Discord identity.** Grants attach to a
@@ -33,14 +33,14 @@ Neither requires the other.
 
 ### The panel — [api.fullobby.com/admin](https://api.fullobby.com/admin)
 
-Sign in with Discord. As a Community Admin you get two tabs:
+Sign in with Discord. As an Org Admin you get two tabs:
 
 - **Hub** — today's rotation, the current target, the leaderboard, and any ready
   checks with the button to answer them
 - **Servers** — your server list: thresholds, seed windows, enable/disable,
   CRCON keys
 
-The other tabs (Networks, Communities, Grants, Discord, Client versions) are
+The other tabs (Networks, Orgs, Grants, Discord, Client versions) are
 Global-Admin-only and stay hidden.
 
 The desktop app's **Manage** tab opens this same panel in-app, so you don't need
@@ -50,14 +50,14 @@ panel surface, not on being an admin.
 ### The DM console — `/config`
 
 Run `/config` in your own Discord and the bot opens a DM session bound to your
-community. Plain text, one topic per command:
+org. Plain text, one topic per command:
 
 ```
-status   servers   channels   perms   roles   network   guild   slash   leaderboard
+status   servers   channels   perms   network   guild   slash   leaderboard
 ```
 
-`help <topic>` explains any of them. This is where community-level configuration
-lives — your Discord link, hub channel, staff and role mappings.
+`help <topic>` explains any of them. This is where org-level configuration
+lives — your Discord link, hub channel and staff.
 
 ## Procedures
 
@@ -102,12 +102,9 @@ perms grant @user admin      everything in this guide
 perms revoke @user operator
 ```
 
-These are durable server-side grants — role sync never touches them. You need
-Community Admin, or Manage Server in your Discord.
-
-Prefer managing staff by Discord role? `roles` maps a role to a level and the bot
-keeps grants in step with your role assignments. Both approaches coexist: a
-manual grant sits alongside a synced one.
+These are durable server-side grants and the only way someone gets access —
+Discord roles confer nothing. You need Org Admin, or Manage Server in
+your Discord.
 
 The panel's Grants tab is Global-Admin-only, so the DM console is your path here.
 
@@ -129,13 +126,13 @@ ready-check widget — posted once and edited in place on a five-minute refresh.
 
 **Optional.** The panel's Hub tab shows the same information, and answering ready
 checks doesn't need Discord. The exception is `channels ping`, which mentions
-your operator roles — only Discord can mention a Discord role.
+the operators who hold grants in your org — a Discord-only nudge.
 
 ### Moving to a different Discord
 
 DM console → `guild set <server id>`. Invite the bot to the target first; you
-need Manage Server in both. Slash registration and channel slots move with you.
-**Role mappings don't** — role ids don't survive the move, so re-map them after.
+need Manage Server in both. Slash registration and channel slots move with you,
+and so do grants (they attach to people, not to the Discord).
 
 ### Joining or leaving a network
 
@@ -152,8 +149,9 @@ you redeem it, and joining another network moves you. Leaving is yours to do.
 
 ## Network-level settings
 
-These sit above your community, on the network itself. Network authority is its
-**own scope**, granted by roles in the network's own Discord — no community
+These sit above your org, on the network itself. Network authority is its
+**own scope**, granted explicitly (a Global Admin grants it from the panel, or
+`/perms grant @user admin network:<name>` in the network's Discord) — no org
 confers it, including one whose servers fill the rotation or one that hosts the
 network's Discord. If you hold Network Admin you drive these from Discord with
 `/network ...`; otherwise they belong to whoever does.
@@ -162,16 +160,16 @@ network's Discord. If you hold Network Admin you drive these from Discord with
   `/network code show` for its standing, `/network code disable` to close joining
 - Pausing or resuming the network
 - The network's seeding hours and daily reset hour
-- Rotation order across member communities
-- Moving a server to a different community
+- Rotation order across member orgs
+- Moving a server to a different org
 
 ### Reading a join code
 
 `/network code show <network>` prints the current code, along with whether
 joining is open and when it was last rotated. Reading it takes Operator or Admin
-**on the network, or in any community that has joined it** — deliberately wider
+**on the network, or in any org that has joined it** — deliberately wider
 than rotating, because the people onboarding players are usually member
-communities' staff rather than network staff.
+orgs' staff rather than network staff.
 
 Rotating stays Admin-only, and still retires the code in circulation. So reach
 for `show` when someone has simply lost the code, and `rotate` only when it has
@@ -204,4 +202,4 @@ invite stops resolving. That's a network-level fix.
 **An operator can't see the Manage tab.** They should — operators get it, with
 Enable/Disable and Window on each server they operate. If it's missing, they're
 on the wrong account (see the permissions note above) or hold no grant in a
-community that owns servers.
+org that owns servers.
