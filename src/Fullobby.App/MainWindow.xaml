@@ -139,7 +139,7 @@
             Severity="Warning"
             Margin="12,0,12,6"
             Title="Join a seeding network"
-            Message="Fullobby is in limited beta — seeding runs inside community networks. You won't be able to seed until you join one.">
+            Message="Fullobby is in limited beta — seeding runs inside invite-only networks. You won't be able to seed until you join one.">
             <InfoBar.ActionButton>
                 <Button Content="Join a network" Click="NetworkGateJoin_Click" />
             </InfoBar.ActionButton>

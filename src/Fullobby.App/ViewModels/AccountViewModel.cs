@@ -210,7 +210,7 @@ public sealed partial class AccountViewModel : ObservableObject
     /// <summary>Whether to show the embedded Manage tab: the user can reach at least one
     /// surface the panel offers.
     /// <para>Deliberately wider than <see cref="IsAdminUser"/>, and widened twice. It first
-    /// gated on a <i>global</i> grant, hiding the tab from every community Admin — the
+    /// gated on a <i>global</i> grant, hiding the tab from every org Admin — the
     /// people the server surface is built for. It then gated on the <c>CanManage*</c>
     /// flags, which still hid it from <b>operators</b>, whose whole job (answering ready
     /// checks, taking a downed server out of the rotation, setting its seed window) the

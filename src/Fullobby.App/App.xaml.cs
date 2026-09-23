@@ -87,7 +87,7 @@ public partial class App : Application
         AppHost.Services.GetRequiredService<MissedAutoseedMonitor>().AutoseedDue += OnAutoseedDue;
 
         // Tell an operator a ready check is waiting on them. Without this the only notice is the
-        // bot's Discord DM, so a community running no Discord — or an operator with closed DMs —
+        // bot's Discord DM, so an org running no Discord — or an operator with closed DMs —
         // never hears about a check that is blocking their own server from being seeded.
         AppHost.Services.GetRequiredService<ReadyCheckMonitor>().ChecksDue += OnReadyChecksDue;
 

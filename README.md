@@ -12,8 +12,8 @@ Built by [Cat Tree Gaming L.L.C.](https://github.com/Cat-Tree-Gaming-L-L-C). Nat
 ## Guides
 
 - **[User guide](docs/USER-GUIDE.md)** — install, join a network, seed. Start here.
-- **[Operator guide](docs/OPERATOR-GUIDE.md)** — answering ready checks and keeping your community's servers in the rotation.
-- **[Admin guide](docs/ADMIN-GUIDE.md)** — running a community: servers, staff, your Discord, schedules.
+- **[Operator guide](docs/OPERATOR-GUIDE.md)** — answering ready checks and keeping your org's servers in the rotation.
+- **[Admin guide](docs/ADMIN-GUIDE.md)** — running an org: servers, staff, your Discord, schedules.
 
 ## Download
 
@@ -184,8 +184,8 @@ src/
 tools/Fullobby.MockApi/ Local mock API for offline dev
 installer/                Inno Setup script
 docs/USER-GUIDE.md        Player guide (install, join, seed)
-docs/OPERATOR-GUIDE.md    Community Operator guide (ready checks)
-docs/ADMIN-GUIDE.md       Community Admin guide (servers, staff, Discord)
+docs/OPERATOR-GUIDE.md    Org Operator guide (ready checks)
+docs/ADMIN-GUIDE.md       Org Admin guide (servers, staff, Discord)
 docs/ARCHITECTURE.md      Architecture reference
 ```
 

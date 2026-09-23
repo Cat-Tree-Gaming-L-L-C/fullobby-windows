@@ -1,6 +1,6 @@
 # Fullobby — operator guide
 
-For **Community Operators**: the day-to-day role. You keep your community's
+For **Org Operators**: the day-to-day role. You keep your org's
 servers moving through the rotation — above all by answering ready checks.
 
 Read [USER-GUIDE.md](USER-GUIDE.md) first for install and sign-in. If you also
@@ -9,11 +9,11 @@ add servers or appoint staff, you're an Admin — see
 
 ## What you hold
 
-Permissions have a **level** (operator or admin) and a **scope** (a community, a
-network, or global). You're `operator` scoped to your community.
+Permissions have a **level** (operator or admin) and a **scope** (an org, a
+network, or global). You're `operator` scoped to your org.
 
-That means your community's own business: its servers' day-to-day state, and the
-ready checks over them. It does **not** reach another community's servers, and it
+That means your org's own business: its servers' day-to-day state, and the
+ready checks over them. It does **not** reach another org's servers, and it
 does not reach network-level settings — nor does anyone else's authority reach
 yours. A network admin cannot answer your ready check and commit you to a seed
 you didn't agree to.
@@ -45,13 +45,13 @@ any one of them settles it:
    thing either way. Works with no Discord involved, and keeps working when your
    DMs are closed.
 2. **A Discord DM** from the bot, with a button.
-3. **The hub channel**, if your community registered one — a button per window
+3. **The hub channel**, if your org registered one — a button per window
    awaiting confirmation.
 
 ### Finding them in the panel
 
-Sign in with Discord, open **Hub**, and pick **your community** in the scope
-picker — not the network. Checks belong to the community that operates the
+Sign in with Discord, open **Hub**, and pick **your org** in the scope
+picker — not the network. Checks belong to the org that operates the
 server, so they never appear on a network's hub. If you're looking at the network
 and see nothing, that's why.
 
@@ -70,7 +70,7 @@ it, or the window has passed.
 ### Your Servers tab
 
 Open **Manage** in the app (or the panel in a browser) and pick **Servers**. It
-lists the servers of the communities you operate,
+lists the servers of the orgs you operate,
 with **Enable/Disable** and **Window** on each. Adding, editing, removing and
 re-tagging servers are Admin, so those controls aren't shown to you — the page
 says as much rather than offering buttons that would be refused.
@@ -83,12 +83,12 @@ prefer them.
 Not restrictions on you personally, just the boundary of the operator level:
 
 - Add, edit, remove or reorder servers, change a threshold, set a CRCON key →
-  your Community Admin
-- Appoint or remove staff → your Community Admin
-- Register the hub channel, map Discord roles, move the community's Discord →
-  your Community Admin
+  your Org Admin
+- Appoint or remove staff → your Org Admin
+- Register the hub channel, map Discord roles, move the org's Discord →
+  your Org Admin
 - *Changing* the network's join code, its seeding hours, pausing it, rotation
-  order across communities → a Network Admin (a role in the network's own
+  order across orgs → a Network Admin (a role in the network's own
   Discord). You can **read** the join code yourself with
   `/network code show <network>` — you're the one handing it to players.
 

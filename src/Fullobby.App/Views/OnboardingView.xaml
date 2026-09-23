@@ -61,7 +61,7 @@
                     <!-- Staff used to hit a wall further in: guest mints a NEW account, and their
                          Discord already belongs to the one holding their permissions, so linking it
                          afterwards is refused. Say so here, while the choice is still free. -->
-                    <TextBlock Text="Guest is for players. If you run a community or network, sign in with Discord so your permissions come with you."
+                    <TextBlock Text="Guest is for players. If you run an org or network, sign in with Discord so your permissions come with you."
                                FontSize="11" Opacity="0.5" TextWrapping="Wrap"
                                TextAlignment="Center" HorizontalAlignment="Center" />
                 </StackPanel>
@@ -70,7 +70,7 @@
                 <StackPanel x:Name="StepNetwork" Spacing="10" Visibility="Collapsed">
                     <TextBlock Text="Join a Seeding Network" Style="{StaticResource SubtitleTextBlockStyle}" HorizontalAlignment="Center" TextAlignment="Center" />
                     <TextBlock
-                        Text="Fullobby is in limited beta: seeding runs inside community networks. Enter the network name and join code you received from a participating network."
+                        Text="Fullobby is in limited beta: seeding runs inside invite-only networks. Enter the network name and join code you received from a participating network."
                         Opacity="0.7" TextWrapping="Wrap" TextAlignment="Center" />
 
                     <TextBox x:Name="NetworkTagBox" PlaceholderText="Network name" MaxLength="64" />
@@ -100,7 +100,7 @@
                     <Button x:Name="NetworkContinueButton" Content="Continue" Style="{StaticResource AccentButtonStyle}"
                             HorizontalAlignment="Center" Margin="0,6,0,0" IsEnabled="False"
                             Click="NetworkContinue_Click" />
-                    <TextBlock Text="No join code? Ask the staff of a community that runs Fullobby."
+                    <TextBlock Text="No join code? Ask the staff of an org that runs Fullobby."
                                FontSize="11" Opacity="0.4" TextWrapping="Wrap"
                                TextAlignment="Center" HorizontalAlignment="Center" />
                     <!-- Escape hatch. Hidden on the re-armed network gate, where the account is

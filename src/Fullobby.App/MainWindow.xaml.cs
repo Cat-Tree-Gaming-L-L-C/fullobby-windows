@@ -248,10 +248,10 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>Show the Manage tab while /me reports the user can reach any panel surface —
-    /// a global grant, community Admin, network Admin, or an <b>operator</b>. If that
+    /// a global grant, org Admin, network Admin, or an <b>operator</b>. If that
     /// disappears (sign-out, grant revoked) while the tab is open, bounce to Seed.
     /// <para>Widened twice: it gated on a <i>global</i> grant until 0.4.1, hiding it from
-    /// every community admin, then on the manage flags, which still hid it from operators
+    /// every org admin, then on the manage flags, which still hid it from operators
     /// — who answer ready checks and toggle servers, both of which the panel serves.</para>
     /// </summary>
     private void UpdateManageVisibility()

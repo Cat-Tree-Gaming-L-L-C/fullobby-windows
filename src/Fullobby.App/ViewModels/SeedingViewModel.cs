@@ -648,7 +648,7 @@ public sealed partial class SeedingViewModel : ObservableObject
     /// explain it and open the join-a-network portal (onboarding overlay at the network step).</summary>
     private void SurfaceJoinANetworkPortal()
     {
-        _inAppToast.Info("Join a seeding network to start seeding — enter your community's join code.");
+        _inAppToast.Info("Join a seeding network to start seeding — enter your org's join code.");
         _account.OpenNetworkGate();
     }
 

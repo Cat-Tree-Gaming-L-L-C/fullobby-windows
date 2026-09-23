@@ -118,9 +118,9 @@ public class ApiModelsTests
         Assert.False(u.CanManageNetworks);
     }
 
-    /// <summary>A community Admin is not a global Admin — the whole point of the split.</summary>
+    /// <summary>An org Admin is not a global Admin — the whole point of the split.</summary>
     [Fact]
-    public void UserInfo_CommunityAdminIsNotGlobalAdmin()
+    public void UserInfo_OrgAdminIsNotGlobalAdmin()
     {
         var u = Parse<UserInfo>(
             """{"user_id":"3","username":"vidaro","can_manage_servers":true}""");
@@ -274,14 +274,14 @@ public class ApiModelsTests
     {
         var json = """
             {"networks":[{"network_id":1,"network_tag":"chll","active":true,"default_seeding_threshold":75,
-            "hll_day":[{"db_id":1,"name":"A","short_name":"A","community_tag":"chll","status":"not_ready","threshold":50,"window_start_ts":1700000000}]}],
+            "hll_day":[{"db_id":1,"name":"A","short_name":"A","org_tag":"chll","status":"not_ready","threshold":50,"window_start_ts":1700000000}]}],
             "updated_at":0}
             """;
         var r = Parse<SeedingStatusResponse>(json);
         var n = Assert.Single(r.Networks);
         Assert.Single(n.HllDay);
         Assert.Equal(DayStatus.NotReady, n.HllDay[0].Status);
-        Assert.Equal("chll", n.HllDay[0].CommunityTag);
+        Assert.Equal("chll", n.HllDay[0].OrgTag);
         Assert.Equal(1700000000, n.HllDay[0].WindowStartTs);
         Assert.Empty(n.HllvDay); // omitted → default empty
     }

@@ -1,7 +1,7 @@
 # Fullobby — user guide
 
 For players. Install the app, join a seeding network, and help fill your
-community's servers.
+org's servers.
 
 If you run servers or answer ready checks, you'll also have a **Manage** tab in
 the app — see [OPERATOR-GUIDE.md](OPERATOR-GUIDE.md) or
@@ -11,7 +11,7 @@ the app — see [OPERATOR-GUIDE.md](OPERATOR-GUIDE.md) or
 
 - **Windows 10 (version 2004 / build 19041) or Windows 11.**
 - **Steam, with Hell Let Loose installed.** The app launches your existing copy.
-- **A network name and join code**, from the community that invited you. Fullobby
+- **A network name and join code**, from the org that invited you. Fullobby
   is in limited beta and seeding happens inside networks — the app can't finish
   setup without one.
 
@@ -40,7 +40,7 @@ the app pins.
 - **Guest** is fine for trying it out. It's anonymous, gets a random display
   name, and is cleaned up after 14 days of inactivity. Signing in with a real
   provider later upgrades it in place.
-- **If you hold any staff role** in your community — admin or operator —
+- **If you hold any staff role** in your org — admin or operator —
   **sign in with Discord.** Permissions attach to your Discord account. You can
   fix it afterwards by linking Discord (see below), but starting there is
   simpler.
@@ -104,7 +104,7 @@ while afterwards.
 
 Time is credited only while you're confirmed on the server that's actually being
 seeded. You can see your own totals and streaks in the app, and there's a
-leaderboard per network and community.
+leaderboard per network and org.
 
 Don't want to appear on it? There's a **leaderboard opt-out** on the account
 page. It hides you from the board; your seeding still counts for the servers.
