@@ -40,10 +40,9 @@ the app pins.
 - **Guest** is fine for trying it out. It's anonymous, gets a random display
   name, and is cleaned up after 14 days of inactivity. Signing in with a real
   provider later upgrades it in place.
-- **If you hold any staff role** in your org — admin or operator —
-  **sign in with Discord.** Permissions attach to your Discord account. You can
-  fix it afterwards by linking Discord (see below), but starting there is
-  simpler.
+- **If you've been invited as staff** — operator, admin or owner — sign in with
+  the account you accepted the invite on. Roles belong to that Fullobby account,
+  whichever provider it uses; Discord roles don't make anyone staff.
 - Epic and Xbox appear as options but aren't switched on yet.
 
 ### 2. Join a network

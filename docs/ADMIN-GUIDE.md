@@ -16,54 +16,44 @@ Three levels, and knowing which you're touching saves a lot of confusion:
   orgs' servers, on its own schedule. It's the thing a customer buys. Your
   org belongs to at most one at a time.
 
-Permissions are a **level** (operator / admin) × a **scope** (org, network,
-global). You're `admin` scoped to your org.
+Permissions are a **level** — operator, admin, or owner — in a **scope**: an
+org, a network, or global. You're `admin` (or `owner`) scoped to your org.
+
+- **Operator** — day-to-day: ready checks, enable/disable, seed windows.
+- **Admin** — everything in this guide, and appointing Operators.
+- **Owner** — an Admin who can also appoint Admins and other Owners.
 
 Network authority reaches no member org's servers, and org authority
 reaches no network setting. That's enforced, not a convention.
 
-> **Everything resolves through your Discord identity.** Grants attach to a
-> Discord user id — true even in a deployment that never installs the bot,
-> because it's an identity, not an infrastructure dependency. Sign in with
-> Discord, or link it from the account page and your permissions come with it.
+> **Discord confers nothing.** Your permissions are grants on your Fullobby
+> account, appointed with invite links. Discord roles and Manage Server don't
+> make anyone staff. Discord is where Fullobby *shows* things — your hub,
+> announcements, the leaderboard — and one way to sign in.
 
-## Your two surfaces
+## Where you do it: the panel
 
-Neither requires the other.
+[api.fullobby.com/admin](https://api.fullobby.com/admin), or the desktop app's
+**Manage** tab, which opens the same panel in-app. As an Org Admin you see:
 
-### The panel — [api.fullobby.com/admin](https://api.fullobby.com/admin)
+- **Hub** — today's rotation, the current target, the leaderboard, ready checks
+  with the button to answer them, and your hub's Discord mirror settings
+- **Servers** — thresholds, seed windows, enable/disable, CRCON keys
+- **Staff** — who holds a role in your org, and invite links to appoint more
+- **Org settings** — display name, public invite, your Discord server, your
+  network membership, partner webhooks
 
-Sign in with Discord. As an Org Admin you get two tabs:
+Networks, Grants, Discord and Client versions are for network staff or
+Global Admins and stay hidden.
 
-- **Hub** — today's rotation, the current target, the leaderboard, and any ready
-  checks with the button to answer them
-- **Servers** — your server list: thresholds, seed windows, enable/disable,
-  CRCON keys
-
-The other tabs (Networks, Orgs, Grants, Discord, Client versions) are
-Global-Admin-only and stay hidden.
-
-The desktop app's **Manage** tab opens this same panel in-app, so you don't need
-a browser. Your operators get it too — it's gated on being able to reach *any*
-panel surface, not on being an admin.
-
-### The DM console — `/config`
-
-Run `/config` in your own Discord and the bot opens a DM session bound to your
-org. Plain text, one topic per command:
-
-```
-status   servers   channels   perms   roles   network   guild   slash   leaderboard
-```
-
-`help <topic>` explains any of them. This is where org-level configuration
-lives — your Discord link, hub channel, staff and role mappings.
+Discord's `/config` still works, but it's read-only now: it DMs you your org's
+status and a link back here.
 
 ## Procedures
 
 ### Servers
 
-Panel → **Servers**, or the DM console's `servers`.
+Panel → **Servers**.
 
 - **Threshold** — the player count at which a server counts as seeded. Below it
   the server is a candidate; above it, done for the cycle.
@@ -93,73 +83,73 @@ nothing rotates regardless of per-server windows.
 
 ### Staff
 
-DM console → `perms`.
+Panel → **Staff**.
 
-```
-perms                        list your controllers
-perms grant @user operator   day-to-day: ready checks, toggles, windows
-perms grant @user admin      everything in this guide
-perms revoke @user operator
-```
+To appoint someone, pick a level, add a note saying who it's for, and **Create
+invite link**. Send them the link. They open it, sign in with any account
+(Steam, Discord, …), and accept. The link works once, for 7 days, and is shown
+only when you create it. Open invites are listed with a Revoke button.
 
-These are durable server-side grants — role sync never touches them. You need
-Org Admin, or Manage Server in your Discord.
-
-Prefer managing staff by Discord role? `roles` maps a role to a level and the bot
-keeps grants in step with your role assignments. Both approaches coexist: a
-manual grant sits alongside a synced one.
-
-The panel's Grants tab is Global-Admin-only, so the DM console is your path here.
+An Admin can invite and remove Operators. Inviting or removing Admins and Owners
+takes an Owner. You can't revoke your own role, and the last Owner can't be
+removed — appoint another first.
 
 ### The hub channel
 
-DM console → `channels`.
+Panel → **Hub** → *Discord mirror*.
 
-```
-channels                  show the current hub
-channels set #seeding     register it (the bot renames it and posts the messages)
-channels name <name>      rename it
-channels ping 10          nudge an unanswered ready check after 10 minutes
-channels webhook <url>    mirror the hub's embeds into another Discord
-channels clear            stop using it
-```
+One channel in your Discord carries today's rotation, the current target, the
+leaderboard and the ready-check widget — posted once and edited in place on a
+five-minute refresh. Register it with its channel id (the bot must be in your
+server — see below), and optionally:
 
-One channel carries today's rotation, the current target, the leaderboard and the
-ready-check widget — posted once and edited in place on a five-minute refresh.
+- **Escalation ping** — after this many minutes, an unanswered ready check is
+  announced below the widget, mentioning the **role to mention** you set. The
+  role only decides who gets pinged; who can answer is decided on the Staff tab.
+- **Webhook mirror** — post a copy of the hub into another server's channel,
+  e.g. a public one. Needs no bot there.
 
 **Optional.** The panel's Hub tab shows the same information, and answering ready
-checks doesn't need Discord. The exception is `channels ping`, which mentions
-your operator roles — only Discord can mention a Discord role.
+checks doesn't need Discord.
 
-### Moving to a different Discord
+### Your Discord server
 
-DM console → `guild set <server id>`. Invite the bot to the target first; you
-need Manage Server in both. Slash registration and channel slots move with you.
-**Role mappings don't** — role ids don't survive the move, so re-map them after.
+Panel → **Org settings** → *Connect a Discord server*.
+
+This runs Discord's own "Add to server": pick your server, approve the bot, and
+you come back to the panel to confirm. Adding a bot needs Manage Server there,
+which is how Fullobby knows the server is yours — it confers nothing else. The
+same button moves you to a different server; your hub needs registering again in
+the new one.
+
+The same card sets whether your server shows Fullobby's display commands
+(`/servers list`, `/seeding …`) or only `/config`.
 
 ### Joining or leaving a network
 
-DM console → `network`.
+Panel → **Org settings** → *Network*.
 
-```
-network                              show your membership
-network join <name> <code>           redeem a join code
-network leave                        detach — your servers stop rotating
-```
+Enter the network's name and the join code its staff gave you. Joining another
+network moves you; **Leave network** detaches you and your servers stop rotating.
+Membership is a handshake, not a lock-in: a network admin issues a code, you
+redeem it.
 
-Membership is a handshake, not a lock-in: a network admin issues a code,
-you redeem it, and joining another network moves you. Leaving is yours to do.
+### Partner webhooks
+
+Panel → **Org settings** → *Partner webhooks*.
+
+Post your org's announcements or leaderboard into another Discord (a partner's
+server). Paste the webhook URL once — it's a secret, so it's never shown back —
+then turn it on or off, send a test, or remove it.
 
 ## Network-level settings
 
 These sit above your org, on the network itself. Network authority is its
-**own scope**, granted by roles in the network's own Discord — no org
-confers it, including one whose servers fill the rotation or one that hosts the
-network's Discord. If you hold Network Admin you drive these from Discord with
-`/network ...`; otherwise they belong to whoever does.
+**own scope** — no org confers it, including one whose servers fill the
+rotation. Whoever holds Network Admin runs these from the panel's **Networks**
+tab:
 
-- The network's join code — `/network code rotate` to set or replace it,
-  `/network code show` for its standing, `/network code disable` to close joining
+- The network's join code: set, rotate or disable it
 - Pausing or resuming the network
 - The network's seeding hours and daily reset hour
 - Rotation order across member orgs
@@ -167,18 +157,14 @@ network's Discord. If you hold Network Admin you drive these from Discord with
 
 ### Reading a join code
 
-`/network code show <network>` prints the current code, along with whether
-joining is open and when it was last rotated. Reading it takes Operator or Admin
-**on the network, or in any org that has joined it** — deliberately wider
-than rotating, because the people onboarding players are usually member
-orgs' staff rather than network staff.
+Panel → **Hub** (your org's) → *Network join code* → **Show code**. You don't
+need to be network staff: Operators and Admins of any member org can read it,
+because they're usually the ones onboarding players. Rotating stays with network
+admins and retires the code in circulation — so ask for a rotation only when a
+code has leaked, not when someone has lost it.
 
-Rotating stays Admin-only, and still retires the code in circulation. So reach
-for `show` when someone has simply lost the code, and `rotate` only when it has
-actually leaked or you want to close the door on whoever has it.
-
-Codes set before this landed have no readable copy and say so; rotating once
-issues one that can be read back afterwards.
+A code set before read-back existed says it can't be shown; a network admin
+rotating it once fixes that.
 
 ## Not yours
 
@@ -186,22 +172,21 @@ issues one that can be read back afterwards.
 
 ## Troubleshooting
 
-**Someone says they have no permissions.** Nearly always a second account — they
-signed in with Steam, and the grant is on their Discord. They link Discord from
-the account page and it follows; if that Discord already had an account, the two
-combine. Check `perms` lists them before assuming a grant problem.
+**Someone says they have no permissions.** Check the Staff tab lists them. If it
+does, they're signed in to a different account — a Steam login and a Discord
+login are separate accounts until linked from the account page. If it doesn't,
+send them an invite.
+
+**Someone had permissions from a Discord role and lost them.** Roles no longer
+confer anything. Invite them.
 
 **A server never becomes the target.** Enabled? Sitting on an unanswered ready
 check? The Hub's rotation board shows a per-server status.
 
-**The hub channel stopped updating.** The Hub's standing card reports delivery
+**The hub channel stopped updating.** The Hub's mirror card reports delivery
 health — a deleted channel or a revoked bot permission shows there, which is
 invisible from inside Discord itself.
 
-**Everything went quiet overnight.** A network pauses itself if its public lead
-invite stops resolving. That's a network-level fix.
-
 **An operator can't see the Manage tab.** They should — operators get it, with
 Enable/Disable and Window on each server they operate. If it's missing, they're
-on the wrong account (see the permissions note above) or hold no grant in a
-org that owns servers.
+on the wrong account (see above) or hold no role in an org that owns servers.
