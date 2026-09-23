@@ -1,7 +1,7 @@
 {
-  "version": "0.4.2",
-  "download_url": "https://github.com/Cat-Tree-Gaming-L-L-C/fullobby-windows/releases/download/v0.4.2/Fullobby-Setup-0.4.2.exe",
-  "notes": "Fullobby 0.4.2\n\nIf you help run a community's servers, there's now a Manage tab in the app —\ntoday's rotation, what's seeding right now, and your servers' settings. It's\nopen to operators too, not just admins.\n\nReady checks now reach you as a desktop notification, so a server no longer\nloses its place in the rotation just because a Discord DM went unseen. You can\nanswer them from the app, and none of it needs Discord any more.\n\nNew guides for players, operators and admins are linked from the README.",
-  "sha256": "a3dc990889a71cabceb9f461df345acb5fbbab6445db53c41f7868d3d9a3a625",
-  "signature": "MEUCIQDv6RiAV+4TjM9u/FIPylVUgOf57PjoHmY3huKoJbNDHQIgGM3UrweAIt7eBrcHkkeb2wYSJOwQECkRTZTyKLmu6VI="
+  "version": "0.4.3",
+  "download_url": "https://github.com/Cat-Tree-Gaming-L-L-C/fullobby-windows/releases/download/v0.4.3/Fullobby-Setup-0.4.3.exe",
+  "notes": "Fullobby 0.4.3\n\nAuto-seed now wakes for each server's own seed window, not only for the\nnetwork's opening hour. Before, if your network opened at 06:00 and a\nserver's window opened at 07:30, the app woke at 06:00, found nothing to\nseed yet, said \"All servers are seeded\", and slept through 07:30. It now\nwakes for 07:30 too, and when it comes up early it says \"Nothing to seed\nyet — the next server window opens at HH:MM\" and goes back to sleep.\n\nAfter updating, glance at Settings → Auto-Seed: it should list a wake time\nfor every server window in your networks, not just one.\n\nAnswering a ready check confirms the server; it does not start anyone's\ngame. Seeding starts from these wakes or the Seed button.\n\nWindows 10 support is back. Windows 10 version 2004 (build 19041) or newer\ninstalls and runs again. The Manage tab needs Microsoft's WebView2 runtime,\nwhich Windows 11 ships and Windows 10 doesn't; if that tab shows an\ninstall-the-runtime message instead of the panel, that's expected.",
+  "sha256": "8039ce94187af7c301558fe0c57a5347fc634e6ed4597e073b72e4e688b41da3",
+  "signature": "MEYCIQDQhKNiMfJrMPFushz/a9JkB20uUNTxUf7bLS6y1caFlQIhAJUDPKw+wDG0TXGMJmVasUR9uyIbblwQLTtglF7jIkti"
 }
