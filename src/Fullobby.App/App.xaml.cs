@@ -512,6 +512,10 @@ public partial class App : Application
                 Log.Information("Deep link: register callback received");
                 _ = account.HandleRegisterCallbackAsync(reg.State, reg.Token);
                 break;
+            case DeepLinkAction.Invite invite:
+                Log.Information("Deep link: invite link received");
+                account.OfferInvite(invite.Token);
+                break;
             case DeepLinkAction.Unknown unknown:
                 // Strip query/fragment before logging: a malformed auth/register callback
                 // (e.g. token present but refresh_token missing) lands here still carrying a

@@ -18,6 +18,11 @@ public abstract record DeepLinkAction
     /// <c>/register-challenge</c> on the backend).</summary>
     public sealed record RegisterCallback(string? State, string Token) : DeepLinkAction;
 
+    /// <summary>A network invite link handed to the app (<c>fullobby://invite?token=...</c>):
+    /// open the join flow prefilled with it. <paramref name="Token"/> is the validated 64-hex token
+    /// (see <see cref="Api.InviteLink.ParseToken"/>); nothing is joined without the user confirming.</summary>
+    public sealed record Invite(string Token) : DeepLinkAction;
+
     /// <summary>Unknown or unsupported deep link.</summary>
     public sealed record Unknown(string Url) : DeepLinkAction;
 }

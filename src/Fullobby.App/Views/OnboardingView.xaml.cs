@@ -46,6 +46,10 @@ public sealed partial class OnboardingView : UserControl
         {
             UpdateStep();
         }
+        else if (e.PropertyName == nameof(AccountViewModel.PendingInvite) && Account.OnboardingStep == 1)
+        {
+            PrefillPendingInvite();
+        }
     }
 
     private void UpdateStep()
@@ -64,6 +68,7 @@ public sealed partial class OnboardingView : UserControl
         if (step == 1)
         {
             UpdateNetworkStep();
+            PrefillPendingInvite();
             if (_lastStep != 1)
             {
                 // Refresh on entry so a user who already belongs to a network passes instantly.
@@ -256,6 +261,16 @@ public sealed partial class OnboardingView : UserControl
     }
 
     private void InviteDismiss_Click(object sender, RoutedEventArgs e) => ResetInvite();
+
+    /// <summary>Put a <c>fullobby://invite</c> link's token in the box. Held until this step: the
+    /// lookup needs the account the earlier step signs in.</summary>
+    private void PrefillPendingInvite()
+    {
+        if (Account.TakePendingInvite() is { } token)
+        {
+            InviteLinkBox.Text = token;
+        }
+    }
 
     /// <summary>A changed link invalidates the question asked about the old one.</summary>
     private void InviteLinkBox_TextChanged(object sender, TextChangedEventArgs e)

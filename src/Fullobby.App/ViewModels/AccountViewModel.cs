@@ -87,6 +87,13 @@ public sealed partial class AccountViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(SeedingBlocked))]
     private bool onboardingComplete;
 
+    /// <summary>An invite token handed over by a <c>fullobby://invite</c> deep link, waiting for a
+    /// join prompt to prefill with it: the onboarding network step, or the join dialog once the user
+    /// is past onboarding (MainWindow). Taken once with <see cref="TakePendingInvite"/>; nothing is
+    /// joined until the user confirms, and it is never written to config.</summary>
+    [ObservableProperty]
+    private string? pendingInvite;
+
     /// <summary>Current onboarding step (0 sign-in, 1 network, 2 link, 3 nickname, 4 done).</summary>
     [ObservableProperty]
     private int onboardingStep;
@@ -1021,6 +1028,17 @@ public sealed partial class AccountViewModel : ObservableObject
         {
             return InviteError(e, "accept");
         }
+    }
+
+    /// <summary>Hold a deep-linked invite token for whichever join prompt shows next.</summary>
+    public void OfferInvite(string token) => RunOnUi(() => PendingInvite = token);
+
+    /// <summary>Take the pending deep-linked invite, if any, so it prefills only one prompt.</summary>
+    public string? TakePendingInvite()
+    {
+        var token = PendingInvite;
+        PendingInvite = null;
+        return token;
     }
 
     /// <summary>"Join Comp HLL?" — the question an invite preview asks.</summary>

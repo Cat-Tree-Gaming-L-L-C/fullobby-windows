@@ -2,7 +2,8 @@ namespace Fullobby.Core.Activation;
 
 /// <summary>
 /// Parses <c>fullobby://</c> URLs into <see cref="DeepLinkAction"/>s.
-/// Expected format: <c>fullobby://auth/callback?token=...&amp;refresh_token=...</c>
+/// Expected formats: <c>fullobby://auth/callback?token=...&amp;refresh_token=...</c> (and the
+/// other auth callbacks), and <c>fullobby://invite?token=...</c>.
 /// </summary>
 public static class DeepLinkParser
 {
@@ -94,6 +95,17 @@ public static class DeepLinkParser
                     return new DeepLinkAction.RegisterCallback(state, token);
                 }
                 // Register callback missing token
+                return new DeepLinkAction.Unknown(url);
+            }
+            // A host-only URI can come back from the shell normalized with a trailing slash.
+            case "invite" or "invite/":
+            {
+                if (parameters.TryGetValue("token", out var raw)
+                    && Api.InviteLink.ParseToken(raw) is { } inviteToken)
+                {
+                    return new DeepLinkAction.Invite(inviteToken);
+                }
+                // Invite missing or malformed token
                 return new DeepLinkAction.Unknown(url);
             }
             default:
