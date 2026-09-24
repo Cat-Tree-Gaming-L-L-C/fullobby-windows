@@ -245,6 +245,17 @@ public class ApiModelsTests
         Assert.Equal(90, d.Config.StaggerMaxSecs); // config defaults applied
     }
 
+    [Fact]
+    public void SeedingDirective_NetworksStoppedIsAPauseWithNoResumeTime()
+    {
+        var json = """{"action":"stop","all_exhausted":false,"scheduled_pause":true,"networks_stopped":true,"stagger_secs":0,"countdown_secs":30,"snooze_min_secs":60,"snooze_max_secs":1800,"poll_again_in_secs":15,"max_session_secs":18000,"config":{}}""";
+        var d = Parse<SeedingDirective>(json);
+        Assert.True(d.ScheduledPause);
+        Assert.True(d.NetworksStopped);
+        Assert.Null(d.NextActiveInSecs);
+        Assert.False(Parse<SeedingDirective>("""{"action":"stop","config":{}}""").NetworksStopped);
+    }
+
     [Theory]
     [InlineData("\"seeded\"", SwitchReason.Seeded)]
     [InlineData("\"unavailable\"", SwitchReason.Unavailable)]

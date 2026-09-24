@@ -596,7 +596,9 @@ public sealed partial class SeedingViewModel : ObservableObject
             }
             SetSeedError(nextWindowTs is { } ts
                 ? $"Nothing to seed yet — the next server window opens at {LocalHm(ts)}."
-                : directive.ScheduledPause
+                : directive.NetworksStopped
+                    ? "Your network is paused right now. Fullobby will check back."
+                    : directive.ScheduledPause
                     ? "Seeding is paused — outside the scheduled window."
                     : "All servers are seeded — no seeding needed right now.");
             return;
@@ -684,7 +686,9 @@ public sealed partial class SeedingViewModel : ObservableObject
                     await RescheduleAndResleepAsync(d).ConfigureAwait(true);
                     break;
                 }
-                _inAppToast.Info("Seeding paused — outside the scheduled window.");
+                _inAppToast.Info(d.NetworksStopped
+                    ? "Seeding paused — your network is paused right now."
+                    : "Seeding paused — outside the scheduled window.");
             }
             else if (NextServerWindowTs() is { } nextTs)
             {

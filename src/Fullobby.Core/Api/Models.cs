@@ -541,6 +541,9 @@ public sealed class SeedingDirective
     /// <summary>True when there's no target because of a scheduled gap (timezone dead-hours),
     /// not exhaustion — the client should idle and resume, not hard-stop.</summary>
     public bool ScheduledPause { get; set; }
+    /// <summary>True (with <see cref="ScheduledPause"/>) when every network the user is in is stopped —
+    /// paused by its own staff or restricted by Fullobby — so there is no known resume time.</summary>
+    public bool NetworksStopped { get; set; }
     /// <summary>Seconds until the next active window opens (when paused), else null.</summary>
     public int? NextActiveInSecs { get; set; }
     /// <summary>True (with action "stop") only when the user has no network membership — the
