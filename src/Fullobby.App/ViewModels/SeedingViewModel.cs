@@ -277,6 +277,17 @@ public sealed partial class SeedingViewModel : ObservableObject
     [ObservableProperty]
     private string autoseedPromptContext = "";
 
+    /// <summary>What answering Seed Now will do to a game already open ("Hell Let Loose is open —
+    /// Seed Now closes it and starts Hell Let Loose: Vietnam"); empty when nothing is open.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowAutoseedSwapNotice))]
+    private string autoseedSwapNotice = "";
+
+    public bool ShowAutoseedSwapNotice => AutoseedSwapNotice.Length > 0;
+
+    private void UpdateAutoseedSwapNotice(GameDefinition target, IReadOnlyList<GameDefinition> open) =>
+        AutoseedSwapNotice = GameSwap.Plan(target, open).PromptNotice;
+
     /// <summary>Completed by <see cref="AutoseedChoose"/> when the user answers the "Seed now?"
     /// prompt early (true = with Power Savings). Null outside the countdown.</summary>
     private TaskCompletionSource<bool>? _autoseedChoice;
@@ -479,11 +490,8 @@ public sealed partial class SeedingViewModel : ObservableObject
         }
         _seedRegionCooldownUntilMs = Environment.TickCount64 + SeedRegionCooldownSecs * 1000L;
 
-        if (!await ConfirmCloseRunningGameAsync().ConfigureAwait(true))
-        {
-            return;
-        }
-
+        // Whether an open game has to close is asked after the directive picks the game (see
+        // ResolveGameSwapAsync) — the game in priority may not be the one that's open.
         ClearSeedError();
         await RunDirectedSeedingAsync(autoSeed: false).ConfigureAwait(true);
     }
@@ -499,8 +507,10 @@ public sealed partial class SeedingViewModel : ObservableObject
 
     /// <summary>The unified seeding loop: ask the server what to seed (directive), launch it, and obey
     /// the monitor's verdict — relaunch on a switch, end on stop/exhaustion/game-close/user-stop. The
-    /// server owns rotation and timing; this is a thin executor. Used by Seed and auto-seed alike.</summary>
-    private async Task RunDirectedSeedingAsync(bool autoSeed)
+    /// server owns rotation and timing; this is a thin executor. Used by Seed and auto-seed alike.
+    /// <paramref name="swapConsented"/>: an auto-seed whose "Seed now?" prompt was answered, which
+    /// counts as the player's go-ahead to close a game they have open.</summary>
+    private async Task RunDirectedSeedingAsync(bool autoSeed, bool swapConsented = false)
     {
         IsSeeding = true;
         SetStatus(SeedingStatus.Initializing);
@@ -570,6 +580,18 @@ public sealed partial class SeedingViewModel : ObservableObject
                 : directive.ScheduledPause
                     ? "Seeding is paused — outside the scheduled window."
                     : "All servers are seeded — no seeding needed right now.");
+            return;
+        }
+
+        // A game already open — the other title, or this one started by hand — has to close first,
+        // and only with the player's say-so.
+        var targetGame = GameCatalog.ById(directive.Target.Game) ?? _engine.CurrentGame;
+        var swap = GameSwap.Plan(targetGame, _engine.RunningGames());
+        if (swap.Kind != GameSwapKind.None
+            && !await ResolveGameSwapAsync(swap, autoSeed, swapConsented).ConfigureAwait(true))
+        {
+            IsSeeding = false;
+            SetStatus(SeedingStatus.Idle);
             return;
         }
 
@@ -661,6 +683,41 @@ public sealed partial class SeedingViewModel : ObservableObject
             SetStatus(Status == SeedingStatus.Stopping ? SeedingStatus.Stopped : SeedingStatus.Idle);
         }
         IsSeeding = false;
+    }
+
+    /// <summary>Carry out <paramref name="swap"/> if the player agrees, returning whether the seed may
+    /// go ahead. A manual Seed asks (the "Swap games?" dialog); an auto-seed closes the open game
+    /// only when its "Seed now?" prompt was answered (<paramref name="consented"/>) — unattended, it
+    /// never closes a game someone started, and leaves a notification naming the game that needs
+    /// seeding instead.</summary>
+    private async Task<bool> ResolveGameSwapAsync(GameSwapPlan swap, bool autoSeed, bool consented)
+    {
+        if (autoSeed && !consented)
+        {
+            _log.LogInformation("Auto-seed unanswered with {Open} open; left it alone ({Target} not started)",
+                swap.ClosingNames, swap.Target.Id);
+            _toast.Show(Branding.ProductName, swap.SkippedNotice);
+            SetSeedError(swap.SkippedNotice);
+            return false;
+        }
+
+        if (!autoSeed)
+        {
+            SetStatus(SeedingStatus.Idle);
+            var confirmed = ConfirmAsync is null
+                || await ConfirmAsync(swap.ConfirmMessage, swap.Title).ConfigureAwait(true);
+            if (!confirmed)
+            {
+                _log.LogInformation("Player kept {Open} open; {Target} not started", swap.ClosingNames, swap.Target.Id);
+                SetSeedError(swap.DeclinedMessage);
+                return false;
+            }
+            SetStatus(SeedingStatus.Initializing);
+        }
+
+        _log.LogInformation("{Kind}: closing {Open} for {Target}", swap.Kind, swap.ClosingNames, swap.Target.Id);
+        await _engine.CloseGamesAsync(swap.ToClose).ConfigureAwait(true);
+        return true;
     }
 
     /// <summary>The API flagged this user as having no network membership (the limited-beta gate):
@@ -851,15 +908,24 @@ public sealed partial class SeedingViewModel : ObservableObject
 
         try
         {
-            if (_engine.IsGameRunning || IsBusy)
+            if (IsBusy)
             {
-                _log.LogInformation("Game/seeding already active — skipping auto-seed");
+                _log.LogInformation("Seeding already active — skipping auto-seed");
                 return;
             }
 
+            // A game already open no longer skips the seed outright: the prompt says what Seed Now
+            // would close, and only an answer closes it (see ResolveGameSwapAsync). Unanswered, the
+            // player's game is left alone. Provisional until the preview names the target game.
+            var openGames = _engine.RunningGames();
+            UpdateAutoseedSwapNotice(_engine.CurrentGame, openGames);
+
             // Desktop notification before the countdown so a user away from the keyboard gets a
-            // warning before the game launches.
-            _toast.Show(Branding.ProductName, "Auto-seed starting in 60 seconds. Click to cancel.");
+            // warning before the game launches — or, with a game open, a chance to swap.
+            _toast.Show(Branding.ProductName, openGames.Count == 0
+                ? "Auto-seed starting in 60 seconds. Click to cancel."
+                : $"Seeding is due, but {string.Join(" and ", openGames.Select(g => g.DisplayName))} is open. " +
+                  $"Open {Branding.ProductName} within 60 seconds to swap games.");
 
             // 60s "Seed now?" prompt. An explicit answer (Seed Now / Seed with Power Savings)
             // starts immediately and becomes the game's new remembered Power Savings default; on
@@ -869,6 +935,7 @@ public sealed partial class SeedingViewModel : ObservableObject
             AutoseedPromptContext = "";
             _ = FetchAutoseedTargetPreviewAsync(); // best-effort server name for the context line
             AutoseedCountdownActive = true;
+            var answered = false;
             for (var i = 60; i > 0; i--)
             {
                 AutoseedCountdownText = $"Starting automatically in {i}s…";
@@ -878,6 +945,7 @@ public sealed partial class SeedingViewModel : ObservableObject
                 {
                     // Persisted per game by the changed hook — the explicit click is the new default.
                     EfficiencyMode = await _autoseedChoice.Task.ConfigureAwait(true);
+                    answered = true;
                     break;
                 }
                 if (_autoSeedState.IsCancelled)
@@ -899,19 +967,14 @@ public sealed partial class SeedingViewModel : ObservableObject
             }
             AutoseedCountdownActive = false;
 
-            // Re-check HLL didn't get launched during the countdown.
-            if (_engine.IsGameRunning)
-            {
-                _log.LogInformation("HLL started during countdown — skipping auto-seed");
-                return;
-            }
-
-            // The server decides what to seed (and whether it's even an active window).
-            await RunDirectedSeedingAsync(autoSeed: true).ConfigureAwait(true);
+            // The server decides what to seed (and whether it's even an active window). A game
+            // opened by hand during the countdown is caught there too: closed only if answered.
+            await RunDirectedSeedingAsync(autoSeed: true, swapConsented: answered).ConfigureAwait(true);
         }
         finally
         {
             AutoseedCountdownActive = false;
+            AutoseedSwapNotice = "";
             _autoseedChoice = null;
             _autoSeedState.End();
         }
@@ -952,6 +1015,7 @@ public sealed partial class SeedingViewModel : ObservableObject
             if (AutoseedCountdownActive && d.Target is { } target)
             {
                 SelectGame(target);
+                UpdateAutoseedSwapNotice(_engine.CurrentGame, _engine.RunningGames());
                 if (target.Server.Name.Length > 0)
                 {
                     AutoseedPromptContext = target.Server.Name;

@@ -137,12 +137,32 @@ public sealed class SeedingEngine : IDisposable
     /// "game already running" confirmation before (re)starting a seed or launch.</summary>
     public bool IsGameRunning => _process.IsGameRunning(_currentGame);
 
+    /// <summary>The released games open right now (folder-verified), in catalog order.</summary>
+    public IReadOnlyList<GameDefinition> RunningGames() =>
+        GameCatalog.Released.Where(_process.IsGameRunning).ToList();
+
+    /// <summary>Close each of <paramref name="games"/> and wait for it to exit (see
+    /// <see cref="KillGameAndWaitAsync(GameDefinition, int, CancellationToken)"/>). Carries out a
+    /// <see cref="GameSwapPlan"/> the player agreed to.</summary>
+    public async Task CloseGamesAsync(IReadOnlyList<GameDefinition> games, CancellationToken ct = default)
+    {
+        foreach (var game in games)
+        {
+            _log.LogInformation("Closing {Game} to make way for the seed", game.DisplayName);
+            await KillGameAndWaitAsync(game, ct: ct).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>Kill the current game and wait (up to <paramref name="maxWaitSecs"/>) for it to exit.
     /// Used by the UI when the user confirms closing a running game before seeding/launching;
     /// uses a kill-and-poll loop.</summary>
-    public async Task KillGameAndWaitAsync(int maxWaitSecs = 20, CancellationToken ct = default)
+    public Task KillGameAndWaitAsync(int maxWaitSecs = 20, CancellationToken ct = default) =>
+        KillGameAndWaitAsync(_currentGame, maxWaitSecs, ct);
+
+    /// <summary>Kill <paramref name="game"/> — any game, not only the current one — and wait (up to
+    /// <paramref name="maxWaitSecs"/>) for it to exit.</summary>
+    public async Task KillGameAndWaitAsync(GameDefinition game, int maxWaitSecs = 20, CancellationToken ct = default)
     {
-        var game = _currentGame;
         KillGameProcess(game);
         for (var i = 0; i < maxWaitSecs * 2; i++)
         {

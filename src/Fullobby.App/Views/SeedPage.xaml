@@ -343,6 +343,14 @@
                         TextAlignment="Center"
                         TextWrapping="Wrap"
                         HorizontalAlignment="Center" />
+                    <!-- A game is already open: say what Seed Now will close. Unanswered, it's left alone. -->
+                    <InfoBar
+                        IsOpen="True"
+                        IsClosable="False"
+                        Severity="Warning"
+                        MaxWidth="320"
+                        Message="{x:Bind ViewModel.AutoseedSwapNotice, Mode=OneWay}"
+                        Visibility="{x:Bind ViewModel.ShowAutoseedSwapNotice, Mode=OneWay, Converter={StaticResource BoolToVis}}" />
                     <TextBlock
                         Text="{x:Bind ViewModel.AutoseedCountdownText, Mode=OneWay}"
                         Opacity="0.7"

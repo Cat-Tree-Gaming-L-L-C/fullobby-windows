@@ -102,6 +102,12 @@ the one whose window caused the wake. The Seed button shows which game it will
 start underneath, for example "(Hell Let Loose: Vietnam)". Wakes only come from
 servers in games you have installed.
 
+If a game is already open when a seed starts, Fullobby never closes it without
+asking. Pressing Seed asks "Swap games?" and closes the open game only if you say
+yes. When an auto-seed wake finds a game open, the "Seed now?" prompt says what
+Seed Now will close. If nobody answers, your game is left running and a
+notification says which game needs seeding.
+
 If the machine slept through a wake, a watchdog can still fire the seed for a
 while afterwards.
 
