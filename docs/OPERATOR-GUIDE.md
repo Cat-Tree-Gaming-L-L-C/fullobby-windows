@@ -67,7 +67,8 @@ it, or the window has passed.
 | Answer ready checks | Panel → Hub, Discord DM, or hub channel |
 | Enable / disable one of your servers | Panel → Servers |
 | Set or clear a server's seed window | Panel → Servers → Window |
-| Read your network's join code, to hand to players | Panel → Hub (your org's) → Network join code |
+| Get players into the network | Hand out the network's Player invite link — ask a Network Admin for one |
+| Read your network's join code (legacy; links are preferred) | Panel → Hub (your org's) → Network join code (legacy) |
 
 ### Your Servers tab
 
@@ -85,9 +86,10 @@ Not restrictions on you personally, just the boundary of the operator level:
   your Org Admin
 - Appoint or remove staff → your Org Admin
 - Register the hub channel, connect or move the org's Discord → your Org Admin
-- *Changing* the network's join code, its seeding hours, pausing it, rotation
-  order across orgs → a Network Admin. You can **read** the join code yourself
-  (see the table above) — you're the one handing it to players.
+- Making the network's invite links, *changing* its join code, its seeding
+  hours, pausing it, rotation order across orgs → a Network Admin. Ask them for a
+  Player link to hand out. You can still **read** the legacy join code yourself
+  (see the table above) for a player whose network hasn't moved to links.
 
 ## When something looks wrong
 

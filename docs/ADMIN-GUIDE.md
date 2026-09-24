@@ -85,10 +85,18 @@ nothing rotates regardless of per-server windows.
 
 Panel → **Staff**.
 
-To appoint someone, pick a level, add a note saying who it's for, and **Create
-invite link**. Send them the link. They open it, sign in with any account
-(Steam, Discord, …), and accept. The link works once, for 7 days, and is shown
-only when you create it. Open invites are listed with a Revoke button.
+To appoint someone, pick a level and set the link up:
+
+- **Label** — who or what it's for. Only staff see it, in the list of open links.
+- **Expiry** — 30 minutes up to 7 days. Staff links always expire, 7 days at
+  most.
+- **Use limit** — how many people can accept it. Staff links always have one,
+  and an **Owner** link is single-use.
+
+**Create link**, and send it to them. They open it in a browser, sign in with any
+account (Steam, Discord, …), and accept. The link is shown only when you create
+it — copy it then. Open links are listed with their uses and expiry, and a
+Revoke button.
 
 An Admin can invite and remove Operators. Inviting or removing Admins and Owners
 takes an Owner. You can't revoke your own role, and the last Owner can't be
@@ -127,12 +135,16 @@ The same card sets whether your server shows Fullobby's display commands
 
 ### Joining or leaving a network
 
-Panel → **Org settings** → *Network*.
+Panel → **Org settings** → *Network* shows where you stand.
 
-Enter the network's name and the join code its staff gave you. Joining another
-network moves you; **Leave network** detaches you and your servers stop rotating.
-Membership is a handshake, not a lock-in: a network admin issues a code, you
-redeem it.
+To join, ask the network's staff for an **org invite link**. A Network Admin
+makes it in the panel (**Networks** → *Invite links*). Open it in a browser while
+signed in as your org's Admin, pick your org, and accept. Joining another network
+moves you out of the one you're in — the page warns you first. **Leave network**
+detaches you and your servers stop rotating.
+
+Membership is a handshake, not a lock-in: a network admin issues a link, you
+accept it.
 
 ### Partner webhooks
 
@@ -149,7 +161,10 @@ These sit above your org, on the network itself. Network authority is its
 rotation. Whoever holds Network Admin runs these from the panel's **Networks**
 tab:
 
-- The network's join code: set, rotate or disable it
+- The network's invite links (**Networks** → *Invite links*): **Player** links
+  to post where seeders are, and **Org** links to send to an org's Admin. Each
+  has a label, an expiry (or none) and a use limit (or none), and can be revoked
+- The network's join code, the legacy way in: set, rotate or disable it
 - Pausing or resuming the network
 - The network's seeding hours and daily reset hour
 - Rotation order across member orgs
@@ -157,11 +172,14 @@ tab:
 
 ### Reading a join code
 
-Panel → **Hub** (your org's) → *Network join code* → **Show code**. You don't
-need to be network staff: Operators and Admins of any member org can read it,
-because they're usually the ones onboarding players. Rotating stays with network
-admins and retires the code in circulation — so ask for a rotation only when a
-code has leaked, not when someone has lost it.
+Join codes are legacy. Players join with an invite link from the network's staff
+— ask them for a Player link to hand out. A code is only for the odd network
+that still uses one, and for app versions that predate links.
+
+Panel → **Hub** (your org's) → *Network join code (legacy)* → **Show code**. You
+don't need to be network staff: Operators and Admins of any member org can read
+it. Rotating stays with network admins and retires the code in circulation — so
+ask for a rotation only when a code has leaked, not when someone has lost it.
 
 A code set before read-back existed says it can't be shown; a network admin
 rotating it once fixes that.
