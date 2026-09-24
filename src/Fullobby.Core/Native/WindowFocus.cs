@@ -1,3 +1,4 @@
+using Fullobby.Core.Games;
 using Microsoft.Extensions.Logging;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -7,28 +8,53 @@ using Windows.Win32.UI.WindowsAndMessaging;
 namespace Fullobby.Core.Native;
 
 /// <summary>
-/// Finds the HLL game window and silently injects splash-bypass keys via PostMessage,
+/// Finds the seeded game's window and silently injects splash-bypass keys via PostMessage,
 /// with an optional focus-stealing fallback. DI singleton, thread-safe.
 /// </summary>
 /// <remarks>
+/// Which game is <see cref="Game"/> (kept in step with the engine's current game). A game with a
+/// known <see cref="GameDefinition.WindowTitle"/> is matched by title, as HLL always was; one
+/// without (HLL: Vietnam) by an Unreal top-level window owned by its verified game process.
+///
 /// F13 (0x7C) is a real virtual key UE4 registers as "any button pressed" but that no
 /// game binds to anything — safe to spam to dismiss the "press any button" splash.
 /// Escape skips the UE4 intro videos (only during the video phase).
 /// </remarks>
 public sealed class WindowFocus
 {
-    private const string HllWindowTitle = "Hell Let Loose";
+    private const string UnrealWindowClass = "UnrealWindow";
     private const long HwndCacheTtlMs = 1_000;
 
     private const uint WM_KEYDOWN = 0x0100;
     private const uint WM_KEYUP = 0x0101;
 
     private readonly ILogger<WindowFocus> _log;
+    private readonly ProcessMonitor _process;
     private readonly object _cacheGate = new();
     private HWND _cachedHwnd;
+    private uint _cachedOwnerPid;
     private long _cachedAt;
+    private volatile GameDefinition _game = GameCatalog.Hll;
 
-    public WindowFocus(ILogger<WindowFocus> log) => _log = log;
+    public WindowFocus(ILogger<WindowFocus> log, ProcessMonitor process)
+    {
+        _log = log;
+        _process = process;
+    }
+
+    /// <summary>The game whose window this looks for. Changing it drops the cached handle.</summary>
+    public GameDefinition Game
+    {
+        get => _game;
+        set
+        {
+            if (!ReferenceEquals(_game, value))
+            {
+                _game = value;
+                InvalidateCache();
+            }
+        }
+    }
 
     /// <summary>Whether the HLL game window currently exists (used by the splash-bypass window wait).</summary>
     public bool HasHllWindow() => !FindHllHwnd().IsNull;
@@ -39,6 +65,7 @@ public sealed class WindowFocus
         lock (_cacheGate)
         {
             _cachedHwnd = HWND.Null;
+            _cachedOwnerPid = 0;
         }
     }
 
@@ -148,8 +175,8 @@ public sealed class WindowFocus
 
     // ── Internals ───────────────────────────────────────────────────────────
 
-    /// <summary>Find the HLL top-level window, caching the handle for 1s and re-validating its
-    /// title to avoid stale-handle misdirection. Returns <see cref="HWND.Null"/> if not found.</summary>
+    /// <summary>Find the game's top-level window, caching the handle for 1s and re-validating it
+    /// to avoid stale-handle misdirection. Returns <see cref="HWND.Null"/> if not found.</summary>
     internal HWND FindHllHwnd()
     {
         var now = Environment.TickCount64;
@@ -164,26 +191,52 @@ public sealed class WindowFocus
             }
         }
 
+        var game = _game;
         HWND result = HWND.Null;
-        PInvoke.EnumWindows((hwnd, _) =>
+        uint resultPid = 0;
+        if (game.WindowTitle is { } expected)
         {
-            var title = GetWindowTitle(hwnd);
-            if (title is not null && title.Contains(HllWindowTitle, StringComparison.Ordinal))
+            PInvoke.EnumWindows((hwnd, _) =>
             {
-                result = hwnd;
-                return false; // stop
+                var title = GetWindowTitle(hwnd);
+                if (title is not null && title.Contains(expected, StringComparison.Ordinal))
+                {
+                    result = hwnd;
+                    return false; // stop
+                }
+                return true; // continue
+            }, default);
+        }
+        else
+        {
+            var pids = _process.GetGamePids(game);
+            if (pids.Count > 0)
+            {
+                PInvoke.EnumWindows((hwnd, _) =>
+                {
+                    if (!PInvoke.IsWindowVisible(hwnd)
+                        || !pids.Contains(OwnerPid(hwnd))
+                        || GetClassName(hwnd) != UnrealWindowClass)
+                    {
+                        return true; // continue
+                    }
+                    result = hwnd;
+                    resultPid = OwnerPid(hwnd);
+                    return false; // stop
+                }, default);
             }
-            return true; // continue
-        }, default);
+        }
 
         lock (_cacheGate)
         {
             if (result.IsNull || !IsValidHwnd(result))
             {
                 _cachedHwnd = HWND.Null;
+                _cachedOwnerPid = 0;
                 return HWND.Null;
             }
             _cachedHwnd = result;
+            _cachedOwnerPid = resultPid;
             _cachedAt = now;
             return result;
         }
@@ -199,16 +252,40 @@ public sealed class WindowFocus
 
     private static bool IsValidHwnd(HWND hwnd) => !hwnd.IsNull && PInvoke.IsWindow(hwnd);
 
-    /// <summary>Valid window AND still titled "Hell Let Loose" (guards against the HWND being
-    /// recycled for a different process after the game closed).</summary>
-    private static bool IsValidHllHwnd(HWND hwnd)
+    /// <summary>Valid window AND still the game's: titled as the game, or owned by the process it was
+    /// found under (guards against the HWND being recycled for a different process after the game
+    /// closed).</summary>
+    private bool IsValidHllHwnd(HWND hwnd)
     {
         if (!IsValidHwnd(hwnd))
         {
             return false;
         }
-        var title = GetWindowTitle(hwnd);
-        return title is not null && title.Contains(HllWindowTitle, StringComparison.Ordinal);
+        if (_game.WindowTitle is { } expected)
+        {
+            var title = GetWindowTitle(hwnd);
+            return title is not null && title.Contains(expected, StringComparison.Ordinal);
+        }
+        uint owner;
+        lock (_cacheGate)
+        {
+            owner = _cachedOwnerPid;
+        }
+        return owner != 0 && OwnerPid(hwnd) == owner;
+    }
+
+    private static unsafe uint OwnerPid(HWND hwnd)
+    {
+        uint pid = 0;
+        PInvoke.GetWindowThreadProcessId(hwnd, &pid);
+        return pid;
+    }
+
+    private static string? GetClassName(HWND hwnd)
+    {
+        Span<char> buffer = stackalloc char[256];
+        var copied = PInvoke.GetClassName(hwnd, buffer);
+        return copied <= 0 ? null : new string(buffer[..copied]);
     }
 
     private static string? GetWindowTitle(HWND hwnd)

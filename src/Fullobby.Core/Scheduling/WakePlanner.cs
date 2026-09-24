@@ -57,7 +57,8 @@ public static class WakePlanner
     /// its daily window start, justified by that network (<see cref="ServerWindows"/>). Without
     /// these, a client wakes at the network's opening, finds every remaining server still gated on
     /// its own later window, is told "all exhausted", and sleeps through the window it was meant
-    /// to fill.</item>
+    /// to fill. Only the boards of <paramref name="gameIds"/> count (null = every game): a server
+    /// window for a game this machine can't launch would wake it for nothing.</item>
     /// </list>
     /// Wakes are deduplicated by time — two networks opening at 06:00, or a server window that
     /// coincides with a network opening, produce one wake justified by all of them.
@@ -66,7 +67,8 @@ public static class WakePlanner
     /// and inspectable via <see cref="WakePlan.Dropped"/>.
     /// </summary>
     public static WakePlan ComputePlan(
-        IReadOnlyList<NetworkSeedingStatus>? networks, SeedingConfig fleet, int maxWakes = MaxWakes)
+        IReadOnlyList<NetworkSeedingStatus>? networks, SeedingConfig fleet, int maxWakes = MaxWakes,
+        IReadOnlyCollection<string>? gameIds = null)
     {
         networks ??= [];
 
@@ -118,7 +120,7 @@ public static class WakePlanner
         foreach (var network in networks)
         {
             var missedHours = MissedHoursFor(network, fleet);
-            foreach (var time in ServerWindows.StartTimesUtc(network))
+            foreach (var time in ServerWindows.StartTimesUtc(network, gameIds))
             {
                 Add(time, network.NetworkId, missedHours);
             }

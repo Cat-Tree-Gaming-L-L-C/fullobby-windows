@@ -1,4 +1,5 @@
 using Fullobby.Core.Api;
+using Fullobby.Core.Games;
 
 namespace Fullobby.Core.Scheduling;
 
@@ -20,13 +21,15 @@ public static class ServerWindows
 {
     /// <summary>
     /// The distinct daily UTC window-start times of every windowed server on this network's day
-    /// boards, across games. A board entry without a window (null start) contributes nothing.
-    /// Seconds are dropped — windows are minute-granular and a wake's identity is "HH:MM".
+    /// boards, across <paramref name="gameIds"/> (null = every game). A board entry without a
+    /// window (null start) contributes nothing. Seconds are dropped — windows are minute-granular
+    /// and a wake's identity is "HH:MM".
     /// </summary>
-    public static IEnumerable<TimeOnly> StartTimesUtc(NetworkSeedingStatus network)
+    public static IEnumerable<TimeOnly> StartTimesUtc(
+        NetworkSeedingStatus network, IReadOnlyCollection<string>? gameIds = null)
     {
         var seen = new SortedSet<TimeOnly>();
-        foreach (var day in Boards(network))
+        foreach (var day in Boards(network, gameIds))
         {
             if (day.WindowStartTs is { } ts)
             {
@@ -35,6 +38,16 @@ public static class ServerWindows
         }
         return seen;
     }
+
+    /// <summary>
+    /// The earliest server window still ahead of <paramref name="nowUnix"/> for any of
+    /// <paramref name="gameIds"/>, across the given networks — or null when no window opens later
+    /// today. The directive picks the game at seed time, so "the next window" is the next one this
+    /// machine could seed, whichever game it belongs to.
+    /// </summary>
+    public static long? NextOpeningTs(
+        IReadOnlyList<NetworkSeedingStatus>? networks, IReadOnlyCollection<string> gameIds, long nowUnix) =>
+        gameIds.Select(g => NextOpeningTs(networks, g, nowUnix)).Where(t => t is not null).Min();
 
     /// <summary>
     /// The earliest server window still ahead of <paramref name="nowUnix"/> for
@@ -89,6 +102,7 @@ public static class ServerWindows
             _ => [],
         };
 
-    private static IEnumerable<ServerDayStatus> Boards(NetworkSeedingStatus network) =>
-        network.HllDay.Concat(network.HllvDay);
+    private static IEnumerable<ServerDayStatus> Boards(
+        NetworkSeedingStatus network, IReadOnlyCollection<string>? gameIds) =>
+        (gameIds ?? GameCatalog.All.Select(g => g.Id).ToList()).SelectMany(g => Board(network, g));
 }

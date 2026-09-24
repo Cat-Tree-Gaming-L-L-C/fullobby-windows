@@ -100,11 +100,16 @@ public sealed class SeedingEngine : IDisposable
     /// <summary>The shared stop/snooze/switch coordination state (also the snooze/confirm command surface).</summary>
     public SeedingState State => _state;
 
-    /// <summary>The game currently being seeded.</summary>
+    /// <summary>The game currently being seeded — or, when idle, the one a seed would start (the
+    /// directive picks it; see <c>SeedingViewModel</c>). The window finder follows it.</summary>
     public GameDefinition CurrentGame
     {
         get => _currentGame;
-        set => _currentGame = value;
+        set
+        {
+            _currentGame = value;
+            _window.Game = value;
+        }
     }
 
     private void Emit(SeedingEvent e) => Event?.Invoke(e);
@@ -714,7 +719,8 @@ public sealed class SeedingEngine : IDisposable
     {
         try
         {
-            var d = await _api.GetDirectiveAsync(_currentGame.Id, currentIndex, sessionId, ct: ct).ConfigureAwait(false);
+            var d = await _api.GetDirectiveAsync(
+                _currentGame.Id, currentIndex, sessionId, games: InstalledGames.Ids(), ct: ct).ConfigureAwait(false);
             _configProvider.Update(d.Config);
             return d;
         }

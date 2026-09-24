@@ -1,6 +1,7 @@
 using System.Text;
 using Fullobby.Core.Api;
 using Fullobby.Core.Config;
+using Fullobby.Core.Games;
 using Fullobby.Core.Native;
 using Microsoft.Extensions.Logging;
 
@@ -108,9 +109,10 @@ public sealed class AutoSeedService
     }
 
     /// <summary>The desired plan, from cached per-network statuses when fresh (else the fleet
-    /// fallback plan).</summary>
+    /// fallback plan). Server windows count only for games this machine can launch.</summary>
     private WakePlan ComputeCurrentPlan() =>
-        WakePlanner.ComputePlan(_statusCache.GetCached()?.Networks, _configProvider.Current);
+        WakePlanner.ComputePlan(
+            _statusCache.GetCached()?.Networks, _configProvider.Current, gameIds: InstalledGames.Ids());
 
     /// <summary>
     /// Diff the desired plan against the stored set and make Task Scheduler match: register tasks

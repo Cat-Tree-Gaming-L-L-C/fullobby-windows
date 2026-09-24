@@ -1,6 +1,5 @@
 using Fullobby.Core.Api;
 using Fullobby.Core.Config;
-using Fullobby.Core.Games;
 using Fullobby.Core.Native;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -132,7 +131,7 @@ public sealed class MissedAutoseedMonitor : IHostedService, IDisposable
             }
 
             // Final guards: don't stomp an in-progress seed or a hand-launched game.
-            if (_state.IsInProgress || _process.IsGameRunning(GameCatalog.Hll))
+            if (_state.IsInProgress || _process.IsAnyGameRunning())
             {
                 return;
             }

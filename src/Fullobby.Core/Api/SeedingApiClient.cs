@@ -25,12 +25,20 @@ public sealed class SeedingApiClient(HttpClient http)
 
     /// <summary>Fetch the server-decided directive: what to do next (seed/switch/stay/stop), the
     /// target server, stagger/countdown timings, when to poll again, and the current config. The
-    /// client identifies its current server by index in the game's rotation; null = "not seeding".</summary>
+    /// client identifies its current server by index in <paramref name="game"/>'s rotation; null =
+    /// "not seeding". <paramref name="games"/> lists every game this machine can launch — the server
+    /// then picks across them by network and rotation priority, and the target's <c>Game</c> says
+    /// which it chose (possibly not <paramref name="game"/>). Null asks about <paramref name="game"/>
+    /// alone.</summary>
     public Task<SeedingDirective> GetDirectiveAsync(
         string game, int? currentIndex, string? sessionId = null, long? networkId = null,
-        CancellationToken ct = default)
+        IReadOnlyList<string>? games = null, CancellationToken ct = default)
     {
         var path = $"/api/seeding/directive?game={Uri.EscapeDataString(game)}";
+        if (games is { Count: > 0 })
+        {
+            path += $"&games={Uri.EscapeDataString(string.Join(',', games))}";
+        }
         if (currentIndex is not null)
         {
             path += $"&current_index={currentIndex.Value}";

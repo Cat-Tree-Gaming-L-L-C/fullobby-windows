@@ -76,94 +76,144 @@ public sealed class ProcessMonitor
         return found;
     }
 
-    /// <summary>Whether a game's main process is running.</summary>
-    public bool IsGameRunning(GameDefinition game) => IsProcessRunning(game.ExeName);
+    /// <summary>Whether a game's main process is running — any of its <see cref="GameDefinition.ExeNames"/>
+    /// whose image lives in its install folder (15s cache, like <see cref="IsProcessRunning"/>). The
+    /// folder check is what tells the two HLL titles apart: they share a launcher name and may share
+    /// the shipping exe name.</summary>
+    public bool IsGameRunning(GameDefinition game) =>
+        IsRunningCached(GameKey(game), () => FindGamePids(game, game.ExeNames));
 
-    /// <summary>Whether a game's EAC launcher is running.</summary>
-    public bool IsGameLoading(GameDefinition game) => IsProcessRunning(game.LauncherExeName);
+    /// <summary>Whether any released game's main process is running.</summary>
+    public bool IsAnyGameRunning() => GameCatalog.Released.Any(IsGameRunning);
+
+    /// <summary>Whether a game's EAC launcher is running (folder-verified, see <see cref="IsGameRunning"/>).</summary>
+    public bool IsGameLoading(GameDefinition game) =>
+        IsRunningCached(LauncherKey(game), () => FindGamePids(game, [game.LauncherExeName]));
+
+    /// <summary>Pids of the game's main process (folder-verified). Used to find its window when the
+    /// title isn't known.</summary>
+    public IReadOnlyList<uint> GetGamePids(GameDefinition game) => FindGamePids(game, game.ExeNames);
 
     /// <summary>Check the EAC bootstrapper and the game process in a single fresh snapshot.
     /// Returns <c>(launcherRunning, exeRunning)</c>.</summary>
     public (bool LauncherRunning, bool ExeRunning) CheckGameLaunchProcesses(GameDefinition game)
     {
-        var map = SnapshotFindByNames([game.LauncherExeName, game.ExeName]);
+        var map = SnapshotFindByNames([game.LauncherExeName, .. game.ExeNames]);
 
-        map.TryGetValue(game.LauncherExeName, out var launcherPids);
-        var launcherFound = launcherPids is { Count: > 0 };
+        var launcherPids = VerifiedPids(game, map, [game.LauncherExeName]);
+        var exePids = VerifiedPids(game, map, game.ExeNames);
 
-        map.TryGetValue(game.ExeName, out var exePids);
-        var exeFound = exePids is { Count: > 0 };
+        UpdateCache(LauncherKey(game), launcherPids.Count > 0, launcherPids.Count > 0 ? launcherPids[0] : null, evictIfFull: false);
+        UpdateCache(GameKey(game), exePids.Count > 0, exePids.Count > 0 ? exePids[0] : null, evictIfFull: false);
 
-        UpdateCache(game.LauncherExeName, launcherFound, launcherFound ? launcherPids![0] : null, evictIfFull: false);
-        UpdateCache(game.ExeName, exeFound, exeFound ? exePids![0] : null, evictIfFull: false);
-
-        return (launcherFound, exeFound);
+        return (launcherPids.Count > 0, exePids.Count > 0);
     }
 
-    /// <summary>Kill all processes matching the game's exe name, but only after verifying each
-    /// one actually lives under the Steam installation (never kills an unrelated process).</summary>
+    /// <summary>Kill all of the game's main processes, but only those verified to live in the game's
+    /// Steam install folder (never kills an unrelated process — or the other HLL title).</summary>
     public void KillGameProcesses(GameDefinition game)
     {
-        var pids = SnapshotFindByName(game.ExeName);
-        var folderLower = game.InstallFolder.ToLowerInvariant();
-
-        foreach (var pid in pids)
+        foreach (var pid in FindGamePids(game, game.ExeNames))
         {
-            var exePath = GetProcessImagePath(pid);
-            if (exePath is null)
-            {
-                _log.LogDebug("Skipping PID {Pid} - path unavailable", pid);
-                continue;
-            }
-            var pathLower = exePath.ToLowerInvariant();
-
-            if (IsVerifiedGamePath(pathLower, folderLower))
-            {
-                _log.LogDebug("Terminating verified game process (PID {Pid})", pid);
-                TerminatePid(pid);
-            }
-            else
-            {
-                _log.LogDebug("Skipping PID {Pid} - unverified path", pid);
-            }
+            _log.LogDebug("Terminating verified game process (PID {Pid})", pid);
+            TerminatePid(pid);
         }
 
         lock (_cacheGate)
         {
-            _cache.Remove(game.ExeName);
+            _cache.Remove(GameKey(game));
         }
     }
 
     // ── Path verification (pure; public for unit coverage) ──
 
-    /// <summary>Strict fallback check that a path is the HLL Steam install (used when the cached
-    /// Steam dir is unavailable).</summary>
+    /// <summary>Strict fallback check that a path is the HLL Steam install.</summary>
     public static bool IsHllSteamPath(string pathLower) =>
-        pathLower.Contains(@"\steamapps\common\hell let loose\", StringComparison.Ordinal)
-        || pathLower.Contains("/steamapps/common/hell let loose/", StringComparison.Ordinal);
+        IsGameSteamPath(pathLower, GameCatalog.Hll.InstallFolder.ToLowerInvariant());
 
-    /// <summary>Generic fallback: a path under steamapps/common that contains the game's folder.</summary>
+    /// <summary>A path inside <c>steamapps/common/&lt;installFolder&gt;/</c> of any Steam library. The
+    /// folder must be a whole path segment: "hell let loose" is a prefix of "hell let loose - vietnam",
+    /// so a plain substring test would count one game's processes as the other's.</summary>
     public static bool IsGameSteamPath(string pathLower, string installFolderLower) =>
-        (pathLower.Contains(@"\steamapps\common\", StringComparison.Ordinal)
-            || pathLower.Contains("/steamapps/common/", StringComparison.Ordinal))
-        && pathLower.Contains(installFolderLower, StringComparison.Ordinal);
+        pathLower.Contains($@"\steamapps\common\{installFolderLower}\", StringComparison.Ordinal)
+        || pathLower.Contains($"/steamapps/common/{installFolderLower}/", StringComparison.Ordinal);
 
-    /// <summary>Decide whether a process path is a verified copy of the given game: prefer the
-    /// cached Steam directory, fall back to the steamapps/common heuristic.</summary>
-    private static bool IsVerifiedGamePath(string pathLower, string installFolderLower)
+    private static string GameKey(GameDefinition game) => $"game:{game.Id}";
+
+    private static string LauncherKey(GameDefinition game) => $"launcher:{game.Id}";
+
+    private List<uint> FindGamePids(GameDefinition game, IReadOnlyList<string> names) =>
+        VerifiedPids(game, SnapshotFindByNames(names), names);
+
+    /// <summary>The pids in <paramref name="map"/> under any of <paramref name="names"/> whose image is in
+    /// the game's install folder. A process whose path can't be read is only trusted when no other
+    /// game could own that name.</summary>
+    private List<uint> VerifiedPids(
+        GameDefinition game, Dictionary<string, List<uint>> map, IReadOnlyList<string> names)
     {
-        if (SteamPaths.CachedExePath is { } steamExe)
+        var folderLower = game.InstallFolder.ToLowerInvariant();
+        var result = new List<uint>();
+        foreach (var name in names)
         {
-            // Two levels up from steam.exe (…\Steam\steam.exe → the folder containing Steam).
-            var steamDir = Path.GetDirectoryName(Path.GetDirectoryName(steamExe));
-            if (steamDir is not null)
+            if (!map.TryGetValue(name, out var pids))
             {
-                var steamDirLower = steamDir.ToLowerInvariant();
-                return pathLower.StartsWith(steamDirLower, StringComparison.Ordinal)
-                    && pathLower.Contains(installFolderLower, StringComparison.Ordinal);
+                continue;
+            }
+            foreach (var pid in pids)
+            {
+                var exePath = GetProcessImagePath(pid);
+                if (exePath is null)
+                {
+                    if (!IsNameShared(game, name))
+                    {
+                        result.Add(pid);
+                    }
+                    else
+                    {
+                        _log.LogDebug("Skipping PID {Pid} ({Name}) - path unavailable and name is shared", pid, name);
+                    }
+                    continue;
+                }
+                if (IsGameSteamPath(exePath.ToLowerInvariant(), folderLower))
+                {
+                    result.Add(pid);
+                }
             }
         }
-        return IsGameSteamPath(pathLower, installFolderLower);
+        return result;
+    }
+
+    private static bool IsNameShared(GameDefinition game, string name) =>
+        GameCatalog.All.Any(g => g.Id != game.Id
+            && (g.LauncherExeName.Equals(name, StringComparison.OrdinalIgnoreCase)
+                || g.ExeNames.Any(n => n.Equals(name, StringComparison.OrdinalIgnoreCase))));
+
+    /// <summary>Cached running check keyed by <paramref name="key"/> (same TTL + PID fast path as
+    /// <see cref="IsProcessRunning"/>).</summary>
+    private bool IsRunningCached(string key, Func<List<uint>> find)
+    {
+        var now = Environment.TickCount64;
+        lock (_cacheGate)
+        {
+            if (_cache.TryGetValue(key, out var cached) && now - cached.Timestamp < ProcessCacheTtlMs)
+            {
+                if (cached.Pid is { } pid)
+                {
+                    if (IsPidValid(pid) == cached.IsRunning)
+                    {
+                        return cached.IsRunning;
+                    }
+                }
+                else if (!cached.IsRunning)
+                {
+                    return false;
+                }
+            }
+        }
+
+        var pids = find();
+        UpdateCache(key, pids.Count > 0, pids.Count > 0 ? pids[0] : null, evictIfFull: true);
+        return pids.Count > 0;
     }
 
     // ── Native helpers ──────────────────────────────────────────────────────

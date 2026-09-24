@@ -19,7 +19,7 @@ public class GameCatalogTests
         var game = GameCatalog.ById("hllv");
         Assert.NotNull(game);
         Assert.Equal("hllv", game!.Id);
-        Assert.Equal("HLLV", game.DisplayName);
+        Assert.Equal("Hell Let Loose: Vietnam", game.DisplayName);
     }
 
     [Theory]
@@ -38,10 +38,9 @@ public class GameCatalogTests
     }
 
     [Fact]
-    public void Released_OnlyHll()
+    public void Released_BothHllTitles_InCatalogOrder()
     {
-        Assert.Single(GameCatalog.Released);
-        Assert.Equal("hll", GameCatalog.Released[0].Id);
+        Assert.Equal(["hll", "hllv"], GameCatalog.Released.Select(g => g.Id));
     }
 
     [Fact]
@@ -58,8 +57,29 @@ public class GameCatalogTests
     [Fact]
     public void Hllv_FieldValues()
     {
-        Assert.Equal("HLLV", GameCatalog.Hllv.DisplayName);
+        // Steam's published app config for 3079210.
+        Assert.Equal("Hell Let Loose: Vietnam", GameCatalog.Hllv.DisplayName);
+        Assert.Equal("3079210", GameCatalog.Hllv.SteamAppId);
+        Assert.Equal("Launch_HLL.exe", GameCatalog.Hllv.LauncherExeName);
+        Assert.Equal("Hell Let Loose - Vietnam", GameCatalog.Hllv.InstallFolder);
+        // Window title unpublished: found by process instead.
+        Assert.Null(GameCatalog.Hllv.WindowTitle);
         Assert.Null(GameCatalog.Hllv.ConfigRelativePath);
         Assert.False(GameCatalog.Hllv.SupportsEfficiencyMode);
+    }
+
+    [Fact]
+    public void Hllv_ExeNames_IncludeTheHllAlias()
+    {
+        Assert.Equal(["HLLVietnam-Win64-Shipping.exe", "HLL-Win64-Shipping.exe"], GameCatalog.Hllv.ExeNames);
+        Assert.Equal(["HLL-Win64-Shipping.exe"], GameCatalog.Hll.ExeNames);
+    }
+
+    [Fact]
+    public void InstallFolders_AreDistinctSegments()
+    {
+        // The folder check is what separates the two titles' processes; one must not equal the
+        // other (a prefix is fine — IsGameSteamPath matches whole segments).
+        Assert.NotEqual(GameCatalog.Hll.InstallFolder, GameCatalog.Hllv.InstallFolder, StringComparer.OrdinalIgnoreCase);
     }
 }

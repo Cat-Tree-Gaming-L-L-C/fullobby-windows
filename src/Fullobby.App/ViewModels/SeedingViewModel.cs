@@ -164,13 +164,26 @@ public sealed partial class SeedingViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CanStopSeedingOnly))]
     private bool efficiencyMode;
 
+    /// <summary>Set while <see cref="SelectGame(GameDefinition)"/> loads a game's remembered choice,
+    /// so loading it doesn't persist it straight back.</summary>
+    private bool _loadingEfficiencyPreference;
+
     /// <summary>Persist the checkbox per game so the choice is remembered across sessions.</summary>
-    partial void OnEfficiencyModeChanged(bool value) =>
-        EfficiencyPreference.SetEnabled(_config, _engine.CurrentGame, value);
+    partial void OnEfficiencyModeChanged(bool value)
+    {
+        if (!_loadingEfficiencyPreference)
+        {
+            EfficiencyPreference.SetEnabled(_config, _engine.CurrentGame, value);
+        }
+    }
 
     /// <summary>Whether the Power Savings checkbox is rendered at all — only for games whose
     /// definition supports efficiency mode (e.g. not Palworld).</summary>
     public bool ShowEfficiencyOption => _engine.CurrentGame.SupportsEfficiencyMode;
+
+    /// <summary>Second line under the seed buttons naming the game a seed starts, e.g.
+    /// "(Hell Let Loose: Vietnam)" — the directive picks the game, so the button says which.</summary>
+    public string SeedGameLabel => $"({_engine.CurrentGame.DisplayName})";
 
     /// <summary>Whether "Stop Seeding (keep game)" is offered. Disabled in efficiency mode, where
     /// the game window is minimized and the user should fully stop instead.</summary>
@@ -491,13 +504,15 @@ public sealed partial class SeedingViewModel : ObservableObject
     {
         IsSeeding = true;
         SetStatus(SeedingStatus.Initializing);
-        var game = _engine.CurrentGame.Id;
 
-        // Ask the server what (if anything) to seed right now.
+        // Ask the server what (if anything) to seed right now, across every game this machine can
+        // launch: the server picks the game by network and rotation priority, so a wake set for one
+        // game's window seeds whichever game is in priority when it fires.
         SeedingDirective directive;
         try
         {
-            directive = await _api.GetDirectiveAsync(game, null, null).ConfigureAwait(true);
+            directive = await _api.GetDirectiveAsync(
+                _engine.CurrentGame.Id, null, null, games: InstalledGames.Ids()).ConfigureAwait(true);
         }
         catch (ApiException e)
         {
@@ -558,6 +573,7 @@ public sealed partial class SeedingViewModel : ObservableObject
             return;
         }
 
+        SelectGame(directive.Target);
         var index = directive.Target.Index;
         while (true)
         {
@@ -602,7 +618,10 @@ public sealed partial class SeedingViewModel : ObservableObject
             var d = result.Directive;
             if (d is { Action: DirectiveAction.Switch, Target: { } next })
             {
-                index = next.Index; // relaunch the server the directive pointed us to
+                // Relaunch the server the directive pointed us to — possibly in the other game (the
+                // monitor has already closed this one).
+                SelectGame(next);
+                index = next.Index;
                 continue;
             }
 
@@ -652,14 +671,98 @@ public sealed partial class SeedingViewModel : ObservableObject
         _account.OpenNetworkGate();
     }
 
-    /// <summary>The earliest server seed window still ahead today for the current game, from the
-    /// cached seeding status — or null when none is (or the cache is empty/stale, in which case the
-    /// caller has nothing to promise and falls back to the plain messaging).</summary>
+    /// <summary>The earliest server seed window still ahead today for any game this machine can
+    /// launch, from the cached seeding status — or null when none is (or the cache is empty/stale,
+    /// in which case the caller has nothing to promise and falls back to the plain messaging).</summary>
     private long? NextServerWindowTs() =>
         ServerWindows.NextOpeningTs(
             _statusCache.GetCached()?.Networks,
-            _engine.CurrentGame.Id,
+            InstalledGames.Ids(),
             DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+
+    /// <summary>Put the directive target's game in focus (see <see cref="SelectGame(GameDefinition)"/>).
+    /// A game this client doesn't know leaves the focus alone — the server only answers with games
+    /// it was asked about, so that would be a server bug, not a reason to launch the wrong game.</summary>
+    private void SelectGame(DirectiveTarget target)
+    {
+        if (GameCatalog.ById(target.Game) is { } game)
+        {
+            SelectGame(game);
+        }
+        else if (target.Game.Length > 0)
+        {
+            _log.LogWarning("Directive named unknown game '{Game}'; staying on {Current}",
+                target.Game, _engine.CurrentGame.Id);
+        }
+    }
+
+    /// <summary>Make <paramref name="game"/> the game in focus: the one the engine launches, the
+    /// seed buttons name, whose Power Savings choice applies, and whose servers the board lists.
+    /// While idle it follows what a seed would start (<see cref="RefreshSeedGameAsync"/>); during a
+    /// run, the game being seeded. A player with one game installed never sees it change.</summary>
+    private void SelectGame(GameDefinition game)
+    {
+        if (ReferenceEquals(_engine.CurrentGame, game))
+        {
+            return;
+        }
+        _log.LogInformation("Game in focus: {From} -> {To}", _engine.CurrentGame.Id, game.Id);
+        _engine.CurrentGame = game;
+
+        _loadingEfficiencyPreference = true;
+        try
+        {
+            EfficiencyMode = EfficiencyPreference.IsEnabled(_config, game);
+        }
+        finally
+        {
+            _loadingEfficiencyPreference = false;
+        }
+        OnPropertyChanged(nameof(ShowEfficiencyOption));
+        OnPropertyChanged(nameof(SeedGameLabel));
+
+        if (_bootstrap.HasServers)
+        {
+            RebuildServers();
+        }
+    }
+
+    /// <summary>Minimum gap between idle "which game would Seed start?" directive checks. Status
+    /// pushes arrive every ~30s; the answer only changes when a window opens or a rotation moves.</summary>
+    private const long SeedGameRefreshMinMs = 60_000;
+    private long _seedGameRefreshedAtMs = long.MinValue / 2;
+
+    /// <summary>While idle, ask the directive which game a seed would start and put that game in
+    /// focus, so the button's game line is true before it's pressed. Only runs with more than one
+    /// launchable game (with one, the answer can't differ). Best-effort: failures leave the focus as
+    /// it was — the directive is asked again, authoritatively, when the seed starts.</summary>
+    private async Task RefreshSeedGameAsync()
+    {
+        if (IsBusy || IsSeeding || AutoseedCountdownActive || !_auth.IsAuthenticated
+            || InstalledGames.Get().Count < 2)
+        {
+            return;
+        }
+        var now = Environment.TickCount64;
+        if (now - _seedGameRefreshedAtMs < SeedGameRefreshMinMs)
+        {
+            return;
+        }
+        _seedGameRefreshedAtMs = now;
+        try
+        {
+            var d = await _api.GetDirectiveAsync(
+                _engine.CurrentGame.Id, null, null, games: InstalledGames.Ids()).ConfigureAwait(true);
+            if (d.Target is { } target && !IsBusy && !IsSeeding)
+            {
+                SelectGame(target);
+            }
+        }
+        catch (Exception e)
+        {
+            _log.LogDebug(e, "Seed-game preview fetch failed (non-fatal)");
+        }
+    }
 
     private static string LocalHm(long unixTs) =>
         DateTimeOffset.FromUnixTimeSeconds(unixTs).ToLocalTime().ToString("HH:mm");
@@ -763,7 +866,7 @@ public sealed partial class SeedingViewModel : ObservableObject
             // timeout the remembered preference applies unchanged, so unattended auto-seeds keep
             // working exactly as before. Cancel keeps its abort semantics.
             _autoseedChoice = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            AutoseedPromptContext = _engine.CurrentGame.DisplayName;
+            AutoseedPromptContext = "";
             _ = FetchAutoseedTargetPreviewAsync(); // best-effort server name for the context line
             AutoseedCountdownActive = true;
             for (var i = 60; i > 0; i--)
@@ -836,16 +939,23 @@ public sealed partial class SeedingViewModel : ObservableObject
         _autoseedChoice?.TrySetResult(withPowerSavings == "true");
 
     /// <summary>Best-effort: resolve the directive's current target so the "Seed now?" prompt can
-    /// name the server. Display only — the authoritative directive is re-fetched when the seed
-    /// actually starts, so a stale preview is harmless. Failures leave the game-only context.</summary>
+    /// name the server, and put its game in focus so the buttons name the game (and offer Power
+    /// Savings only where the game supports it) before the answer. The authoritative directive is
+    /// re-fetched when the seed actually starts, so a stale preview is harmless. Failures leave the
+    /// buttons naming the game already in focus.</summary>
     private async Task FetchAutoseedTargetPreviewAsync()
     {
         try
         {
-            var d = await _api.GetDirectiveAsync(_engine.CurrentGame.Id, null, null).ConfigureAwait(true);
-            if (AutoseedCountdownActive && d.Target is { Server.Name.Length: > 0 } target)
+            var d = await _api.GetDirectiveAsync(
+                _engine.CurrentGame.Id, null, null, games: InstalledGames.Ids()).ConfigureAwait(true);
+            if (AutoseedCountdownActive && d.Target is { } target)
             {
-                AutoseedPromptContext = $"{_engine.CurrentGame.DisplayName} — {target.Server.Name}";
+                SelectGame(target);
+                if (target.Server.Name.Length > 0)
+                {
+                    AutoseedPromptContext = target.Server.Name;
+                }
             }
         }
         catch (Exception e)
@@ -1194,7 +1304,11 @@ public sealed partial class SeedingViewModel : ObservableObject
     }
 
     private void OnSeedingStatusUpdated(SeedingStatusResponse status) =>
-        _dispatcher.TryEnqueue(() => ApplyDayStatuses(status));
+        _dispatcher.TryEnqueue(() =>
+        {
+            ApplyDayStatuses(status);
+            _ = RefreshSeedGameAsync();
+        });
 
     /// <summary>Apply per-server ready standing to the server rows. The status is per network now:
     /// flatten each network's day board (by db_id — a server belongs to exactly one network) into

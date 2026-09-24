@@ -52,6 +52,15 @@ The architecture was already shaped for it:
   the directive considers every opted-in game, ordered by a per-user game
   priority list (same pattern as network priorities). Seeding one game at a
   time per machine stays the rule.
+  - *Implemented (interim):* every directive request carries
+    `games=<installed ids>` (`InstalledGames` — Steam app manifests across
+    library folders; HLL alone if nothing can be detected). The server picks
+    by network priority, then rotation position, then that list's order, and
+    the target's `game` says which; the client puts that game in focus
+    (`SeedingViewModel.SelectGame`) before launching, and a switch may cross
+    games. Wakes come only from installed games' server windows. The seed
+    buttons name the game in focus underneath ("Seed" / "(Hell Let Loose)").
+    Opt-in and a per-user game order (`user_games`) are still future.
 
 ## Per-game capability matrix
 

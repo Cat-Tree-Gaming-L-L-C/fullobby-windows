@@ -96,6 +96,12 @@ Waking early is normal: if the app comes up and every remaining server is still
 waiting for its own window, it says "Nothing to seed yet — the next server window
 opens at HH:MM", re-arms, and lets the machine sleep until then.
 
+If you have both Hell Let Loose and Hell Let Loose: Vietnam installed, a wake
+seeds whichever game your networks need most at that moment, not necessarily
+the one whose window caused the wake. The Seed button shows which game it will
+start underneath, for example "(Hell Let Loose: Vietnam)". Wakes only come from
+servers in games you have installed.
+
 If the machine slept through a wake, a watchdog can still fire the seed for a
 while afterwards.
 

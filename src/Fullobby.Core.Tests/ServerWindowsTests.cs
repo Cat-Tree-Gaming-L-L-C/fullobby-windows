@@ -43,6 +43,32 @@ public class ServerWindowsTests
     }
 
     [Fact]
+    public void StartTimes_OnlyCountTheGamesGiven()
+    {
+        // A machine without HLL: Vietnam must not wake for its 13:00 window — the "Seed now?" it
+        // would raise could never seed anything.
+        var network = Network(1,
+            hll: [Day(1, DayStatus.NotReady, At(16, 0))],
+            hllv: [Day(2, DayStatus.NotReady, At(13, 0))]);
+
+        Assert.Equal([new TimeOnly(16, 0)], ServerWindows.StartTimesUtc(network, ["hll"]));
+        Assert.Equal([new TimeOnly(13, 0), new TimeOnly(16, 0)], ServerWindows.StartTimesUtc(network, ["hll", "hllv"]));
+    }
+
+    [Fact]
+    public void NextOpening_AcrossGames_IsTheEarliestOfAny()
+    {
+        var networks = new List<NetworkSeedingStatus>
+        {
+            Network(1, [Day(1, DayStatus.NotReady, At(16, 0))], hllv: [Day(2, DayStatus.NotReady, At(13, 0))]),
+        };
+
+        Assert.Equal(At(13), ServerWindows.NextOpeningTs(networks, ["hll", "hllv"], At(12)));
+        Assert.Equal(At(16), ServerWindows.NextOpeningTs(networks, ["hll"], At(12)));
+        Assert.Null(ServerWindows.NextOpeningTs(networks, ["hll", "hllv"], At(17)));
+    }
+
+    [Fact]
     public void NextOpening_IsTheEarliestFutureWindow_ForTheGame()
     {
         var networks = new List<NetworkSeedingStatus>

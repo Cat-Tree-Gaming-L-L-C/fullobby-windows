@@ -19,6 +19,18 @@ public sealed record GameDefinition
     /// <summary>Main game executable name ("HLL-Win64-Shipping.exe").</summary>
     public required string ExeName { get; init; }
 
+    /// <summary>Other names the main executable may run under. A process only counts as this game
+    /// when its image lives in <see cref="InstallFolder"/>, so an alias shared with another game
+    /// (both HLL titles may ship an <c>HLL-Win64-Shipping.exe</c>) can't be mistaken for it.</summary>
+    public IReadOnlyList<string> AltExeNames { get; init; } = [];
+
+    /// <summary><see cref="ExeName"/> followed by <see cref="AltExeNames"/>.</summary>
+    public IReadOnlyList<string> ExeNames => [ExeName, .. AltExeNames];
+
+    /// <summary>Text the game window's title contains, or null when unknown — the window is then
+    /// found by its owning game process instead (see <c>WindowFocus</c>).</summary>
+    public string? WindowTitle { get; init; }
+
     /// <summary>EAC launcher executable name ("Launch_HLL.exe").</summary>
     public required string LauncherExeName { get; init; }
 
@@ -44,27 +56,38 @@ public static class GameCatalog
         ExeName = "HLL-Win64-Shipping.exe",
         LauncherExeName = "Launch_HLL.exe",
         InstallFolder = "Hell Let Loose",
+        WindowTitle = "Hell Let Loose",
         ConfigRelativePath = @"HLL\Saved\Config\WindowsNoEditor\GameUserSettings.ini",
         SupportsEfficiencyMode = true,
     };
 
+    /// <summary>Hell Let Loose: Vietnam. App id, install folder and launcher are Steam's published
+    /// app config (3079210: installdir "Hell Let Loose - Vietnam", launch "Launch_HLL.exe"). The
+    /// shipping exe is inferred from the Unreal project name its settings live under
+    /// (<c>%LOCALAPPDATA%\HLLVietnam</c>), with the HLL name as a fallback alias; the install-folder
+    /// check keeps either from matching the other game. The window title isn't published, so the
+    /// window is found by process. Power savings stays off until its config format is known (its
+    /// settings live under AppData, not the install folder).</summary>
     public static readonly GameDefinition Hllv = new()
     {
         Id = "hllv",
-        DisplayName = "HLLV",
-        SteamAppId = "0",                      // TBD — placeholder
-        ExeName = "HLLV-Win64-Shipping.exe",   // TBD — placeholder
-        LauncherExeName = "Launch_HLLV.exe",   // TBD — placeholder
-        InstallFolder = "HLLV",                // TBD — placeholder
-        ConfigRelativePath = null,             // TBD — no config manipulation until paths known
-        SupportsEfficiencyMode = false,        // TBD — disabled until HLLV's config format known
+        DisplayName = "Hell Let Loose: Vietnam",
+        SteamAppId = "3079210",
+        ExeName = "HLLVietnam-Win64-Shipping.exe",
+        AltExeNames = ["HLL-Win64-Shipping.exe"],
+        LauncherExeName = "Launch_HLL.exe",
+        InstallFolder = "Hell Let Loose - Vietnam",
+        WindowTitle = null,
+        ConfigRelativePath = null,
+        SupportsEfficiencyMode = false,
     };
 
     /// <summary>All supported games, in priority order (HLL first).</summary>
     public static readonly IReadOnlyList<GameDefinition> All = [Hll, Hllv];
 
-    /// <summary>Games available for release (HLLV is scaffolded but not yet ready).</summary>
-    public static readonly IReadOnlyList<GameDefinition> Released = [Hll];
+    /// <summary>Games the client will seed, in catalog order. Which of these a given machine can
+    /// actually launch is <c>InstalledGames</c>' call.</summary>
+    public static readonly IReadOnlyList<GameDefinition> Released = [Hll, Hllv];
 
     /// <summary>Look up a game definition by its short ID (case-sensitive). Null if unknown.</summary>
     public static GameDefinition? ById(string id)

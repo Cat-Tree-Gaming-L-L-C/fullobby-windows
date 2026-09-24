@@ -20,6 +20,8 @@ GetWindowTextW
 GetForegroundWindow
 GetWindowThreadProcessId
 IsWindow
+IsWindowVisible
+GetClassNameW
 PostMessageW
 SetForegroundWindow
 SetWindowPos

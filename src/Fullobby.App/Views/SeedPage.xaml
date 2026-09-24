@@ -168,18 +168,26 @@
                 <!-- Seed button (idle states). Efficiency-capable games get a split button: the
                      primary click seeds with the game's remembered Power Savings choice (zero
                      friction), the flyout offers the explicit pair (each click persisted as the
-                     new remembered default). Other games keep a plain button. -->
+                     new remembered default). Other games keep a plain button. The second line
+                     names the game a seed starts: the server picks it across installed games. -->
                 <StackPanel
                     Spacing="8"
                     Margin="0,8,0,0"
                     Visibility="{x:Bind ViewModel.ShowSeedButtons, Mode=OneWay, Converter={StaticResource BoolToVis}}">
                     <SplitButton
-                        Content="Seed"
                         Height="56"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
                         Command="{x:Bind ViewModel.SeedCommand}"
-                        Visibility="{x:Bind ViewModel.ShowEfficiencyOption, Converter={StaticResource BoolToVis}}">
+                        Visibility="{x:Bind ViewModel.ShowEfficiencyOption, Mode=OneWay, Converter={StaticResource BoolToVis}}">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="Seed" HorizontalAlignment="Center" />
+                            <TextBlock
+                                Text="{x:Bind ViewModel.SeedGameLabel, Mode=OneWay}"
+                                FontSize="11"
+                                Opacity="0.75"
+                                HorizontalAlignment="Center" />
+                        </StackPanel>
                         <SplitButton.Flyout>
                             <MenuFlyout Placement="Bottom">
                                 <MenuFlyoutItem
@@ -195,13 +203,21 @@
                         </SplitButton.Flyout>
                     </SplitButton>
                     <Button
-                        Content="Seed"
                         Height="56"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
                         Style="{StaticResource AccentButtonStyle}"
                         Command="{x:Bind ViewModel.SeedCommand}"
-                        Visibility="{x:Bind ViewModel.ShowEfficiencyOption, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                        Visibility="{x:Bind ViewModel.ShowEfficiencyOption, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="Seed" HorizontalAlignment="Center" />
+                            <TextBlock
+                                Text="{x:Bind ViewModel.SeedGameLabel, Mode=OneWay}"
+                                FontSize="11"
+                                Opacity="0.75"
+                                HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
 
                 <!-- Waiting for update: cancel -->
@@ -336,20 +352,36 @@
                         HorizontalAlignment="Center" />
                     <StackPanel Spacing="6" MinWidth="260">
                         <Button
-                            Content="Seed Now"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Center"
                             Style="{StaticResource AccentButtonStyle}"
                             Command="{x:Bind ViewModel.AutoseedChooseCommand}"
-                            CommandParameter="false" />
+                            CommandParameter="false">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock Text="Seed Now" HorizontalAlignment="Center" />
+                                <TextBlock
+                                    Text="{x:Bind ViewModel.SeedGameLabel, Mode=OneWay}"
+                                    FontSize="11"
+                                    Opacity="0.75"
+                                    HorizontalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                         <Button
-                            Content="Seed with Power Savings"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Center"
                             Command="{x:Bind ViewModel.AutoseedChooseCommand}"
                             CommandParameter="true"
-                            Visibility="{x:Bind ViewModel.ShowEfficiencyOption, Converter={StaticResource BoolToVis}}"
-                            ToolTipService.ToolTip="Temporarily edits the game's GameUserSettings.ini to apply low-resource settings while seeding. Your original settings are backed up and restored when seeding ends." />
+                            Visibility="{x:Bind ViewModel.ShowEfficiencyOption, Mode=OneWay, Converter={StaticResource BoolToVis}}"
+                            ToolTipService.ToolTip="Temporarily edits the game's GameUserSettings.ini to apply low-resource settings while seeding. Your original settings are backed up and restored when seeding ends.">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock Text="Seed with Power Savings" HorizontalAlignment="Center" />
+                                <TextBlock
+                                    Text="{x:Bind ViewModel.SeedGameLabel, Mode=OneWay}"
+                                    FontSize="11"
+                                    Opacity="0.75"
+                                    HorizontalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                         <Button
                             Content="Cancel"
                             HorizontalAlignment="Stretch"
