@@ -4,7 +4,8 @@ namespace Fullobby.Core.Seeding;
 
 /// <summary>
 /// When to nudge a player who has one game open ("Hell Let Loose: Vietnam needs seeding — swap?")
-/// while the directive wants the other. Only a <see cref="GameSwapKind.Swap"/> nudges: someone
+/// while the directive wants the other — or has another Unreal Engine game open, which would likely
+/// stop the seed launching. Only a <see cref="GameSwapKind.Swap"/> nudges: someone
 /// playing the very game that needs seeding is left to their own server. One nudge, then quiet for
 /// <see cref="QuietAfterNudge"/>; "Not now" buys <see cref="QuietAfterSnooze"/>. The nudge only
 /// ever offers — the swap happens when the player picks Swap.
@@ -19,22 +20,28 @@ public sealed class GameSwapNudgePolicy
 
     private long _quietUntilMs = long.MinValue;
 
-    /// <summary>The swap to offer now, or null. Offering starts the quiet period, so call this only
-    /// when the nudge will actually be shown.</summary>
-    public GameSwapPlan? Evaluate(GameDefinition? target, IReadOnlyList<GameDefinition> running, long nowMs)
+    /// <summary>The swap to offer now, or null. <paramref name="foreign"/> are other Unreal games
+    /// open (they'd likely stop the target launching). Offering starts the quiet period, so call
+    /// this only when the nudge will actually be shown.</summary>
+    public GameSwapPlan? Evaluate(
+        GameDefinition? target, IReadOnlyList<GameDefinition> running, long nowMs,
+        IReadOnlyList<ForeignGame>? foreign = null)
     {
-        if (target is null || running.Count == 0 || nowMs < _quietUntilMs)
+        if (target is null || nowMs < _quietUntilMs || !Wanted(target, running, foreign))
         {
             return null;
         }
-        var plan = GameSwap.Plan(target, running);
-        if (plan.Kind != GameSwapKind.Swap || running.Any(g => g.Id == target.Id))
-        {
-            return null; // already in the game that needs seeding
-        }
         _quietUntilMs = nowMs + (long)QuietAfterNudge.TotalMilliseconds;
-        return plan;
+        return GameSwap.Plan(target, running, foreign);
     }
+
+    /// <summary>Whether a nudge toward <paramref name="target"/> applies at all (ignoring quiet
+    /// periods): something is in the way, and the player isn't already in the game that needs
+    /// seeding. Also how a showing nudge knows it has gone stale.</summary>
+    public static bool Wanted(
+        GameDefinition target, IReadOnlyList<GameDefinition> running, IReadOnlyList<ForeignGame>? foreign = null) =>
+        GameSwap.Plan(target, running, foreign).Kind == GameSwapKind.Swap
+        && running.All(g => g.Id != target.Id);
 
     /// <summary>The player said "Not now".</summary>
     public void Snooze(long nowMs) => _quietUntilMs = nowMs + (long)QuietAfterSnooze.TotalMilliseconds;

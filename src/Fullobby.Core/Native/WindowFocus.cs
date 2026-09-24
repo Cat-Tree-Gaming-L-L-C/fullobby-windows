@@ -151,6 +151,22 @@ public sealed class WindowFocus
         return true;
     }
 
+    /// <summary>Owners of visible Unreal game windows (class <c>UnrealWindow</c>) — any Unreal title,
+    /// ours or not. Catches an Unreal game whose exe doesn't follow the shipping naming.</summary>
+    public IReadOnlySet<uint> UnrealWindowOwnerPids()
+    {
+        var pids = new HashSet<uint>();
+        PInvoke.EnumWindows((hwnd, _) =>
+        {
+            if (PInvoke.IsWindowVisible(hwnd) && GetClassName(hwnd) == UnrealWindowClass)
+            {
+                pids.Add(OwnerPid(hwnd));
+            }
+            return true; // continue
+        }, default);
+        return pids;
+    }
+
     /// <summary>Bring the app's own window to the foreground (matched by window title).</summary>
     public void FocusSeedingWindow()
     {

@@ -114,6 +114,20 @@ Not now buttons, and shows the same offer on the Seed page. Swap closes your
 game and starts seeding the other one. Not now keeps it quiet for two hours.
 Otherwise it won't ask again for 30 minutes.
 
+Other Unreal Engine games (Wardogs and the like) get the same treatment.
+Two Unreal games running at once usually stops the second one from launching,
+so before seeding or launching, Fullobby checks for one:
+
+- **Pressing Seed or Launch:** it asks "Close Wardogs?". You can pick Close,
+  Continue anyway, or Cancel. Continue anyway is there in case it guessed
+  wrong, for example an Unreal Editor window.
+- **Auto-seed wake:** the "Seed now?" prompt names the game, and only answering
+  Seed Now closes it.
+- **While you're playing one:** the same nudge as above, with a Close and seed
+  button.
+
+Fullobby never closes another game without you saying so.
+
 If the machine slept through a wake, a watchdog can still fire the seed for a
 while afterwards.
 

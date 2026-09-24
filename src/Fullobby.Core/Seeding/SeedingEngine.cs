@@ -141,6 +141,35 @@ public sealed class SeedingEngine : IDisposable
     public IReadOnlyList<GameDefinition> RunningGames() =>
         GameCatalog.Released.Where(_process.IsGameRunning).ToList();
 
+    /// <summary>Unreal Engine games open that aren't ours (see <see cref="ForeignGame"/>): a seed
+    /// launch next to one usually fails. Our own games' verified processes and this app are excluded.</summary>
+    public IReadOnlyList<ForeignGame> ForeignUnrealGames()
+    {
+        var ours = new HashSet<uint>(GameCatalog.All.SelectMany(_process.GetGamePids))
+        {
+            (uint)Environment.ProcessId,
+        };
+        return _process.FindForeignUnrealGames(_window.UnrealWindowOwnerPids(), ours);
+    }
+
+    /// <summary>Close everything <paramref name="plan"/> names — our games, then foreign Unreal
+    /// games — and wait for each to exit. Only for a plan the player agreed to.</summary>
+    public async Task ClosePlanAsync(GameSwapPlan plan, CancellationToken ct = default)
+    {
+        await CloseGamesAsync(plan.ToClose, ct).ConfigureAwait(false);
+        foreach (var foreign in plan.Foreign)
+        {
+            if (!_process.TerminateForeign(foreign))
+            {
+                continue;
+            }
+            for (var i = 0; i < 40 && _process.IsPidRunning(foreign.Pid); i++)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(500), ct).ConfigureAwait(false);
+            }
+        }
+    }
+
     /// <summary>Close each of <paramref name="games"/> and wait for it to exit (see
     /// <see cref="KillGameAndWaitAsync(GameDefinition, int, CancellationToken)"/>). Carries out a
     /// <see cref="GameSwapPlan"/> the player agreed to.</summary>

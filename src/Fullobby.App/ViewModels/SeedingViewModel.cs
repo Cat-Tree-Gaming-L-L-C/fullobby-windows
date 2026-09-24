@@ -69,9 +69,20 @@ public sealed partial class SeedingViewModel : ObservableObject
     /// huge NextActiveInSecs doesn't strand the loop). The poll re-fetches and resumes when the window opens.</summary>
     private const int ScheduledPauseMaxWaitSecs = 600;
 
-    /// <summary>Set by the hosting page (which has a XamlRoot) so the VM can ask the user to
-    /// confirm closing a running game. Returns true when the user confirms.</summary>
-    public Func<string, string, Task<bool>>? ConfirmAsync { get; set; }
+    /// <summary>Set by the hosting page (which has a XamlRoot): ask a close-before-seeding question (see
+    /// <see cref="GameSwapPlan"/>) and return the answer — Close / Continue anyway (only offered
+    /// when <see cref="GameSwapPlan.AllowContinueAnyway"/>) / Cancel.</summary>
+    public Func<GameSwapPlan, Task<GameSwapChoice>>? ChooseSwapAsync { get; set; }
+
+    /// <summary>What's in the way of launching <paramref name="target"/> right now: our games open,
+    /// and any other Unreal Engine game (which would likely stop it launching).</summary>
+    private GameSwapPlan PlanFor(GameDefinition target) =>
+        GameSwap.Plan(target, _engine.RunningGames(), _engine.ForeignUnrealGames());
+
+    /// <summary>Ask about <paramref name="plan"/>. No dialog host means no answer — and nothing is
+    /// closed without one.</summary>
+    private async Task<GameSwapChoice> AskSwapAsync(GameSwapPlan plan) =>
+        ChooseSwapAsync is null ? GameSwapChoice.Cancel : await ChooseSwapAsync(plan).ConfigureAwait(true);
 
     public SeedingViewModel(
         ILogger<SeedingViewModel> log,
@@ -285,8 +296,14 @@ public sealed partial class SeedingViewModel : ObservableObject
 
     public bool ShowAutoseedSwapNotice => AutoseedSwapNotice.Length > 0;
 
-    private void UpdateAutoseedSwapNotice(GameDefinition target, IReadOnlyList<GameDefinition> open) =>
-        AutoseedSwapNotice = GameSwap.Plan(target, open).PromptNotice;
+    /// <summary>The plan the "Seed now?" prompt last showed — what answering it agrees to close.</summary>
+    private GameSwapPlan? _autoseedShownPlan;
+
+    private void UpdateAutoseedSwapNotice(GameDefinition target)
+    {
+        _autoseedShownPlan = PlanFor(target);
+        AutoseedSwapNotice = _autoseedShownPlan.PromptNotice;
+    }
 
     /// <summary>Completed by <see cref="AutoseedChoose"/> when the user answers the "Seed now?"
     /// prompt early (true = with Power Savings). Null outside the countdown.</summary>
@@ -508,10 +525,11 @@ public sealed partial class SeedingViewModel : ObservableObject
     /// <summary>The unified seeding loop: ask the server what to seed (directive), launch it, and obey
     /// the monitor's verdict — relaunch on a switch, end on stop/exhaustion/game-close/user-stop. The
     /// server owns rotation and timing; this is a thin executor. Used by Seed and auto-seed alike.
-    /// <paramref name="swapConsented"/>: an auto-seed whose "Seed now?" prompt was answered, which
-    /// counts as the player's go-ahead to close a game they have open.</summary>
+    /// <paramref name="consent"/>: what the player already agreed to close — the plan an answered
+    /// "Seed now?" prompt showed, or the one the nudge offered (<paramref name="consentForTarget"/>:
+    /// only for that target game). Anything beyond it is asked about, or, unattended, left alone.</summary>
     private async Task RunDirectedSeedingAsync(
-        bool autoSeed, bool swapConsented = false, GameDefinition? consentedSwapTarget = null)
+        bool autoSeed, GameSwapPlan? consent = null, bool consentForTarget = false)
     {
         IsSeeding = true;
         SetStatus(SeedingStatus.Initializing);
@@ -587,12 +605,10 @@ public sealed partial class SeedingViewModel : ObservableObject
         // A game already open — the other title, or this one started by hand — has to close first,
         // and only with the player's say-so.
         var targetGame = GameCatalog.ById(directive.Target.Game) ?? _engine.CurrentGame;
-        var swap = GameSwap.Plan(targetGame, _engine.RunningGames());
-        // The nudge's Swap button agreed to a swap *to that game*; if the directive has since moved
-        // on (or wants the open game relaunched instead), that isn't what was agreed — ask again.
-        var consented = swapConsented
-            || (consentedSwapTarget is not null && swap.Kind == GameSwapKind.Swap
-                && swap.Target.Id == consentedSwapTarget.Id);
+        var swap = PlanFor(targetGame);
+        // Consent covers exactly what the player was shown: something opened since, or (for the
+        // nudge) a different target game, isn't what they agreed to — ask again.
+        var consented = consent is not null && swap.IsCoveredBy(consent, consentForTarget);
         if (swap.Kind != GameSwapKind.None
             && !await ResolveGameSwapAsync(swap, autoSeed, consented).ConfigureAwait(true))
         {
@@ -711,19 +727,23 @@ public sealed partial class SeedingViewModel : ObservableObject
         if (!autoSeed && !consented)
         {
             SetStatus(SeedingStatus.Idle);
-            var confirmed = ConfirmAsync is null
-                || await ConfirmAsync(swap.ConfirmMessage, swap.Title).ConfigureAwait(true);
-            if (!confirmed)
+            var choice = await AskSwapAsync(swap).ConfigureAwait(true);
+            if (choice == GameSwapChoice.Cancel)
             {
                 _log.LogInformation("Player kept {Open} open; {Target} not started", swap.ClosingNames, swap.Target.Id);
                 SetSeedError(swap.DeclinedMessage);
                 return false;
             }
             SetStatus(SeedingStatus.Initializing);
+            if (choice == GameSwapChoice.ContinueAnyway)
+            {
+                _log.LogInformation("Player chose to seed {Target} with {Open} still open", swap.Target.Id, swap.ClosingNames);
+                return true;
+            }
         }
 
         _log.LogInformation("{Kind}: closing {Open} for {Target}", swap.Kind, swap.ClosingNames, swap.Target.Id);
-        await _engine.CloseGamesAsync(swap.ToClose).ConfigureAwait(true);
+        await _engine.ClosePlanAsync(swap).ConfigureAwait(true);
         return true;
     }
 
@@ -805,8 +825,13 @@ public sealed partial class SeedingViewModel : ObservableObject
         // Idle, or a game launched from the Launch tab (Running) — that's someone playing, which is
         // exactly when the swap nudge matters. Never mid-seed.
         if (Status is not (SeedingStatus.Idle or SeedingStatus.Stopped or SeedingStatus.Running)
-            || IsSeeding || AutoseedCountdownActive || !_auth.IsAuthenticated
-            || InstalledGames.Get().Count < 2)
+            || IsSeeding || AutoseedCountdownActive || !_auth.IsAuthenticated)
+        {
+            return;
+        }
+        // With one game installed the directive can't pick a different game, so only another Unreal
+        // game open (the nudge's other case) is worth a directive call.
+        if (InstalledGames.Get().Count < 2 && _engine.ForeignUnrealGames().Count == 0)
         {
             return;
         }
@@ -849,8 +874,9 @@ public sealed partial class SeedingViewModel : ObservableObject
 
     private readonly GameSwapNudgePolicy _swapNudgePolicy = new();
 
-    /// <summary>The game the showing nudge offers to swap to; null when none is showing.</summary>
-    private GameDefinition? _swapNudgeTarget;
+    /// <summary>What the showing nudge offers (target + what it would close); null when none is
+    /// showing. Its Swap button agrees to exactly this.</summary>
+    private GameSwapPlan? _swapNudgePlan;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowGameSwapNudge))]
@@ -863,29 +889,34 @@ public sealed partial class SeedingViewModel : ObservableObject
     private void EvaluateGameSwapNudge(GameDefinition? target)
     {
         var running = _engine.RunningGames();
-        if (_swapNudgeTarget is not null
-            && (target?.Id != _swapNudgeTarget.Id || running.Count == 0
-                || running.Any(g => g.Id == _swapNudgeTarget.Id)))
+        var foreign = _engine.ForeignUnrealGames();
+        if (_swapNudgePlan is { } showing
+            && (target?.Id != showing.Target.Id || !GameSwapNudgePolicy.Wanted(showing.Target, running, foreign)))
         {
             ClearGameSwapNudge();
         }
 
-        if (_swapNudgePolicy.Evaluate(target, running, Environment.TickCount64) is not { } plan)
+        if (_swapNudgePolicy.Evaluate(target, running, Environment.TickCount64, foreign) is not { } plan)
         {
             return;
         }
-        _swapNudgeTarget = plan.Target;
-        GameSwapNudge = $"{plan.Target.DisplayName} needs seeding. Swap from {plan.ClosingNames}?";
+        _swapNudgePlan = plan;
+        GameSwapNudge = plan.NudgeMessage;
+        GameSwapNudgeAcceptLabel = plan.NudgeAcceptLabel;
         _log.LogInformation("Swap nudge: {Target} needs seeding, {Open} open", plan.Target.Id, plan.ClosingNames);
         _toast.ShowWithButtons(
             $"{plan.Target.DisplayName} needs seeding",
-            $"You're in {plan.ClosingNames}. Swap closes it and starts seeding {plan.Target.DisplayName}.",
-            [("Swap", SwapNudgeAcceptAction), ("Not now", SwapNudgeSnoozeAction)]);
+            plan.NudgeBody,
+            [(plan.NudgeAcceptLabel, SwapNudgeAcceptAction), ("Not now", SwapNudgeSnoozeAction)]);
     }
+
+    /// <summary>The nudge banner's accept button ("Swap", or "Close and seed" for another Unreal game).</summary>
+    [ObservableProperty]
+    private string gameSwapNudgeAcceptLabel = "Swap";
 
     private void ClearGameSwapNudge()
     {
-        _swapNudgeTarget = null;
+        _swapNudgePlan = null;
         GameSwapNudge = "";
     }
 
@@ -894,9 +925,9 @@ public sealed partial class SeedingViewModel : ObservableObject
     [RelayCommand]
     private async Task SwapToNeededGameAsync()
     {
-        var target = _swapNudgeTarget;
+        var offered = _swapNudgePlan;
         ClearGameSwapNudge();
-        if (target is null || IsSeeding || AutoseedCountdownActive)
+        if (offered is null || IsSeeding || AutoseedCountdownActive)
         {
             return;
         }
@@ -905,7 +936,7 @@ public sealed partial class SeedingViewModel : ObservableObject
             SetStatus(SeedingStatus.Idle); // the Launch-tab game is about to be closed for the swap
         }
         ClearSeedError();
-        await RunDirectedSeedingAsync(autoSeed: false, consentedSwapTarget: target).ConfigureAwait(true);
+        await RunDirectedSeedingAsync(autoSeed: false, consent: offered, consentForTarget: true).ConfigureAwait(true);
     }
 
     /// <summary>The nudge's "Not now": hide it and stay quiet for a while.</summary>
@@ -1012,15 +1043,14 @@ public sealed partial class SeedingViewModel : ObservableObject
             // A game already open no longer skips the seed outright: the prompt says what Seed Now
             // would close, and only an answer closes it (see ResolveGameSwapAsync). Unanswered, the
             // player's game is left alone. Provisional until the preview names the target game.
-            var openGames = _engine.RunningGames();
-            UpdateAutoseedSwapNotice(_engine.CurrentGame, openGames);
+            UpdateAutoseedSwapNotice(_engine.CurrentGame);
 
             // Desktop notification before the countdown so a user away from the keyboard gets a
             // warning before the game launches — or, with a game open, a chance to swap.
-            _toast.Show(Branding.ProductName, openGames.Count == 0
+            _toast.Show(Branding.ProductName, _autoseedShownPlan!.Kind == GameSwapKind.None
                 ? "Auto-seed starting in 60 seconds. Click to cancel."
-                : $"Seeding is due, but {string.Join(" and ", openGames.Select(g => g.DisplayName))} is open. " +
-                  $"Open {Branding.ProductName} within 60 seconds to swap games.");
+                : $"Seeding is due, but {_autoseedShownPlan.ClosingNames} is open. " +
+                  $"Open {Branding.ProductName} within 60 seconds to close it and seed.");
 
             // 60s "Seed now?" prompt. An explicit answer (Seed Now / Seed with Power Savings)
             // starts immediately and becomes the game's new remembered Power Savings default; on
@@ -1064,12 +1094,14 @@ public sealed partial class SeedingViewModel : ObservableObject
 
             // The server decides what to seed (and whether it's even an active window). A game
             // opened by hand during the countdown is caught there too: closed only if answered.
-            await RunDirectedSeedingAsync(autoSeed: true, swapConsented: answered).ConfigureAwait(true);
+            await RunDirectedSeedingAsync(autoSeed: true, consent: answered ? _autoseedShownPlan : null)
+                .ConfigureAwait(true);
         }
         finally
         {
             AutoseedCountdownActive = false;
             AutoseedSwapNotice = "";
+            _autoseedShownPlan = null;
             _autoseedChoice = null;
             _autoSeedState.End();
         }
@@ -1110,7 +1142,7 @@ public sealed partial class SeedingViewModel : ObservableObject
             if (AutoseedCountdownActive && d.Target is { } target)
             {
                 SelectGame(target);
-                UpdateAutoseedSwapNotice(_engine.CurrentGame, _engine.RunningGames());
+                UpdateAutoseedSwapNotice(_engine.CurrentGame);
                 if (target.Server.Name.Length > 0)
                 {
                     AutoseedPromptContext = target.Server.Name;
@@ -1220,27 +1252,29 @@ public sealed partial class SeedingViewModel : ObservableObject
         }
     }
 
-    /// <summary>If the game is already running, ask the user to confirm closing it and wait for
-    /// exit. Returns false only when the user declines. Mirrors the show_confirm path.</summary>
+    /// <summary>Before a Launch-tab launch: if the game is already running, our other game is, or
+    /// another Unreal game is (which would likely stop it launching), ask before closing anything and
+    /// wait for exit. Returns false when the player keeps what's open (Cancel).</summary>
     private async Task<bool> ConfirmCloseRunningGameAsync()
     {
-        if (!_engine.IsGameRunning)
+        var plan = PlanFor(_engine.CurrentGame);
+        if (plan.Kind == GameSwapKind.None)
         {
             return true;
         }
 
         SetStatus(SeedingStatus.Idle);
-        var confirmed = ConfirmAsync is null
-            || await ConfirmAsync(
-                $"{_engine.CurrentGame.DisplayName} is currently running. Close the game to continue?",
-                "Game Running").ConfigureAwait(true);
-        if (!confirmed)
+        var choice = await AskSwapAsync(plan).ConfigureAwait(true);
+        if (choice == GameSwapChoice.Cancel)
         {
             return false;
         }
 
         SetStatus(SeedingStatus.Initializing);
-        await _engine.KillGameAndWaitAsync().ConfigureAwait(true);
+        if (choice == GameSwapChoice.Close)
+        {
+            await _engine.ClosePlanAsync(plan).ConfigureAwait(true);
+        }
         return true;
     }
 

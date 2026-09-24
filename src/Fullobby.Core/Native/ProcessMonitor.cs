@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Fullobby.Core.Games;
 using Microsoft.Extensions.Logging;
@@ -123,6 +124,72 @@ public sealed class ProcessMonitor
         {
             _cache.Remove(GameKey(game));
         }
+    }
+
+    // ── Other Unreal Engine games ────────────────────────────────────────
+
+    /// <summary>
+    /// Unreal Engine games running that aren't ours: every process named like an Unreal shipping
+    /// build (<see cref="ForeignGame.IsUnrealShippingExe"/>) plus every owner of an Unreal game
+    /// window (<paramref name="unrealWindowPids"/>, which catches renamed exes), minus
+    /// <paramref name="excludePids"/> (our own games' verified processes). A fresh snapshot — this
+    /// gates launches, so no cache.
+    /// </summary>
+    public IReadOnlyList<ForeignGame> FindForeignUnrealGames(
+        IReadOnlySet<uint> unrealWindowPids, IReadOnlySet<uint> excludePids)
+    {
+        var found = new List<ForeignGame>();
+        foreach (var (pid, name) in SnapshotAll())
+        {
+            if (excludePids.Contains(pid)
+                || !(ForeignGame.IsUnrealShippingExe(name) || unrealWindowPids.Contains(pid)))
+            {
+                continue;
+            }
+            found.Add(new ForeignGame(pid, name, DescribeProcess(pid, name)));
+        }
+        return found;
+    }
+
+    /// <summary>Close a foreign game the player agreed to close — only if <see cref="ForeignGame.Pid"/>
+    /// is still that exe (a recycled pid is left alone). Returns whether a kill was issued.</summary>
+    public bool TerminateForeign(ForeignGame game)
+    {
+        var current = SnapshotAll().FirstOrDefault(p => p.Pid == game.Pid);
+        if (current.Name is null || !current.Name.Equals(game.ExeName, StringComparison.OrdinalIgnoreCase))
+        {
+            _log.LogDebug("Skipping PID {Pid} - no longer {Exe}", game.Pid, game.ExeName);
+            return false;
+        }
+        _log.LogInformation("Terminating {Name} (PID {Pid}) with the player's permission", game.DisplayName, game.Pid);
+        TerminatePid(game.Pid);
+        return true;
+    }
+
+    /// <summary>Whether a process id is still alive.</summary>
+    public bool IsPidRunning(uint pid) => IsPidValid(pid);
+
+    /// <summary>The exe's product name (what the player knows the game as), else the Unreal project
+    /// name from the exe name.</summary>
+    private static string DescribeProcess(uint pid, string exeName)
+    {
+        try
+        {
+            if (GetProcessImagePath(pid) is { } path)
+            {
+                var info = FileVersionInfo.GetVersionInfo(path);
+                var name = info.ProductName is { Length: > 0 } p ? p : info.FileDescription;
+                if (name is { Length: > 0 } && !name.Contains("Unreal", StringComparison.OrdinalIgnoreCase))
+                {
+                    return name.Trim();
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // Unreadable version info — fall back to the exe name.
+        }
+        return ForeignGame.NameFromExe(exeName);
     }
 
     // ── Path verification (pure; public for unit coverage) ──
@@ -273,6 +340,35 @@ public sealed class ProcessMonitor
         {
             PInvoke.CloseHandle(handle);
         }
+    }
+
+    /// <summary>Every process's (pid, exe name). Allocates a string per process — for the occasional
+    /// full scan, not the hot launch-polling path (that's <see cref="SnapshotFindByNames"/>).</summary>
+    private static List<(uint Pid, string Name)> SnapshotAll()
+    {
+        var result = new List<(uint, string)>();
+        using var snapshot = PInvoke.CreateToolhelp32Snapshot_SafeHandle(
+            CREATE_TOOLHELP_SNAPSHOT_FLAGS.TH32CS_SNAPPROCESS, 0);
+        if (snapshot.IsInvalid)
+        {
+            return result;
+        }
+        var entry = new PROCESSENTRY32W { dwSize = (uint)Marshal.SizeOf<PROCESSENTRY32W>() };
+        if (PInvoke.Process32FirstW(snapshot, ref entry))
+        {
+            do
+            {
+                var nameSpan = entry.szExeFile.AsReadOnlySpan();
+                var end = nameSpan.IndexOf('\0');
+                if (end >= 0)
+                {
+                    nameSpan = nameSpan[..end];
+                }
+                result.Add((entry.th32ProcessID, nameSpan.ToString()));
+            }
+            while (PInvoke.Process32NextW(snapshot, ref entry));
+        }
+        return result;
     }
 
     private static List<uint> SnapshotFindByName(string name)
