@@ -17,7 +17,7 @@ public record SeedingCandidate(string Game, int Index, ServerInfo Server, long D
 
 // status: "done" | "current" | "pending" | "skipped" | "not_ready" | "missed_ready" | "deferred".
 public record ServerDayStatus(
-    long DbId, string Name, string ShortName, string? CommunityTag, string Status,
+    long DbId, string Name, string ShortName, string? OrgTag, string Status,
     int? PlayerCount, int Threshold, long? WindowStartTs);
 
 // Per-network seeding status (multi-tenant). phase: "cycling" | "all_seeded" | null.
