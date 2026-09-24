@@ -40,6 +40,12 @@ public record NetworkMembership(
     long Priority, long JoinedAt);
 
 public record JoinNetworkRequest(string Name, string Code);
+public record InviteTokenRequest(string Token);
+
+/// <summary>An invite link as its recipient sees it (preview and accept both return this).</summary>
+public record InviteView(
+    long Id, string Role, long? NetworkId, string? NetworkName, string? OrgTag, string? Label,
+    long? MaxUses, long Uses, long? ExpiresAt, string? CreatedByName, bool Already);
 public record SetPrioritiesRequest(List<long> OrderedIds);
 
 public record RegisterResponse(string UserId, string ApiKey, string Username, string DisplayName);

@@ -202,6 +202,37 @@ public class ApiModelsTests
     }
 
     [Fact]
+    public void InvitePreview_SnakeCaseMapping()
+    {
+        var p = Parse<InvitePreview>(
+            """{"id":5,"org_id":null,"network_id":3,"org_tag":null,"network_name":"Comp HLL","role":"member","label":"Discord #welcome","max_uses":100,"uses":7,"created_by":2,"created_by_name":"alice","created_at":1700000000,"expires_at":1700600000,"already":false}""");
+        Assert.Equal(5, p.Id);
+        Assert.Equal(3, p.NetworkId);
+        Assert.Equal("Comp HLL", p.NetworkName);
+        Assert.Equal("member", p.Role);
+        Assert.True(p.IsPlayerLink);
+        Assert.Equal("Discord #welcome", p.Label);
+        Assert.Equal(100, p.MaxUses);
+        Assert.Equal(7, p.Uses);
+        Assert.Equal("alice", p.CreatedByName);
+        Assert.Equal(1700600000, p.ExpiresAt);
+        Assert.False(p.Already);
+    }
+
+    [Fact]
+    public void InvitePreview_NoExpiryNoLimit_AndStaffRole()
+    {
+        var p = Parse<InvitePreview>(
+            """{"id":1,"org_id":4,"network_id":null,"org_tag":"ABC","network_name":null,"role":"operator","label":null,"max_uses":null,"uses":0,"created_by":null,"created_by_name":null,"created_at":0,"expires_at":null,"already":true}""");
+        Assert.Null(p.ExpiresAt);
+        Assert.Null(p.MaxUses);
+        Assert.Null(p.NetworkName);
+        Assert.Equal("ABC", p.OrgTag);
+        Assert.False(p.IsPlayerLink);
+        Assert.True(p.Already);
+    }
+
+    [Fact]
     public void SeedingDirective_ActionLowercaseEnumAndDefaults()
     {
         var json = """{"action":"switch","target":{"game":"hll","index":1,"server":{"ip":"1.2.3.4","short_name":"S","name":"S","seeding_threshold":50,"game":"hll"},"db_id":7},"all_exhausted":false,"stagger_secs":0,"countdown_secs":30,"snooze_min_secs":60,"snooze_max_secs":1800,"poll_again_in_secs":15,"max_session_secs":18000,"config":{}}""";

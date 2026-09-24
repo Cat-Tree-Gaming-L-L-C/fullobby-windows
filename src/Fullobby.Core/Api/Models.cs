@@ -378,6 +378,38 @@ public sealed class NetworkMembership
     public long JoinedAt { get; set; }
 }
 
+/// <summary>An invite link as its recipient sees it, from <c>POST /api/invites/preview</c> and
+/// <c>POST /api/invites/accept</c>. The app only acts on player links
+/// (<see cref="Role"/> == <see cref="MemberRole"/>); org and staff links are accepted on the web
+/// page, where an org Admin picks the org. The org picker (<c>eligible_orgs</c>) is not modelled
+/// for that reason.</summary>
+public sealed class InvitePreview
+{
+    /// <summary>The role of a player link: accepting it joins the network.</summary>
+    public const string MemberRole = "member";
+
+    public long Id { get; set; }
+    /// <summary>"member", "org", "operator", "admin" or "owner".</summary>
+    public string Role { get; set; } = "";
+    public long? NetworkId { get; set; }
+    /// <summary>The network's display name, falling back to its name.</summary>
+    public string? NetworkName { get; set; }
+    public string? OrgTag { get; set; }
+    /// <summary>A note from the link's maker (e.g. which event or community it was for).</summary>
+    public string? Label { get; set; }
+    /// <summary>Null: no use limit.</summary>
+    public long? MaxUses { get; set; }
+    public long Uses { get; set; }
+    /// <summary>Unix seconds; null: never expires.</summary>
+    public long? ExpiresAt { get; set; }
+    public string? CreatedByName { get; set; }
+    /// <summary>Accepting would change nothing — the account is already a member. Such an accept
+    /// doesn't use the link up.</summary>
+    public bool Already { get; set; }
+
+    public bool IsPlayerLink => Role == MemberRole;
+}
+
 public sealed class StartSessionResponse
 {
     public string SessionId { get; set; } = "";
