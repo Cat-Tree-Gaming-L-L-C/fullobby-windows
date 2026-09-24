@@ -108,6 +108,12 @@ yes. When an auto-seed wake finds a game open, the "Seed now?" prompt says what
 Seed Now will close. If nobody answers, your game is left running and a
 notification says which game needs seeding.
 
+If you're playing one of the games when the other one needs seeding, Fullobby
+sends a notification ("Hell Let Loose: Vietnam needs seeding") with Swap and
+Not now buttons, and shows the same offer on the Seed page. Swap closes your
+game and starts seeding the other one. Not now keeps it quiet for two hours.
+Otherwise it won't ask again for 30 minutes.
+
 If the machine slept through a wake, a watchdog can still fire the seed for a
 while afterwards.
 

@@ -58,6 +58,20 @@
                         HorizontalAlignment="Center" />
                 </Border>
 
+                <!-- Swap nudge: a game is open while the other one needs seeding. Offer only. -->
+                <InfoBar
+                    IsOpen="{x:Bind ViewModel.ShowGameSwapNudge, Mode=OneWay}"
+                    IsClosable="False"
+                    Severity="Informational"
+                    Message="{x:Bind ViewModel.GameSwapNudge, Mode=OneWay}">
+                    <InfoBar.Content>
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,12">
+                            <Button Content="Swap" Command="{x:Bind ViewModel.SwapToNeededGameCommand}" />
+                            <Button Content="Not now" Command="{x:Bind ViewModel.DismissGameSwapNudgeCommand}" />
+                        </StackPanel>
+                    </InfoBar.Content>
+                </InfoBar>
+
                 <!-- Splash-bypass banner -->
                 <Border
                     Visibility="{x:Bind ViewModel.SplashBypassActive, Mode=OneWay, Converter={StaticResource BoolToVis}}"

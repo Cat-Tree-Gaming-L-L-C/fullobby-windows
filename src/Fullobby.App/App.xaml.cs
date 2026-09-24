@@ -116,6 +116,7 @@ public partial class App : Application
         var toasts = AppHost.Services.GetRequiredService<Services.ToastService>();
         toasts.Register();
         toasts.Activated += () => _window?.DispatcherQueue.TryEnqueue(() => _window.BringToFront());
+        toasts.ActionInvoked += OnToastAction;
 
         _window = AppHost.Services.GetRequiredService<MainWindow>();
         _window.Closed += (_, _) =>
@@ -324,6 +325,24 @@ public partial class App : Application
 
     /// <summary>The auto-seed re-armed its wake for a moved window — the scheduled task will wake the
     /// machine again at the new time, so this process has nothing left to do.</summary>
+    /// <summary>A toast button was clicked (off-thread). The swap nudge's buttons: Swap brings the
+    /// window forward and swaps; Not now just snoozes, leaving the player in their game.</summary>
+    private void OnToastAction(string action) =>
+        _window?.DispatcherQueue.TryEnqueue(() =>
+        {
+            var vm = AppHost.Services.GetRequiredService<ViewModels.SeedingViewModel>();
+            switch (action)
+            {
+                case ViewModels.SeedingViewModel.SwapNudgeAcceptAction:
+                    _window.BringToFront();
+                    _ = vm.SwapToNeededGameCommand.ExecuteAsync(null);
+                    break;
+                case ViewModels.SeedingViewModel.SwapNudgeSnoozeAction:
+                    vm.DismissGameSwapNudgeCommand.Execute(null);
+                    break;
+            }
+        });
+
     private void OnResleepRequested() =>
         EndAutoseedLaunch("re-armed for a moved window; letting the PC sleep");
 

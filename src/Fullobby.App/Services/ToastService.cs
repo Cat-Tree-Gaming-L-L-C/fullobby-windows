@@ -23,6 +23,14 @@ public sealed class ToastService
     /// window forward so they can snooze/stop.</summary>
     public event Action? Activated;
 
+    /// <summary>Raised (off-thread) with the button's action when the user clicks a toast button
+    /// (see <see cref="ShowWithButtons"/>) instead of the toast body. Not followed by
+    /// <see cref="Activated"/>: a "Not now" must not pull the app over the player's game.</summary>
+    public event Action<string>? ActionInvoked;
+
+    /// <summary>Toast argument key carrying a button's action.</summary>
+    private const string ActionArg = "action";
+
     /// <summary>Register the unpackaged toast handler. Call once at startup before showing toasts.</summary>
     public void Register()
     {
@@ -90,6 +98,27 @@ public sealed class ToastService
         }
     }
 
+    /// <summary>A title/body toast with buttons, each reporting its action through
+    /// <see cref="ActionInvoked"/>. Clicking the body behaves like any other toast.</summary>
+    public void ShowWithButtons(string title, string body, IReadOnlyList<(string Label, string Action)> buttons)
+    {
+        try
+        {
+            var builder = new AppNotificationBuilder()
+                .AddText(title)
+                .AddText(body);
+            foreach (var (label, action) in buttons)
+            {
+                builder.AddButton(new AppNotificationButton(label).AddArgument(ActionArg, action));
+            }
+            AppNotificationManager.Default.Show(builder.BuildNotification());
+        }
+        catch (Exception e)
+        {
+            _log.LogWarning(e, "Failed to show notification");
+        }
+    }
+
     /// <summary>Windows "exclamation" chime via MessageBeep.</summary>
     public void PlayAttentionSound()
     {
@@ -104,7 +133,14 @@ public sealed class ToastService
     }
 
     private void OnNotificationInvoked(AppNotificationManager sender, AppNotificationActivatedEventArgs args)
-        => Activated?.Invoke();
+    {
+        if (args.Arguments.TryGetValue(ActionArg, out var action) && action.Length > 0)
+        {
+            ActionInvoked?.Invoke(action);
+            return;
+        }
+        Activated?.Invoke();
+    }
 
     [DllImport("user32.dll")]
     private static extern bool MessageBeep(uint uType);
