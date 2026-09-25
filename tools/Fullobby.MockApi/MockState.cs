@@ -48,6 +48,12 @@ public sealed class MockState
     public const long NetworkId = 1;
     public const string NetworkInviteUrl = "https://discord.gg/mock";
 
+    // Invite links: paste http://localhost:<port>/invite#<token> (or just the token) into the app.
+    // The player link joins the mock network; the operator link exercises the "open it in a
+    // browser" path. Any other token gets the uniform 400.
+    public static readonly string PlayerInviteToken = new('a', 64);
+    public static readonly string StaffInviteToken = new('b', 64);
+
     public ArmedError? Armed { get; set; }
 
     // Auto-advance: simulate the server *currently being seeded* filling up over time so it crosses
@@ -371,6 +377,33 @@ public sealed class MockState
             _memberships.Add(m);
             return m;
         }
+    }
+
+    /// <summary>An invite link's view for <paramref name="token"/>, or null for an unknown one.
+    /// Accepting the player link joins the mock network.</summary>
+    public InviteView? Invite(string token, bool accept)
+    {
+        token = token.Trim();
+        if (token == StaffInviteToken)
+        {
+            return new InviteView(2, "operator", NetworkId, NetworkDisplayName, null, null, 1, 0,
+                DateTimeOffset.UtcNow.AddDays(7).ToUnixTimeSeconds(), "mock-admin", false);
+        }
+        if (token != PlayerInviteToken)
+        {
+            return null;
+        }
+        bool already;
+        lock (_gate)
+        {
+            already = _memberships.Any(m => m.NetworkId == NetworkId);
+        }
+        if (accept && !already)
+        {
+            Join(NetworkName, JoinCode);
+        }
+        return new InviteView(1, "member", NetworkId, NetworkDisplayName, null, "Mock welcome link",
+            null, 0, null, "mock-admin", already);
     }
 
     /// <summary>Leave by network id (idempotent, like the real endpoint).</summary>

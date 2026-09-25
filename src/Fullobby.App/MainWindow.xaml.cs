@@ -183,6 +183,13 @@ public sealed partial class MainWindow : Window
             {
                 UpdateNetworkGateBar();
             }
+
+            // A fullobby://invite link: open the join dialog with it, once past onboarding (whose
+            // network step takes it otherwise). Re-checked when the overlay closes.
+            if (e.PropertyName is nameof(AccountViewModel.PendingInvite) or nameof(AccountViewModel.ShowOnboarding))
+            {
+                _ = OpenPendingInviteAsync();
+            }
         };
     }
 
@@ -198,6 +205,28 @@ public sealed partial class MainWindow : Window
     /// <summary>Open the shared join dialog from the banner — the same one Settings uses.</summary>
     private async void NetworkGateJoin_Click(object sender, RoutedEventArgs e) =>
         await Views.NetworkJoinDialog.ShowAsync(Account, RootGrid.XamlRoot);
+
+    /// <summary>Show the join dialog prefilled with a deep-linked invite. Skipped while the overlay
+    /// is up (the onboarding network step prefills instead) or signed out.</summary>
+    private async Task OpenPendingInviteAsync()
+    {
+        if (Account.ShowOnboarding || !Account.IsLoggedIn || Account.PendingInvite is null
+            || RootGrid.XamlRoot is null)
+        {
+            return;
+        }
+        var token = Account.TakePendingInvite();
+        try
+        {
+            await Views.NetworkJoinDialog.ShowAsync(Account, RootGrid.XamlRoot, token);
+        }
+        catch (Exception ex)
+        {
+            // WinUI allows one ContentDialog at a time; another one already open throws here.
+            // Dropping the link is fine: the user can click it again once that one is closed.
+            Log.Warning(ex, "Couldn't open the join dialog for an invite link");
+        }
+    }
 
     /// <summary>Raised by ConfigService, possibly off the UI thread.</summary>
     private void OnSecretProtectionUnavailable() =>

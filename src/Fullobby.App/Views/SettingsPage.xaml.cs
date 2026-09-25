@@ -444,7 +444,7 @@ public sealed partial class SettingsPage : Page
         var dialog = new ContentDialog
         {
             Title = "Leave Network",
-            Content = $"Leave {row.Label}? You'll need a join code to rejoin, and its servers will no longer be seeded by you.",
+            Content = $"Leave {row.Label}? You'll need a new invite link to rejoin, and its servers will no longer be seeded by you.",
             PrimaryButtonText = "Leave",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Close,
@@ -465,8 +465,8 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    /// <summary>Join-a-network dialog: tag + join code. The code is sent and forgotten — never
-    /// stored. Shared with the shell's join-a-network banner (see <see cref="NetworkJoinDialog"/>),
+    /// <summary>Join-a-network dialog: an invite link, or a tag + join code as the legacy fallback.
+    /// Neither is ever stored. Shared with the shell's join-a-network banner (see <see cref="NetworkJoinDialog"/>),
     /// so both entry points behave identically.</summary>
     private async void NetworkJoin_Click(object sender, RoutedEventArgs e) =>
         await NetworkJoinDialog.ShowAsync(Account, XamlRoot);

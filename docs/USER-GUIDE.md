@@ -11,9 +11,9 @@ the app — see [OPERATOR-GUIDE.md](OPERATOR-GUIDE.md) or
 
 - **Windows 10 (version 2004 / build 19041) or Windows 11.**
 - **Steam, with Hell Let Loose installed.** The app launches your existing copy.
-- **A network name and join code**, from the org that invited you. Fullobby
-  is in limited beta and seeding happens inside networks — the app can't finish
-  setup without one.
+- **An invite link** from the staff of a network — usually posted in their
+  Discord. Fullobby is in limited beta and seeding happens inside networks — the
+  app can't finish setup without one.
 
 ## Install
 
@@ -47,13 +47,24 @@ the app pins.
 
 ### 2. Join a network
 
-Enter the **network name** and **join code** you were given.
+Paste the **invite link** you were given and press **Check link**. The app
+shows which network it's for — *"Join Comp HLL?"* — and **Join** puts you in.
 
+Paste the whole link, `https://…/invite#…`; it's too long to retype. Opening
+the link in a browser works too: sign in there with the same account you use in
+the app, accept, and the app picks it up.
+
+If the app says the link is for org staff, it's an org or staff invite, not a
+player one — open it in a browser instead, or ask for a player link.
+
+**Given a network name and join code instead?** Some networks still hand those
+out. Open **Have a join code instead?** under the link box and enter both.
 Capitalisation doesn't matter and surrounding spaces are trimmed, but the dashes
 in the code are part of it — paste rather than retype.
 
 This is required: until you're in a network, the app has nothing to seed and
-won't finish onboarding. Joining more than one is fine; you can reorder them by
+won't finish onboarding. Joining more than one is fine — **Settings → Seeding
+Networks → Join a network** takes another link — and you can reorder them by
 priority later.
 
 ### 3. Link your other account
@@ -150,7 +161,9 @@ verified against a signed manifest before it runs — see
 
 | What you see | What's happening |
 |---|---|
-| "That network name or code isn't valid" | The message is deliberately vague so codes can't be guessed at. Check the name, re-paste the code with its dashes. Still failing? Ask staff to rotate it — codes are stored hashed and nobody can read yours back. |
+| "This invite is no longer valid — ask for a new one" | The link expired, was used up or was revoked. The message is the same for all three on purpose. Ask the network's staff for a fresh link. |
+| "This link is for org staff, not players" | It's an org or staff invite. Open it in a browser, signed in — or ask for a player link. |
+| "Invalid network or join code" | Join codes only. The message is deliberately vague so codes can't be guessed at. Check the name, re-paste the code with its dashes. Still failing? Ask for an invite link instead. |
 | Nothing to seed | Outside the network's hours, or every server is already full. The app says which. |
 | Signed in but nothing works / no permissions | You're probably on a different account than the one holding your access — see below. |
 | Installer won't run | Windows 10 build 19041 (version 2004) or newer is required. Check Winver. |

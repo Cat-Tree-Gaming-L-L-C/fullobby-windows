@@ -216,12 +216,28 @@ public sealed class SeedingApiClient(HttpClient http)
 
     // ── Seeding networks (auth required) ──────────────────────────────────
 
-    /// <summary>Join a seeding network by name + join code. The API returns a uniform 400 for any
+    /// <summary>Join a seeding network by name + join code — the legacy way in, kept for networks
+    /// that still hand out codes (invite links are preferred). The API returns a uniform 400 for any
     /// failure (unknown network or wrong code — indistinguishable by design) and 429 when
     /// rate-limited. The code is sent and forgotten — never stored client-side.</summary>
     public Task<NetworkMembership> JoinNetworkAsync(string name, string code, CancellationToken ct = default) =>
         SendAsync<NetworkMembership>(HttpMethod.Post, "/api/networks/join",
             new Dictionary<string, object?> { ["name"] = name, ["code"] = code }, ct);
+
+    /// <summary>Look at an invite link before accepting it. <paramref name="token"/> is the hex
+    /// after the link's <c>#</c> (see <see cref="InviteLink.ParseToken"/>). Any unknown, revoked,
+    /// expired or used-up link is one uniform 400 whose <c>error</c> says to ask for a new one;
+    /// 429 when rate-limited.</summary>
+    public Task<InvitePreview> PreviewInviteAsync(string token, CancellationToken ct = default) =>
+        SendAsync<InvitePreview>(HttpMethod.Post, "/api/invites/preview",
+            new Dictionary<string, object?> { ["token"] = token }, ct);
+
+    /// <summary>Accept an invite link. For a player link this joins its network; an accept that
+    /// changes nothing comes back with <see cref="InvitePreview.Already"/> set. Failures as
+    /// <see cref="PreviewInviteAsync"/>. The token is sent and forgotten — never stored.</summary>
+    public Task<InvitePreview> AcceptInviteAsync(string token, CancellationToken ct = default) =>
+        SendAsync<InvitePreview>(HttpMethod.Post, "/api/invites/accept",
+            new Dictionary<string, object?> { ["token"] = token }, ct);
 
     /// <summary>Fetch the user's network memberships, ordered by priority.</summary>
     public Task<List<NetworkMembership>> GetMyNetworksAsync(CancellationToken ct = default) =>

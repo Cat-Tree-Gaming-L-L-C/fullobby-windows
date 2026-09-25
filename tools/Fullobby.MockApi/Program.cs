@@ -105,6 +105,17 @@ app.MapPost("/api/networks/join", (JoinNetworkRequest req) =>
         ? Results.Json(m)
         : Results.BadRequest(new { error = "invalid network or join code" }));
 
+// ── Invite links (player link: 64 × 'a'; operator link: 64 × 'b'; uniform 400 otherwise) ──
+app.MapPost("/api/invites/preview", (InviteTokenRequest req) =>
+    state.Invite(req.Token, accept: false) is { } v
+        ? Results.Json(v)
+        : Results.BadRequest(new { error = "This invite is no longer valid — ask for a new one." }));
+
+app.MapPost("/api/invites/accept", (InviteTokenRequest req) =>
+    state.Invite(req.Token, accept: true) is { } v
+        ? Results.Json(v)
+        : Results.BadRequest(new { error = "This invite is no longer valid — ask for a new one." }));
+
 app.MapGet("/api/networks/mine", () => Results.Json(state.Memberships));
 
 app.MapDelete("/api/networks/{networkId:long}/membership", (long networkId) =>

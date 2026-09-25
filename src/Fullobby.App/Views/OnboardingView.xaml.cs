@@ -46,6 +46,10 @@ public sealed partial class OnboardingView : UserControl
         {
             UpdateStep();
         }
+        else if (e.PropertyName == nameof(AccountViewModel.PendingInvite) && Account.OnboardingStep == 1)
+        {
+            PrefillPendingInvite();
+        }
     }
 
     private void UpdateStep()
@@ -64,6 +68,7 @@ public sealed partial class OnboardingView : UserControl
         if (step == 1)
         {
             UpdateNetworkStep();
+            PrefillPendingInvite();
             if (_lastStep != 1)
             {
                 // Refresh on entry so a user who already belongs to a network passes instantly.
@@ -197,8 +202,92 @@ public sealed partial class OnboardingView : UserControl
 
     // ── Network step ────────────────────────────────────────────────────────
 
-    /// <summary>Join with the entered tag + code. The code is sent and forgotten — cleared from
-    /// the box on success and never written to config.</summary>
+    /// <summary>Look up the pasted invite link and ask "Join &lt;network&gt;?" before joining. An org
+    /// or staff link, or a dead one, is explained inline instead.</summary>
+    private async void InviteCheck_Click(object sender, RoutedEventArgs e)
+    {
+        InviteCheckButton.IsEnabled = false;
+        InviteError.Visibility = Visibility.Collapsed;
+        InviteConfirmPanel.Visibility = Visibility.Collapsed;
+        try
+        {
+            var (preview, error) = await Account.PreviewInviteAsync(InviteLinkBox.Text);
+            if (preview is null)
+            {
+                InviteError.Text = error;
+                InviteError.Visibility = Visibility.Visible;
+                return;
+            }
+            InviteConfirmTitle.Text = AccountViewModel.InviteQuestion(preview);
+            var detail = AccountViewModel.InviteDetail(preview);
+            InviteConfirmDetail.Text = detail;
+            InviteConfirmDetail.Visibility = Vis(detail.Length > 0);
+            // Already a member: nothing to accept, just acknowledge (Continue is enabled by the
+            // membership refresh the preview did).
+            InviteAcceptButton.Visibility = Vis(!preview.Already);
+            InviteDismissButton.Content = preview.Already ? "OK" : "Cancel";
+            InviteConfirmPanel.Visibility = Visibility.Visible;
+        }
+        finally
+        {
+            InviteCheckButton.IsEnabled = true;
+        }
+    }
+
+    /// <summary>Join through the previewed link. The link is cleared from the box on success and
+    /// never written to config.</summary>
+    private async void InviteAccept_Click(object sender, RoutedEventArgs e)
+    {
+        InviteAcceptButton.IsEnabled = false;
+        InviteError.Visibility = Visibility.Collapsed;
+        try
+        {
+            var error = await Account.AcceptInviteAsync(InviteLinkBox.Text);
+            if (error is null)
+            {
+                ResetInvite();
+            }
+            else
+            {
+                InviteConfirmPanel.Visibility = Visibility.Collapsed;
+                InviteError.Text = error;
+                InviteError.Visibility = Visibility.Visible;
+            }
+        }
+        finally
+        {
+            InviteAcceptButton.IsEnabled = true;
+        }
+    }
+
+    private void InviteDismiss_Click(object sender, RoutedEventArgs e) => ResetInvite();
+
+    /// <summary>Put a <c>fullobby://invite</c> link's token in the box. Held until this step: the
+    /// lookup needs the account the earlier step signs in.</summary>
+    private void PrefillPendingInvite()
+    {
+        if (Account.TakePendingInvite() is { } token)
+        {
+            InviteLinkBox.Text = token;
+        }
+    }
+
+    /// <summary>A changed link invalidates the question asked about the old one.</summary>
+    private void InviteLinkBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        InviteConfirmPanel.Visibility = Visibility.Collapsed;
+        InviteError.Visibility = Visibility.Collapsed;
+    }
+
+    private void ResetInvite()
+    {
+        InviteLinkBox.Text = ""; // also collapses the panel and error (TextChanged)
+        InviteConfirmPanel.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>Join with the entered tag + code — the legacy way in, under "Have a join code
+    /// instead?". The code is sent and forgotten — cleared from the box on success and never
+    /// written to config.</summary>
     private async void JoinNetwork_Click(object sender, RoutedEventArgs e)
     {
         NetworkJoinButton.IsEnabled = false;

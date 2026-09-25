@@ -244,4 +244,33 @@ public class DeepLinkParserTests
 
         Assert.IsType<DeepLinkAction.Unknown>(action);
     }
+
+    // ── Invite links ────────────────────────────────────────────────
+
+    private const string InviteToken = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+    [Theory]
+    [InlineData("fullobby://invite?token=" + InviteToken)]
+    [InlineData("fullobby://invite/?token=" + InviteToken)]
+    public void ParseInvite(string url)
+    {
+        var invite = Assert.IsType<DeepLinkAction.Invite>(DeepLinkParser.Parse(url));
+        Assert.Equal(InviteToken, invite.Token);
+    }
+
+    [Fact]
+    public void ParseInviteLowercasesToken()
+    {
+        var invite = Assert.IsType<DeepLinkAction.Invite>(
+            DeepLinkParser.Parse("fullobby://invite?token=" + InviteToken.ToUpperInvariant()));
+        Assert.Equal(InviteToken, invite.Token);
+    }
+
+    [Theory]
+    [InlineData("fullobby://invite")]
+    [InlineData("fullobby://invite?token=")]
+    [InlineData("fullobby://invite?token=abc123")]
+    [InlineData("fullobby://invite?code=" + InviteToken)]
+    public void ParseInviteWithoutValidTokenIsUnknown(string url) =>
+        Assert.IsType<DeepLinkAction.Unknown>(DeepLinkParser.Parse(url));
 }

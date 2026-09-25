@@ -87,6 +87,13 @@ public sealed partial class AccountViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(SeedingBlocked))]
     private bool onboardingComplete;
 
+    /// <summary>An invite token handed over by a <c>fullobby://invite</c> deep link, waiting for a
+    /// join prompt to prefill with it: the onboarding network step, or the join dialog once the user
+    /// is past onboarding (MainWindow). Taken once with <see cref="TakePendingInvite"/>; nothing is
+    /// joined until the user confirms, and it is never written to config.</summary>
+    [ObservableProperty]
+    private string? pendingInvite;
+
     /// <summary>Current onboarding step (0 sign-in, 1 network, 2 link, 3 nickname, 4 done).</summary>
     [ObservableProperty]
     private int onboardingStep;
@@ -955,8 +962,128 @@ public sealed partial class AccountViewModel : ObservableObject
         }
     }
 
-    /// <summary>Join a network by name + code. Returns null on success, else a user-facing error.
-    /// The code is sent and forgotten — never stored client-side.</summary>
+    /// <summary>Shown when an org or staff link is pasted into the app. Those are accepted on the
+    /// web page, where an org Admin picks which org to bring in.</summary>
+    public const string StaffInviteMessage =
+        "This link is for org staff, not players. Open it in a web browser while signed in.";
+
+    /// <summary>Look up an invite link before joining. Returns the preview, or a user-facing error:
+    /// for a malformed paste, a dead link (the server's own "ask for a new one" message) or an org
+    /// or staff link, which the app doesn't accept. When the preview says the account is already a
+    /// member, the membership list is refreshed so the network step can move on.</summary>
+    public async Task<(InvitePreview? Preview, string? Error)> PreviewInviteAsync(string link)
+    {
+        var token = InviteLink.ParseToken(link);
+        if (token is null)
+        {
+            return (null, link.Trim().Length == 0
+                ? "Paste the invite link you were sent."
+                : "That doesn't look like an invite link. Paste the whole link you were sent.");
+        }
+        if (OnCooldown("preview_invite", 2))
+        {
+            return (null, "Please wait a moment before trying again.");
+        }
+        try
+        {
+            var preview = await _api.PreviewInviteAsync(token).ConfigureAwait(false);
+            if (!preview.IsPlayerLink)
+            {
+                return (null, StaffInviteMessage);
+            }
+            if (preview.Already)
+            {
+                await RefreshNetworksAsync().ConfigureAwait(false);
+            }
+            return (preview, null);
+        }
+        catch (Exception e)
+        {
+            return (null, InviteError(e, "preview"));
+        }
+    }
+
+    /// <summary>Accept a player invite link. Returns null on success, else a user-facing error. The
+    /// token is sent and forgotten — never stored client-side.</summary>
+    public async Task<string?> AcceptInviteAsync(string link)
+    {
+        var token = InviteLink.ParseToken(link);
+        if (token is null)
+        {
+            return "That doesn't look like an invite link. Paste the whole link you were sent.";
+        }
+        if (OnCooldown("accept_invite", 2))
+        {
+            return "Please wait a moment before trying again.";
+        }
+        try
+        {
+            var accepted = await _api.AcceptInviteAsync(token).ConfigureAwait(false);
+            await RefreshNetworksAsync().ConfigureAwait(false);
+            var name = accepted.NetworkName ?? "the network";
+            _toast.Success(accepted.Already ? $"You're already in {name}" : $"Joined {name}");
+            return null;
+        }
+        catch (Exception e)
+        {
+            return InviteError(e, "accept");
+        }
+    }
+
+    /// <summary>Hold a deep-linked invite token for whichever join prompt shows next.</summary>
+    public void OfferInvite(string token) => RunOnUi(() => PendingInvite = token);
+
+    /// <summary>Take the pending deep-linked invite, if any, so it prefills only one prompt.</summary>
+    public string? TakePendingInvite()
+    {
+        var token = PendingInvite;
+        PendingInvite = null;
+        return token;
+    }
+
+    /// <summary>"Join Comp HLL?" — the question an invite preview asks.</summary>
+    public static string InviteQuestion(InvitePreview preview) =>
+        preview.Already
+            ? $"You're already in {preview.NetworkName ?? "this network"}."
+            : $"Join {preview.NetworkName ?? "this network"}?";
+
+    /// <summary>Who sent the link and its note, for under the question. Empty when neither is set.</summary>
+    public static string InviteDetail(InvitePreview preview)
+    {
+        var parts = new List<string>(2);
+        if (!string.IsNullOrWhiteSpace(preview.CreatedByName))
+        {
+            parts.Add($"Invited by {preview.CreatedByName}");
+        }
+        if (!string.IsNullOrWhiteSpace(preview.Label))
+        {
+            parts.Add($"“{preview.Label}”");
+        }
+        return string.Join(" · ", parts);
+    }
+
+    /// <summary>Map an invite preview/accept failure to what the user sees. Every dead link is one
+    /// uniform 400 by design; its message already says what to do, so it's shown as-is.</summary>
+    private string InviteError(Exception e, string what)
+    {
+        switch (e)
+        {
+            case ApiException { StatusCode: HttpStatusCode.TooManyRequests }:
+                return "Too many attempts — please wait a minute and try again.";
+            case ApiException { StatusCode: HttpStatusCode.BadRequest } api:
+                var message = ApiValidation.FriendlyError(api.Message);
+                return message.StartsWith("API error", StringComparison.Ordinal)
+                    ? "This invite is no longer valid — ask for a new one."
+                    : message;
+            default:
+                _log.LogError(e, "Failed to {What} invite", what);
+                return "Couldn't reach the seeding service. Please try again.";
+        }
+    }
+
+    /// <summary>Join a network by name + code — the legacy way in, kept for networks that still
+    /// hand out codes. Returns null on success, else a user-facing error. The code is sent and
+    /// forgotten — never stored client-side.</summary>
     public async Task<string?> JoinNetworkAsync(string name, string code)
     {
         name = name.Trim();
