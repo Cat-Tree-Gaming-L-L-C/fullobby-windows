@@ -40,6 +40,8 @@ public static class ServiceCollectionExtensions
 
         // Self-updater (Phase 5): release check + installer download/verify/launch.
         services.AddSingleton<UpdaterService>();
+        services.AddSingleton<AutoUpdateService>();
+        services.AddHostedService(sp => sp.GetRequiredService<AutoUpdateService>());
 
         // Automation & tools (Phase 4): startup registry + auto-seed scheduling.
         services.AddSingleton<StartupRegistry>();

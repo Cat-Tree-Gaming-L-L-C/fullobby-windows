@@ -6,6 +6,7 @@ using Fullobby.Core.Platform;
 using Fullobby.Core.Scheduling;
 using Fullobby.Core.Seeding;
 using Fullobby.Core.Tools;
+using Fullobby.Core.Update;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
@@ -54,6 +55,27 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        // An update the user accepted earlier installs now, before anything else starts: the
+        // installer replaces the exe and relaunches us. Only on a plain launch — never an auto-seed
+        // start (that would cut the seed it was started for) or a deep link (it would be lost).
+        if (!_launchedForAutoseed
+            && AppInstance.GetCurrent().GetActivatedEventArgs().Kind == ExtendedActivationKind.Launch)
+        {
+            try
+            {
+                if (AppHost.Services.GetRequiredService<AutoUpdateService>()
+                        .TryInstallStaged(_startMinimized ? Branding.MinimizedArg : null))
+                {
+                    Log.CloseAndFlush();
+                    Environment.Exit(0);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Installing the staged update failed");
+            }
+        }
+
         AppHost.Start();
         Log.Information("Fullobby v{Version} starting",
             typeof(App).Assembly.GetName().Version?.ToString(3));
@@ -90,6 +112,9 @@ public partial class App : Application
         // bot's Discord DM, so an org running no Discord — or an operator with closed DMs —
         // never hears about a check that is blocking their own server from being seeded.
         AppHost.Services.GetRequiredService<ReadyCheckMonitor>().ChecksDue += OnReadyChecksDue;
+
+        // Ask the user about a newer version the background check finds.
+        AppHost.Services.GetRequiredService<AutoUpdateService>().UpdateAvailable += OnUpdateAvailable;
 
         // Register the fullobby:// protocol for this exe (refreshes the
         // installer's bootstrap registration with the WAS activation marker so
@@ -340,8 +365,54 @@ public partial class App : Application
                 case ViewModels.SeedingViewModel.SwapNudgeSnoozeAction:
                     vm.DismissGameSwapNudgeCommand.Execute(null);
                     break;
+                case UpdateStageAction:
+                    _ = StageUpdateAsync();
+                    break;
+                case UpdateDeclineAction:
+                    AppHost.Services.GetRequiredService<AutoUpdateService>().Decline();
+                    break;
             }
         });
+
+    /// <summary>Toast button actions for the update prompt.</summary>
+    private const string UpdateStageAction = "update-stage";
+    private const string UpdateDeclineAction = "update-decline";
+
+    /// <summary>The background check found a newer version (off-thread): ask whether to install it
+    /// next time the app starts.</summary>
+    private void OnUpdateAvailable(UpdateInfo info)
+    {
+        try
+        {
+            AppHost.Services.GetRequiredService<Services.ToastService>().ShowWithButtons(
+                $"Fullobby v{info.Version} is available",
+                "Install it the next time Fullobby starts?",
+                [("Install on next restart", UpdateStageAction), ("Not now", UpdateDeclineAction)]);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Update prompt failed");
+        }
+    }
+
+    /// <summary>Download and verify the accepted update so the next start can install it.</summary>
+    private static async Task StageUpdateAsync()
+    {
+        var toasts = AppHost.Services.GetRequiredService<Services.ToastService>();
+        var updates = AppHost.Services.GetRequiredService<AutoUpdateService>();
+        try
+        {
+            await updates.StageAsync().ConfigureAwait(false);
+            toasts.Show("Update ready",
+                $"Fullobby v{updates.Staged?.Version} will install the next time Fullobby starts.");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Staging the update failed");
+            toasts.Show("Update failed",
+                "The update couldn't be downloaded or verified. Fullobby will ask again later.");
+        }
+    }
 
     private void OnResleepRequested() =>
         EndAutoseedLaunch("re-armed for a moved window; letting the PC sleep");
