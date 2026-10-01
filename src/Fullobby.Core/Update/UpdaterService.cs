@@ -92,9 +92,13 @@ public sealed class UpdaterService
     /// Download the installer to a temp directory and validate it: a trusted pinned-key signature
     /// over <c>(version, sha256)</c>, HTTPS + trusted host, ≤500 MB, and a matching SHA-256 (a missing
     /// signature or checksum is a hard failure). Returns the written path. Throws on any validation or
-    /// I/O failure — the caller must not launch on a throw.
+    /// I/O failure — the caller must not launch on a throw. <paramref name="root"/> is where the
+    /// randomized download folder goes: the temp directory by default, or
+    /// <see cref="Branding.StagedUpdatesDir"/> for an update held until the next start, which has to
+    /// outlive temp-folder cleanup.
     /// </summary>
-    public async Task<string> DownloadAndVerifyAsync(UpdateInfo update, CancellationToken ct = default)
+    public async Task<string> DownloadAndVerifyAsync(
+        UpdateInfo update, CancellationToken ct = default, string? root = null)
     {
         if (update.DownloadUrl.Length == 0)
         {
@@ -139,7 +143,8 @@ public sealed class UpdaterService
 
         // Fresh randomized subdirectory per download so the installer path is unpredictable —
         // a same-user process can't pre-plant a file at a known location for us to launch.
-        var tempDir = Path.Combine(Path.GetTempPath(), "fullobby-update", Path.GetRandomFileName());
+        var tempDir = Path.Combine(
+            root ?? Path.Combine(Path.GetTempPath(), "fullobby-update"), Path.GetRandomFileName());
         Directory.CreateDirectory(tempDir);
         var downloadPath = Path.Combine(tempDir, fileName);
 
@@ -175,7 +180,15 @@ public sealed class UpdaterService
     /// TOCTOU gap between download and execution. Returns once the process is spawned; the caller is
     /// responsible for shutting the app down afterwards so the installer can replace the running exe.
     /// </summary>
-    public void LaunchInstaller(string path, string expectedSha256)
+    public void LaunchInstaller(string path, string expectedSha256) =>
+        LaunchInstaller(path, expectedSha256, []);
+
+    /// <summary>
+    /// <see cref="LaunchInstaller(string, string)"/> passing <paramref name="arguments"/> to the
+    /// installer (e.g. Inno Setup's <c>/SILENT</c>). Arguments need a direct launch rather than a
+    /// shell association, so only an <c>.exe</c> is accepted when any are given.
+    /// </summary>
+    public void LaunchInstaller(string path, string expectedSha256, IReadOnlyList<string> arguments)
     {
         var extension = Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
         if (UpdateValidation.ValidateInstallerExtension(extension) is { } extError)
@@ -193,8 +206,25 @@ public sealed class UpdaterService
         }
 
         _log.LogInformation("Launching installer: {Path}", path);
-        // UseShellExecute so both .exe and .msi launch via their shell association.
-        Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        if (arguments.Count == 0)
+        {
+            // UseShellExecute so both .exe and .msi launch via their shell association.
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        else
+        {
+            if (extension != "exe")
+            {
+                throw new InvalidOperationException("Installer arguments need an .exe installer");
+            }
+            // The installer is per-user (PrivilegesRequired=lowest), so a direct start needs no elevation.
+            var psi = new ProcessStartInfo(path) { UseShellExecute = false };
+            foreach (var arg in arguments)
+            {
+                psi.ArgumentList.Add(arg);
+            }
+            Process.Start(psi);
+        }
         _log.LogInformation("Update installer launched, app should exit for the update to apply");
     }
 

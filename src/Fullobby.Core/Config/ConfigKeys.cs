@@ -20,4 +20,12 @@ public static class ConfigKeys
     /// every pre-0.3.0 install that set up auto-seed — read for adoption into
     /// <see cref="AutoSeedWakes"/>, removed once adopted, never written again.</summary>
     public const string LegacyAutoSeedTime = "auto_seed_time";
+
+    /// <summary>An update the user accepted, downloaded and verified, waiting to install at the next
+    /// start (JSON <c>StagedUpdate</c>). Written and cleared by <c>Core.Update.AutoUpdateService</c>.</summary>
+    public const string StagedUpdate = "staged_update";
+
+    /// <summary>The update version the user answered "Not now" to. The background check doesn't ask
+    /// about that version again; a newer one is asked about as usual.</summary>
+    public const string DeclinedUpdateVersion = "update_declined_version";
 }

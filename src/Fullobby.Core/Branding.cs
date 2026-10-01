@@ -76,6 +76,10 @@ public static class Branding
     public static string ConfigDir => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ConfigDirName);
 
+    /// <summary>%LOCALAPPDATA%\Fullobby\updates — installers held until the next start.</summary>
+    public static string StagedUpdatesDir => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), LocalDataDirName, "updates");
+
     /// <summary>%LOCALAPPDATA%\Fullobby\logs</summary>
     public static string LogsDir => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), LocalDataDirName, "logs");

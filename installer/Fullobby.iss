@@ -62,8 +62,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 ; Opt-out: no "unchecked" flag, so it is pre-ticked on a first install. On a reinstall or update
 ; InitializeWizard re-seeds it from the HKCU Run value, so an update can never resurrect a
-; "Start with Windows" the user turned off in Settings — the self-updater launches setup.exe
-; interactively (UpdaterService.LaunchInstaller), so this page is shown on every update.
+; "Start with Windows" the user turned off in Settings. The Settings "Check for updates" button
+; runs setup.exe interactively, so this page is shown on those updates; a staged update installs
+; with /SILENT (AutoUpdateService), where InitializeWizard still runs and the same rule applies.
 Name: "startup"; Description: "Start {#AppName} in the tray when I sign in to Windows"; GroupDescription: "Additional options:"
 
 [Files]
@@ -93,8 +94,17 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\{#ExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+; The app installs a staged update at startup by running this installer with
+; /SILENT /RELAUNCH=1 [/RELAUNCHARGS=--minimized] and exiting; bring it back once the files are in.
+Filename: "{app}\{#ExeName}"; Parameters: "{param:RELAUNCHARGS|}"; Flags: nowait; Check: ShouldRelaunch
 
 [Code]
+{ A silent self-update asked to restart the app (see the [Run] entry). }
+function ShouldRelaunch: Boolean;
+begin
+  Result := WizardSilent and (ExpandConstant('{param:RELAUNCH|0}') = '1');
+end;
+
 { The app self-registers fullobby:// at runtime via the Windows App SDK
   (ActivationRegistrationManager), which mints a ProgId keyed to the exe path under
   HKCU\Software\Classes\App.<hash>.Protocol. Inno's [Registry] uninsdeletekey only removes the
