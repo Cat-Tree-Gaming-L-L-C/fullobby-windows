@@ -39,7 +39,7 @@
             <StackPanel
                 Spacing="6"
                 HorizontalAlignment="Center"
-                Visibility="{x:Bind ViewModel.ServersReady, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}">
+                Visibility="{x:Bind ViewModel.LaunchServersReady, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}">
                 <ProgressRing
                     IsActive="True"
                     Width="28" Height="28"
@@ -64,12 +64,20 @@
             <!-- Launch buttons (idle states) -->
             <StackPanel
                 Spacing="6"
-                Visibility="{x:Bind ViewModel.ShowSeedButtons, Mode=OneWay, Converter={StaticResource BoolToVis}}">
+                Visibility="{x:Bind ViewModel.ShowLaunchButtons, Mode=OneWay, Converter={StaticResource BoolToVis}}">
 
-                <ItemsControl ItemsSource="{x:Bind ViewModel.Servers}">
+                <ItemsControl ItemsSource="{x:Bind ViewModel.LaunchServers}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:ServerRow">
                             <StackPanel Margin="0,2" Spacing="2">
+                                <!-- Game header (only when more than one game has servers) -->
+                                <TextBlock
+                                    Text="{x:Bind GameHeader}"
+                                    Visibility="{x:Bind ShowGameHeader, Converter={StaticResource BoolToVis}}"
+                                    FontSize="11"
+                                    FontWeight="SemiBold"
+                                    Opacity="0.6"
+                                    Margin="2,8,0,2" />
                                 <Button
                                     Content="{x:Bind LaunchLabel}"
                                     Height="44"
