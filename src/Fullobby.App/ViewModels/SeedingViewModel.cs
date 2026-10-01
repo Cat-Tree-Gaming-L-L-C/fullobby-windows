@@ -5,6 +5,7 @@ using Fullobby.Core.Api;
 using Fullobby.Core.Bootstrap;
 using Fullobby.Core.Config;
 using Fullobby.Core.Games;
+using Fullobby.Core.Native;
 using Fullobby.Core.Scheduling;
 using Fullobby.Core.Seeding;
 using Fullobby.Core.Servers;
@@ -541,11 +542,10 @@ public sealed partial class SeedingViewModel : ObservableObject
     /// the monitor's verdict — relaunch on a switch, end on stop/exhaustion/game-close/user-stop. The
     /// server owns rotation and timing; this is a thin executor. Used by Seed and auto-seed alike.
     /// <paramref name="consent"/>: what the player already agreed to close — the plan an answered
-    /// "Seed now?" prompt showed, or the one the nudge offered (<paramref name="consentForTarget"/>:
-    /// only for that target game). Anything beyond it is asked about, or, unattended, left alone.</summary>
-    private async Task RunDirectedSeedingAsync(
-        bool autoSeed, GameSwapPlan? consent = null, bool consentForTarget = false)
+    /// "Seed now?" prompt showed. Anything beyond it is asked about, or, unattended, left alone.</summary>
+    private async Task RunDirectedSeedingAsync(bool autoSeed, GameSwapPlan? consent = null)
     {
+        ClearSeedNudge();
         IsSeeding = true;
         SetStatus(SeedingStatus.Initializing);
 
@@ -623,9 +623,9 @@ public sealed partial class SeedingViewModel : ObservableObject
         // and only with the player's say-so.
         var targetGame = GameCatalog.ById(directive.Target.Game) ?? _engine.CurrentGame;
         var swap = PlanFor(targetGame);
-        // Consent covers exactly what the player was shown: something opened since, or (for the
-        // nudge) a different target game, isn't what they agreed to — ask again.
-        var consented = consent is not null && swap.IsCoveredBy(consent, consentForTarget);
+        // Consent covers exactly what the player was shown: something opened since isn't what they
+        // agreed to — ask again.
+        var consented = consent is not null && swap.IsCoveredBy(consent);
         if (swap.Kind != GameSwapKind.None
             && !await ResolveGameSwapAsync(swap, autoSeed, consented).ConfigureAwait(true))
         {
@@ -727,23 +727,22 @@ public sealed partial class SeedingViewModel : ObservableObject
     }
 
     /// <summary>Carry out <paramref name="swap"/> if the player agrees, returning whether the seed may
-    /// go ahead. A manual Seed asks (the "Swap games?" dialog) unless the nudge's Swap already did
-    /// (<paramref name="consented"/>); an auto-seed closes the open game only when its "Seed now?"
-    /// prompt was answered (<paramref name="consented"/>) — unattended, it
-    /// never closes a game someone started, and leaves a notification naming the game that needs
-    /// seeding instead.</summary>
+    /// go ahead. A manual Seed asks (the "Swap games?" dialog); an auto-seed closes the open game only
+    /// when its "Seed now?" prompt was answered (<paramref name="consented"/>) — unattended, it never
+    /// closes a game someone started. (An auto-seed normally waits out the player's game before its
+    /// prompt; this covers one opened in the moment since.)</summary>
     private async Task<bool> ResolveGameSwapAsync(GameSwapPlan swap, bool autoSeed, bool consented)
     {
         if (autoSeed && !consented)
         {
+            // They're in a game now: say so in the app only, not over their game.
             _log.LogInformation("Auto-seed unanswered with {Open} open; left it alone ({Target} not started)",
                 swap.ClosingNames, swap.Target.Id);
-            _toast.Show(Branding.ProductName, swap.SkippedNotice);
             SetSeedError(swap.SkippedNotice);
             return false;
         }
 
-        if (!autoSeed && !consented)
+        if (!autoSeed)
         {
             SetStatus(SeedingStatus.Idle);
             var choice = await AskSwapAsync(swap).ConfigureAwait(true);
@@ -801,7 +800,7 @@ public sealed partial class SeedingViewModel : ObservableObject
 
     /// <summary>Make <paramref name="game"/> the game in focus: the one the engine launches, the
     /// seed buttons name, whose Power Savings choice applies, and whose servers the board lists.
-    /// While idle it follows what a seed would start (<see cref="RefreshSeedGameAsync"/>); during a
+    /// While idle it follows the user's streamed seed targets (<see cref="OnSeedTargetsChanged"/>); during a
     /// run, the game being seeded. A player with one game installed never sees it change.</summary>
     private void SelectGame(GameDefinition game)
     {
@@ -830,140 +829,118 @@ public sealed partial class SeedingViewModel : ObservableObject
         }
     }
 
-    /// <summary>Minimum gap between idle "which game would Seed start?" directive checks. Status
-    /// pushes arrive every ~30s; the answer only changes when a window opens or a rotation moves.</summary>
-    private const long SeedGameRefreshMinMs = 60_000;
-    private long _seedGameRefreshedAtMs = long.MinValue / 2;
+    /// <summary>The user's seed targets as of the last status push (server ids), or null until a
+    /// push arrives with the user's networks known. Diffed against each push to spot a new target;
+    /// the first such push is only the baseline, so starting the app (or signing in) never nudges
+    /// about what was already waiting.</summary>
+    private HashSet<long>? _lastSeedTargets;
 
-    /// <summary>While idle, ask the directive which game a seed would start and put that game in
-    /// focus, so the button's game line is true before it's pressed. Only runs with more than one
-    /// launchable game (with one, the answer can't differ). Best-effort: failures leave the focus as
-    /// it was — the directive is asked again, authoritatively, when the seed starts.</summary>
-    private async Task RefreshSeedGameAsync()
+    /// <summary>
+    /// React to a streamed status push — nothing here asks the API. Reads off the user's current
+    /// targets (<see cref="SeedTargets"/>) and, while idle: puts the game they point at in focus,
+    /// so the Seed button's game line is right before it's pressed, and nudges a free player when a
+    /// target is new since the last push. A target that turns up while the player is gaming is let
+    /// go, not saved for later. When targets span both games, which comes first is the directive's
+    /// call, so the focus is left alone; the seed itself always asks the directive.
+    /// </summary>
+    private void OnSeedTargetsChanged(SeedingStatusResponse status)
     {
-        // Idle, or a game launched from the Launch tab (Running) — that's someone playing, which is
-        // exactly when the swap nudge matters. Never mid-seed.
-        if (Status is not (SeedingStatus.Idle or SeedingStatus.Stopped or SeedingStatus.Running)
+        var members = _account.MemberNetworkIds;
+        if (members.Count == 0)
+        {
+            // Signed out, or memberships not loaded yet: nothing to read, and no baseline to keep.
+            _lastSeedTargets = null;
+            ClearSeedNudge();
+            return;
+        }
+        var targets = SeedTargets.For(status, members, InstalledGames.Ids());
+        var added = _lastSeedTargets is { } previous ? SeedTargets.Added(previous, targets) : [];
+        _lastSeedTargets = targets.Select(c => c.DbId).ToHashSet();
+
+        if (targets.Count == 0)
+        {
+            ClearSeedNudge();
+        }
+
+        // Idle only: never mid-seed, and not while a Launch-tab game runs (the engine watches the
+        // game in focus to notice it closing, so moving the focus would end that session).
+        if (Status is not (SeedingStatus.Idle or SeedingStatus.Stopped)
             || IsSeeding || AutoseedCountdownActive || !_auth.IsAuthenticated)
         {
             return;
         }
-        // With one game installed the directive can't pick a different game, so only another Unreal
-        // game open (the nudge's other case) is worth a directive call.
-        if (InstalledGames.Get().Count < 2 && _engine.ForeignUnrealGames().Count == 0)
+        if (SeedTargets.SoleGame(targets) is { } soleGame && GameCatalog.ById(soleGame) is { } game)
         {
-            return;
+            SelectGame(game);
         }
-        var now = Environment.TickCount64;
-        if (now - _seedGameRefreshedAtMs < SeedGameRefreshMinMs)
+        if (added.Count > 0)
         {
-            return;
-        }
-        _seedGameRefreshedAtMs = now;
-        try
-        {
-            var d = await _api.GetDirectiveAsync(
-                _engine.CurrentGame.Id, null, null, games: InstalledGames.Ids()).ConfigureAwait(true);
-            if (IsSeeding)
-            {
-                return;
-            }
-            // Not while a Launch-tab game runs: the engine watches the game in focus to notice it
-            // closing, so moving the focus would end that session under the player.
-            if (d.Target is { } target && !IsBusy)
-            {
-                SelectGame(target);
-            }
-            EvaluateGameSwapNudge(d.Target is { } t ? GameCatalog.ById(t.Game) : null);
-        }
-        catch (Exception e)
-        {
-            _log.LogDebug(e, "Seed-game preview fetch failed (non-fatal)");
+            EvaluateSeedNudge(GameCatalog.ById(added[0].Game));
         }
     }
 
-    // ── Swap nudge ─────────────────────────────────────────────────────────────
-    // A player with one game open while the directive wants the other gets offered a swap: a
-    // desktop notification (they're likely in-game, the app in the tray) and a banner on the Seed
-    // page. Offer only — nothing closes until they pick Swap.
+    // ── Seed nudge ─────────────────────────────────────────────────────────────
+    // A player who is free — on the desktop, not in any game — while a game needs seeding gets a
+    // notification and a banner on the Seed page offering to seed. Never while they're gaming:
+    // the app should be as intrusive as it needs to be and no more.
 
     /// <summary>Toast button actions (routed back by the app host).</summary>
-    public const string SwapNudgeAcceptAction = "swap-game";
-    public const string SwapNudgeSnoozeAction = "swap-not-now";
+    public const string SeedNudgeAcceptAction = "nudge-seed";
+    public const string SeedNudgeSnoozeAction = "nudge-not-now";
 
-    private readonly GameSwapNudgePolicy _swapNudgePolicy = new();
-
-    /// <summary>What the showing nudge offers (target + what it would close); null when none is
-    /// showing. Its Swap button agrees to exactly this.</summary>
-    private GameSwapPlan? _swapNudgePlan;
+    private readonly SeedNudgePolicy _seedNudgePolicy = new();
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowGameSwapNudge))]
-    private string gameSwapNudge = "";
+    [NotifyPropertyChangedFor(nameof(ShowSeedNudge))]
+    private string seedNudge = "";
 
-    public bool ShowGameSwapNudge => GameSwapNudge.Length > 0;
+    public bool ShowSeedNudge => SeedNudge.Length > 0;
 
-    /// <summary>Offer a swap to <paramref name="target"/> if a different game is open (and the policy
-    /// isn't in a quiet period); clear a stale offer once it no longer applies.</summary>
-    private void EvaluateGameSwapNudge(GameDefinition? target)
+    /// <summary>In a game (ours or another Unreal one), or in anything Windows treats as do-not-
+    /// disturb — fullscreen, presenting, quiet hours. The nudge stays away from all of it.</summary>
+    private bool PlayerBusy() => PlayersGameOpen() || !UserPresence.AcceptsNotifications();
+
+    /// <summary>Nudge about <paramref name="target"/> (null: nothing needs seeding) if the player is
+    /// free and the policy isn't in a quiet period; clear a banner that no longer applies.</summary>
+    private void EvaluateSeedNudge(GameDefinition? target)
     {
-        var running = _engine.RunningGames();
-        var foreign = _engine.ForeignUnrealGames();
-        if (_swapNudgePlan is { } showing
-            && (target?.Id != showing.Target.Id || !GameSwapNudgePolicy.Wanted(showing.Target, running, foreign)))
+        var busy = PlayerBusy();
+        if (target is null || busy)
         {
-            ClearGameSwapNudge();
+            ClearSeedNudge();
         }
-
-        if (_swapNudgePolicy.Evaluate(target, running, Environment.TickCount64, foreign) is not { } plan)
+        if (!_seedNudgePolicy.ShouldNudge(target, busy, Environment.TickCount64))
         {
             return;
         }
-        _swapNudgePlan = plan;
-        GameSwapNudge = plan.NudgeMessage;
-        GameSwapNudgeAcceptLabel = plan.NudgeAcceptLabel;
-        _log.LogInformation("Swap nudge: {Target} needs seeding, {Open} open", plan.Target.Id, plan.ClosingNames);
+        SeedNudge = $"{target!.DisplayName} needs seeding.";
+        _log.LogInformation("Seed nudge: {Target} needs seeding, player is free", target.Id);
         _toast.ShowWithButtons(
-            $"{plan.Target.DisplayName} needs seeding",
-            plan.NudgeBody,
-            [(plan.NudgeAcceptLabel, SwapNudgeAcceptAction), ("Not now", SwapNudgeSnoozeAction)]);
+            $"{target.DisplayName} needs seeding",
+            "Got a few minutes? Start seeding now.",
+            [("Seed", SeedNudgeAcceptAction), ("Not now", SeedNudgeSnoozeAction)]);
     }
 
-    /// <summary>The nudge banner's accept button ("Swap", or "Close and seed" for another Unreal game).</summary>
-    [ObservableProperty]
-    private string gameSwapNudgeAcceptLabel = "Swap";
+    private void ClearSeedNudge() => SeedNudge = "";
 
-    private void ClearGameSwapNudge()
-    {
-        _swapNudgePlan = null;
-        GameSwapNudge = "";
-    }
-
-    /// <summary>The nudge's Swap: close the open game and seed the one that needs it. The click is
-    /// the consent — no second dialog, unless the directive has moved on to something else.</summary>
+    /// <summary>The nudge's Seed: the same as pressing Seed — anything opened since is asked about.</summary>
     [RelayCommand]
-    private async Task SwapToNeededGameAsync()
+    private async Task SeedFromNudgeAsync()
     {
-        var offered = _swapNudgePlan;
-        ClearGameSwapNudge();
-        if (offered is null || IsSeeding || AutoseedCountdownActive)
+        ClearSeedNudge();
+        if (AutoseedCountdownActive)
         {
             return;
         }
-        if (Status == SeedingStatus.Running)
-        {
-            SetStatus(SeedingStatus.Idle); // the Launch-tab game is about to be closed for the swap
-        }
-        ClearSeedError();
-        await RunDirectedSeedingAsync(autoSeed: false, consent: offered, consentForTarget: true).ConfigureAwait(true);
+        await SeedAsync().ConfigureAwait(true);
     }
 
     /// <summary>The nudge's "Not now": hide it and stay quiet for a while.</summary>
     [RelayCommand]
-    private void DismissGameSwapNudge()
+    private void DismissSeedNudge()
     {
-        ClearGameSwapNudge();
-        _swapNudgePolicy.Snooze(Environment.TickCount64);
+        ClearSeedNudge();
+        _seedNudgePolicy.Snooze(Environment.TickCount64);
     }
 
     private static string LocalHm(long unixTs) =>
@@ -1025,7 +1002,10 @@ public sealed partial class SeedingViewModel : ObservableObject
     /// doesn't re-fire a wake whose seed already ran, while a later wake the same day still gets its
     /// turn.
     /// </summary>
-    public async Task RunAutoseedAsync(string? wakeKey = null)
+    /// <para><paramref name="showWindow"/> brings the app forward for the "Seed now?" prompt. It is
+    /// called only once the prompt is about to show, so an auto-seed held back for the player's own
+    /// game never pulls the window over it.</para>
+    public async Task RunAutoseedAsync(string? wakeKey = null, Action? showWindow = null)
     {
         // Hard gate: nothing unattended runs while the account isn't ready to seed — mid first-run,
         // needing to sign in again, or holding no network membership. The first two put the
@@ -1059,7 +1039,15 @@ public sealed partial class SeedingViewModel : ObservableObject
                 return;
             }
 
-            // A game already open no longer skips the seed outright: the prompt says what Seed Now
+            // The player is in a game of their own: no window, notification or prompt over it.
+            // The seed waits until they close it.
+            if (!await WaitForPlayersGameToCloseAsync().ConfigureAwait(true) || IsBusy)
+            {
+                return;
+            }
+            showWindow?.Invoke();
+
+            // A game opened in the moment since is still caught here: the prompt says what Seed Now
             // would close, and only an answer closes it (see ResolveGameSwapAsync). Unanswered, the
             // player's game is left alone. Provisional until the preview names the target game.
             UpdateAutoseedSwapNotice(_engine.CurrentGame);
@@ -1124,6 +1112,55 @@ public sealed partial class SeedingViewModel : ObservableObject
             _autoseedChoice = null;
             _autoSeedState.End();
         }
+    }
+
+    /// <summary>How often a held-back auto-seed looks for the player's game to have closed.</summary>
+    private static readonly TimeSpan PlayersGamePollInterval = TimeSpan.FromSeconds(15);
+
+    /// <summary>Whether the player has a game open: one of ours started by hand, or another Unreal
+    /// Engine game (Wardogs and the like) that would likely stop the seed launching.</summary>
+    private bool PlayersGameOpen() =>
+        _engine.RunningGames().Count > 0 || _engine.ForeignUnrealGames().Count > 0;
+
+    /// <summary>
+    /// Hold an auto-seed while the player has a game open, quietly: asking them to close their own
+    /// game is for a seed they start themselves. Returns true once nothing is open (straight away
+    /// when nothing was), false when the auto-seed should be dropped instead: cancelled, seeding got
+    /// blocked, or the player started a seed of their own meanwhile. Whether there is still anything
+    /// to seed by the time they close it is the directive's call, like any other wake.
+    /// </summary>
+    private async Task<bool> WaitForPlayersGameToCloseAsync()
+    {
+        if (!PlayersGameOpen())
+        {
+            return true;
+        }
+        _log.LogInformation("Auto-seed due while the player has a game open; waiting for it to close");
+
+        do
+        {
+            await Task.Delay(PlayersGamePollInterval).ConfigureAwait(true);
+            if (_autoSeedState.IsCancelled)
+            {
+                _log.LogInformation("Auto-seed cancelled while waiting for the player's game to close");
+                return false;
+            }
+            if (_account.SeedingBlocked)
+            {
+                _log.LogInformation("Auto-seed aborted — seeding was blocked while it waited");
+                AutoseedAbandoned?.Invoke("setup stopped being complete while it waited");
+                return false;
+            }
+            if (IsSeeding)
+            {
+                _log.LogInformation("Player started seeding while auto-seed waited; dropping the auto-seed");
+                return false;
+            }
+        }
+        while (PlayersGameOpen());
+
+        _log.LogInformation("Player's game closed; auto-seed going ahead");
+        return true;
     }
 
     /// <summary>A launch that didn't name its wake can only be the legacy single-slot task — while
@@ -1553,7 +1590,7 @@ public sealed partial class SeedingViewModel : ObservableObject
         _dispatcher.TryEnqueue(() =>
         {
             ApplyDayStatuses(status);
-            _ = RefreshSeedGameAsync();
+            OnSeedTargetsChanged(status);
         });
 
     /// <summary>Apply per-server ready standing to the server rows. The status is per network now:

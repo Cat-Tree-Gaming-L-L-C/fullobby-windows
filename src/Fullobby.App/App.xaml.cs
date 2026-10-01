@@ -207,10 +207,15 @@ public partial class App : Application
         // constructor ForceCreate()s it, and its left-click / "Show" command runs BringToFront,
         // which is then the window's first Activate(). What that defers is RootGrid.Loaded — and
         // with it the unprotected-secrets dialog, which already re-checks there because it can't
-        // show without a XamlRoot. An auto-seed launch shows the window through StartAutoseed.
+        // show without a XamlRoot. An auto-seed launch shows the window through StartAutoseed, when
+        // its "Seed now?" prompt comes up — not while the player is in a game of their own.
         if (_startMinimized)
         {
             Log.Information("Launched with {Arg} — starting in the tray", Branding.MinimizedArg);
+        }
+        else if (_launchedForAutoseed)
+        {
+            Log.Information("Auto-seed launch — the window waits for the seed prompt");
         }
         else
         {
@@ -348,22 +353,20 @@ public partial class App : Application
         EndAutoseedLaunch("onboarding hasn't been completed");
     }
 
-    /// <summary>The auto-seed re-armed its wake for a moved window — the scheduled task will wake the
-    /// machine again at the new time, so this process has nothing left to do.</summary>
-    /// <summary>A toast button was clicked (off-thread). The swap nudge's buttons: Swap brings the
-    /// window forward and swaps; Not now just snoozes, leaving the player in their game.</summary>
+    /// <summary>A toast button was clicked (off-thread). The seed nudge's Seed brings the window
+    /// forward and seeds; its Not now just snoozes. Then the update prompt's answers.</summary>
     private void OnToastAction(string action) =>
         _window?.DispatcherQueue.TryEnqueue(() =>
         {
             var vm = AppHost.Services.GetRequiredService<ViewModels.SeedingViewModel>();
             switch (action)
             {
-                case ViewModels.SeedingViewModel.SwapNudgeAcceptAction:
+                case ViewModels.SeedingViewModel.SeedNudgeAcceptAction:
                     _window.BringToFront();
-                    _ = vm.SwapToNeededGameCommand.ExecuteAsync(null);
+                    _ = vm.SeedFromNudgeCommand.ExecuteAsync(null);
                     break;
-                case ViewModels.SeedingViewModel.SwapNudgeSnoozeAction:
-                    vm.DismissGameSwapNudgeCommand.Execute(null);
+                case ViewModels.SeedingViewModel.SeedNudgeSnoozeAction:
+                    vm.DismissSeedNudgeCommand.Execute(null);
                     break;
                 case UpdateStageAction:
                     _ = StageUpdateAsync();
@@ -414,6 +417,8 @@ public partial class App : Application
         }
     }
 
+    /// <summary>The auto-seed re-armed its wake for a moved window — the scheduled task will wake the
+    /// machine again at the new time, so this process has nothing left to do.</summary>
     private void OnResleepRequested() =>
         EndAutoseedLaunch("re-armed for a moved window; letting the PC sleep");
 
@@ -488,11 +493,9 @@ public partial class App : Application
             _ = vm.RunAutoseedAsync(wakeKey);
             return;
         }
-        queue.TryEnqueue(() =>
-        {
-            _window?.BringToFront();
-            _ = vm.RunAutoseedAsync(wakeKey);
-        });
+        // The window comes forward when the "Seed now?" prompt does, which waits while the
+        // player has a game of their own open.
+        queue.TryEnqueue(() => _ = vm.RunAutoseedAsync(wakeKey, () => _window?.BringToFront()));
     }
 
     /// <summary>Whether any token asks for a tray-only start (--minimized).</summary>
@@ -541,12 +544,17 @@ public partial class App : Application
     {
         _window?.DispatcherQueue.TryEnqueue(() =>
         {
-            HandleActivation(args);
-            _window.BringToFront();
+            // An auto-seed shows the window itself, and not while the player is in a game.
+            if (!HandleActivation(args))
+            {
+                _window.BringToFront();
+            }
         });
     }
 
-    private void HandleActivation(AppActivationArguments args)
+    /// <summary>Act on an activation. True when it started an auto-seed, which decides for itself
+    /// when to show the window.</summary>
+    private bool HandleActivation(AppActivationArguments args)
     {
         // A scheduled task launching a second instance forwards its --autoseed flag here.
         if (args.Kind == ExtendedActivationKind.Launch
@@ -556,13 +564,13 @@ public partial class App : Application
             && HasAutoseedArg(tokens))
         {
             StartAutoseed(WakeKeyFromArgs(tokens));
-            return;
+            return true;
         }
 
         var uri = ExtractDeepLinkUri(args);
         if (uri is null)
         {
-            return; // plain launch, nothing to do
+            return false; // plain launch, nothing to do
         }
 
         // Route OAuth deep links into the account VM. Runs on the UI thread (OnLaunched, or
@@ -600,6 +608,7 @@ public partial class App : Application
                 Log.Warning("Ignored non-fullobby URI activation");
                 break;
         }
+        return false;
     }
 
     private static string? ExtractDeepLinkUri(AppActivationArguments args)
