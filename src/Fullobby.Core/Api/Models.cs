@@ -284,6 +284,9 @@ public sealed class ServerDayStatus
     public int Threshold { get; set; }
     /// <summary>Unix ts of today's scheduled window start (null = no window).</summary>
     public long? WindowStartTs { get; set; }
+    /// <summary>With <see cref="DayStatus.NotReady"/>: an operator already confirmed ready and the
+    /// server is only waiting for its window start. False means the check is unanswered.</summary>
+    public bool ReadyConfirmed { get; set; }
 }
 
 /// <summary>Pre-computed seeding status, one entry per seeding network (multi-tenant).

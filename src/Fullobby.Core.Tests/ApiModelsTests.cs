@@ -328,6 +328,17 @@ public class ApiModelsTests
         Assert.Empty(n.HllvDay); // omitted → default empty
     }
 
+    [Theory]
+    // The API only sends the flag when true; absent means an unanswered check.
+    [InlineData(",\"ready_confirmed\":true", true)]
+    [InlineData("", false)]
+    public void ServerDayStatus_ReadyConfirmed(string extra, bool expected)
+    {
+        var d = Parse<ServerDayStatus>(
+            "{\"db_id\":1,\"name\":\"S\",\"short_name\":\"S\",\"status\":\"not_ready\",\"threshold\":50" + extra + "}");
+        Assert.Equal(expected, d.ReadyConfirmed);
+    }
+
     [Fact]
     public void RegisterResponse_SnakeCaseMapping()
     {

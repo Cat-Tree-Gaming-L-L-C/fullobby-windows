@@ -92,6 +92,7 @@ public sealed partial class ServerRow : ObservableObject
 
     private DayStatus? _readyStatus;
     private long? _windowStartTs;
+    private bool _readyConfirmed;
 
     /// <summary>This server's standing in today's rotation (ready-check / seeded state), or null
     /// before the first seeding-status update. Drives <see cref="ReadyBadge"/>.</summary>
@@ -102,6 +103,7 @@ public sealed partial class ServerRow : ObservableObject
     {
         _readyStatus = day?.Status;
         _windowStartTs = day?.WindowStartTs;
+        _readyConfirmed = day?.ReadyConfirmed ?? false;
         OnPropertyChanged(nameof(ReadyBadge));
         OnPropertyChanged(nameof(ShowReadyBadge));
     }
@@ -110,6 +112,10 @@ public sealed partial class ServerRow : ObservableObject
     /// noteworthy (pending its turn, or offline/passworded which the stats line already conveys).</summary>
     public string ReadyBadge => _readyStatus switch
     {
+        // Answered early: still gated until the window, but nobody needs to act.
+        DayStatus.NotReady when _readyConfirmed => _windowStartTs is { } ts
+            ? $"✓ Ready — window {LocalHm(ts)}"
+            : "✓ Ready",
         DayStatus.NotReady => _windowStartTs is { } ts
             ? $"⧗ Not ready — window {LocalHm(ts)}"
             : "⧗ Not ready",
