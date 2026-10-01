@@ -1,4 +1,5 @@
 using Fullobby.Core.Api;
+using Fullobby.Core.Games;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Fullobby.App.ViewModels;
@@ -48,8 +49,19 @@ public sealed partial class ServerRow : ObservableObject
         : IsPassworded ? "Password-protected — can't join via launcher"
         : "";
 
-    public ServerRow(int index, ServerInfo info)
+    /// <summary>The game this server runs. The Launch tab lists every installed game's servers
+    /// together, so a row launches its own game rather than whichever one seeding has in focus.</summary>
+    public GameDefinition Game { get; }
+
+    /// <summary>Game name shown above the first of this game's rows on the Launch tab, when more
+    /// than one game is listed; empty otherwise.</summary>
+    public string GameHeader { get; init; } = "";
+
+    public bool ShowGameHeader => GameHeader.Length > 0;
+
+    public ServerRow(int index, ServerInfo info, GameDefinition game)
     {
+        Game = game;
         Index = index;
         Name = info.Name;
         ShortName = info.ShortName;

@@ -152,6 +152,7 @@ public sealed partial class SeedingViewModel : ObservableObject
         if (_bootstrap.HasServers)
         {
             RebuildServers();
+            RebuildLaunchServers();
         }
 
         // Compute the initial button/banner visibility (RefreshDerived otherwise only runs on a
@@ -360,6 +361,19 @@ public sealed partial class SeedingViewModel : ObservableObject
     /// <summary>The single ordered server rotation for the current game (region removed).</summary>
     public ObservableCollection<ServerRow> Servers { get; } = [];
 
+    /// <summary>The Launch tab's quick-connect list: every server of every game this machine can
+    /// launch, grouped by game. Independent of <see cref="Servers"/>, which follows the game seeding
+    /// has in focus — a player picking a server by hand wants all of theirs, whichever game it is.</summary>
+    public ObservableCollection<ServerRow> LaunchServers { get; } = [];
+
+    [ObservableProperty]
+    private bool launchServersReady;
+
+    [ObservableProperty]
+    private bool showLaunchButtons;
+
+    partial void OnLaunchServersReadyChanged(bool value) => RefreshDerived();
+
     // ── Status transitions ─────────────────────────────────────────────────────
 
     private void SetStatus(SeedingStatus value) => Status = value;
@@ -456,9 +470,10 @@ public sealed partial class SeedingViewModel : ObservableObject
         // Gate the seed buttons on a definite, successful server-list response: while the list is
         // still loading (indeterminate) or failed, the loading/retry block is shown instead, so a
         // user can't kick off a seed against an unconfirmed server list.
-        ShowSeedButtons = ServersReady
-            && (Status is SeedingStatus.Idle or SeedingStatus.Stopped
-                || (Status == SeedingStatus.Running && !IsSeeding));
+        var idle = Status is SeedingStatus.Idle or SeedingStatus.Stopped
+            || (Status == SeedingStatus.Running && !IsSeeding);
+        ShowSeedButtons = ServersReady && idle;
+        ShowLaunchButtons = LaunchServersReady && idle;
 
         ShowWaitingForUpdate = Status == SeedingStatus.WaitingForUpdate;
 
@@ -1235,6 +1250,10 @@ public sealed partial class SeedingViewModel : ObservableObject
         }
 
         ClearLaunchError();
+
+        // Launch the row's own game: the engine opens, and watches, the game in focus.
+        SelectGame(row.Game);
+
         IsSeeding = false;
         SetStatus(SeedingStatus.Initializing);
 
@@ -1467,12 +1486,17 @@ public sealed partial class SeedingViewModel : ObservableObject
 
     // ── Bootstrapper events ────────────────────────────────────────────────────
 
-    private void OnServersLoaded() => _dispatcher.TryEnqueue(RebuildServers);
+    private void OnServersLoaded() => _dispatcher.TryEnqueue(() =>
+    {
+        RebuildServers();
+        RebuildLaunchServers();
+    });
 
     private void OnServersLoadFailed() => _dispatcher.TryEnqueue(() =>
     {
         ServerLoadError = true;
         ServersReady = false;
+        LaunchServersReady = false;
     });
 
     private void OnStatsUpdated(IReadOnlyList<BatchStatsResult> stats) =>
@@ -1487,7 +1511,7 @@ public sealed partial class SeedingViewModel : ObservableObject
         Servers.Clear();
         for (var i = 0; i < servers.Count; i++)
         {
-            Servers.Add(new ServerRow(i, servers[i]));
+            Servers.Add(new ServerRow(i, servers[i], _engine.CurrentGame));
         }
 
         ServersReady = Servers.Count > 0;
@@ -1498,6 +1522,31 @@ public sealed partial class SeedingViewModel : ObservableObject
         {
             ApplyDayStatuses(cached);
         }
+    }
+
+    /// <summary>Rebuild the Launch tab's list from every installed game's rotation, game by game,
+    /// headed by the game's name when there is more than one.</summary>
+    private void RebuildLaunchServers()
+    {
+        var games = InstalledGames.Get()
+            .Select(g => (Game: g, Servers: _servers.GetServers(g.Id)))
+            .Where(x => x.Servers.Count > 0)
+            .ToList();
+        var showHeaders = games.Count > 1;
+
+        LaunchServers.Clear();
+        foreach (var (game, servers) in games)
+        {
+            for (var i = 0; i < servers.Count; i++)
+            {
+                LaunchServers.Add(new ServerRow(i, servers[i], game)
+                {
+                    GameHeader = showHeaders && i == 0 ? game.DisplayName : "",
+                });
+            }
+        }
+
+        LaunchServersReady = LaunchServers.Count > 0;
     }
 
     private void OnSeedingStatusUpdated(SeedingStatusResponse status) =>
@@ -1567,13 +1616,12 @@ public sealed partial class SeedingViewModel : ObservableObject
     {
         LastStatsAt = _live.LastUpdateUtc?.ToLocalTime();
 
-        var game = _engine.CurrentGame.Id;
-        foreach (var row in Servers)
+        foreach (var row in Servers.Concat(LaunchServers))
         {
             BatchStatsResult? match = null;
             foreach (var s in stats)
             {
-                if (s.Game == game && s.Index == row.Index)
+                if (s.Game == row.Game.Id && s.Index == row.Index)
                 {
                     match = s;
                     break;
