@@ -39,7 +39,6 @@ public class ForeignGameTests
             "Wardogs is open. Unreal Engine games like Hell Let Loose usually fail to launch while another one " +
             "is running. Close Wardogs and start seeding Hell Let Loose?",
             plan.ConfirmMessage);
-        Assert.Equal("Close and seed", plan.NudgeAcceptLabel);
     }
 
     [Fact]
@@ -67,35 +66,16 @@ public class ForeignGameTests
 
         // Same thing open (a new pid for the same exe is still what they agreed to close).
         var same = GameSwap.Plan(GameCatalog.Hll, [], [Wardogs with { Pid = 5151 }]);
-        Assert.True(same.IsCoveredBy(shown, sameTarget: true));
+        Assert.True(same.IsCoveredBy(shown));
 
         // Something opened since.
         var more = GameSwap.Plan(GameCatalog.Hll, [], [Wardogs, new ForeignGame(7, "Other-Win64-Shipping.exe", "Other")]);
-        Assert.False(more.IsCoveredBy(shown, sameTarget: true));
+        Assert.False(more.IsCoveredBy(shown));
 
         // Less is fine.
-        Assert.True(GameSwap.Plan(GameCatalog.Hll, []).IsCoveredBy(shown, sameTarget: true));
+        Assert.True(GameSwap.Plan(GameCatalog.Hll, []).IsCoveredBy(shown));
 
-        // A different target: fine for an answered auto-seed prompt, not for the nudge.
-        var otherTarget = GameSwap.Plan(GameCatalog.Hllv, [], [Wardogs]);
-        Assert.True(otherTarget.IsCoveredBy(shown, sameTarget: false));
-        Assert.False(otherTarget.IsCoveredBy(shown, sameTarget: true));
-    }
-
-    [Fact]
-    public void Nudge_ForAnotherUnrealGame_EvenWithOneGameOfOurs()
-    {
-        var policy = new GameSwapNudgePolicy();
-        var plan = policy.Evaluate(GameCatalog.Hll, [], 0, [Wardogs]);
-        Assert.NotNull(plan);
-        Assert.True(plan!.HasForeign);
-        Assert.Contains("usually won't launch while Wardogs is open", plan.NudgeMessage);
-    }
-
-    [Fact]
-    public void Nudge_NotWhileInTheGameThatNeedsSeeding()
-    {
-        // Already playing HLL with Wardogs in the background: HLL is fine where it is.
-        Assert.False(GameSwapNudgePolicy.Wanted(GameCatalog.Hll, [GameCatalog.Hll], [Wardogs]));
+        // A different target is fine: the prompt shows before the directive picks the game.
+        Assert.True(GameSwap.Plan(GameCatalog.Hllv, [], [Wardogs]).IsCoveredBy(shown));
     }
 }

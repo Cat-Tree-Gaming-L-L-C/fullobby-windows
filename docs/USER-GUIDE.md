@@ -110,32 +110,34 @@ opens at HH:MM", re-arms, and lets the machine sleep until then.
 If you have both Hell Let Loose and Hell Let Loose: Vietnam installed, a wake
 seeds whichever game your networks need most at that moment, not necessarily
 the one whose window caused the wake. The Seed button shows which game it will
-start underneath, for example "(Hell Let Loose: Vietnam)". Wakes only come from
-servers in games you have installed.
+start underneath, for example "(Hell Let Loose: Vietnam)". When both games have
+a server waiting, that's a best guess, and the seed itself picks the game. Wakes
+only come from servers in games you have installed.
 
 If a game is already open when a seed starts, Fullobby never closes it without
 asking. Pressing Seed asks "Swap games?" and closes the open game only if you say
-yes. When an auto-seed wake finds a game open, the "Seed now?" prompt says what
-Seed Now will close. If nobody answers, your game is left running and a
-notification says which game needs seeding.
+yes. When an auto-seed wake finds you in a game, it waits quietly: no window,
+notification or prompt while you play. Once you close your game, the auto-seed
+carries on as usual with its "Seed now?" prompt. If the seed window has passed by
+then, it re-arms for the next one.
 
-If you're playing one of the games when the other one needs seeding, Fullobby
-sends a notification ("Hell Let Loose: Vietnam needs seeding") with Swap and
-Not now buttons, and shows the same offer on the Seed page. Swap closes your
-game and starts seeding the other one. Not now keeps it quiet for two hours.
-Otherwise it won't ask again for 30 minutes.
+When one of your networks moves on to a new server to seed while you're free
+(on the desktop, not in a game or anything fullscreen), Fullobby sends a
+notification ("Hell Let Loose: Vietnam needs seeding") with Seed and Not now
+buttons, and shows the same offer on the Seed page. Seed works just like
+pressing Seed. Not now keeps it quiet for two hours. Otherwise it won't ask
+again for 30 minutes. It never sends one while you're gaming, and it doesn't
+save one for later either.
 
-Other Unreal Engine games (Wardogs and the like) get the same treatment.
-Two Unreal games running at once usually stops the second one from launching,
-so before seeding or launching, Fullobby checks for one:
+Other Unreal Engine games (Wardogs and the like) matter too: two Unreal games
+running at once usually stops the second one from launching. Fullobby only
+brings them up when you start something yourself:
 
 - **Pressing Seed or Launch:** it asks "Close Wardogs?". You can pick Close,
   Continue anyway, or Cancel. Continue anyway is there in case it guessed
   wrong, for example an Unreal Editor window.
-- **Auto-seed wake:** the "Seed now?" prompt names the game, and only answering
-  Seed Now closes it.
-- **While you're playing one:** the same nudge as above, with a Close and seed
-  button.
+- **Auto-seed wake:** it waits until you close the other game, as above.
+- **While you're playing one:** nothing.
 
 Fullobby never closes another game without you saying so.
 

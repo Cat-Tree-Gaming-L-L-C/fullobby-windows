@@ -140,6 +140,10 @@ public sealed partial class AccountViewModel : ObservableObject
     /// <summary>The user's network memberships in priority order (top = preferred).</summary>
     public ObservableCollection<NetworkMembershipRow> Networks { get; } = new();
 
+    /// <summary>The ids of the networks the user belongs to (UI thread) — what narrows the streamed,
+    /// every-network seeding status down to this user.</summary>
+    public IReadOnlySet<long> MemberNetworkIds => Networks.Select(n => n.NetworkId).ToHashSet();
+
     /// <summary>The provider currently mid-flight in a login/link (disables buttons + spins).</summary>
     [ObservableProperty]
     private string? busyProvider;

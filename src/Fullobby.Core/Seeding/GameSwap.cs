@@ -112,33 +112,17 @@ public sealed record GameSwapPlan(
              "Press Seed to restart it on the seeding server.",
     };
 
-    /// <summary>The swap nudge's banner line.</summary>
-    public string NudgeMessage => HasForeign
-        ? $"{Target.DisplayName} needs seeding, but it usually won't launch while {ClosingNames} {IsAre} open. " +
-          $"Close {ItThem} and seed?"
-        : $"{Target.DisplayName} needs seeding. Swap from {ClosingNames}?";
-
-    /// <summary>The swap nudge's notification body.</summary>
-    public string NudgeBody => HasForeign
-        ? $"{ClosingNames} {IsAre} open, and {Target.DisplayName} usually won't launch alongside {ItThem}. " +
-          $"Close {ClosingNames} and start seeding?"
-        : $"You're in {ClosingNames}. Swap closes it and starts seeding {Target.DisplayName}.";
-
-    /// <summary>The swap nudge's accept button.</summary>
-    public string NudgeAcceptLabel => HasForeign ? "Close and seed" : "Swap";
-
     /// <summary>What this plan would close, as comparable keys (our games by id, others by exe).</summary>
     public IReadOnlySet<string> CloseKeys =>
         ToClose.Select(g => $"game:{g.Id}")
             .Concat(Foreign.Select(f => $"exe:{f.ExeName.ToLowerInvariant()}"))
             .ToHashSet();
 
-    /// <summary>Whether the player's earlier go-ahead (<paramref name="consent"/>, the plan they were
-    /// shown) covers this fresh plan: everything this would close was named then, and — when
-    /// <paramref name="sameTarget"/> — it's still the game they agreed to seed. Something opened
-    /// since, or a different target, isn't what they agreed to.</summary>
-    public bool IsCoveredBy(GameSwapPlan consent, bool sameTarget) =>
-        (!sameTarget || consent.Target.Id == Target.Id) && CloseKeys.IsSubsetOf(consent.CloseKeys);
+    /// <summary>Whether the player's earlier go-ahead (<paramref name="consent"/>, the plan the
+    /// answered "Seed now?" prompt showed) covers this fresh plan: everything this would close was
+    /// named then. Something opened since isn't what they agreed to. The target may differ — the
+    /// prompt shows before the directive picks the game.</summary>
+    public bool IsCoveredBy(GameSwapPlan consent) => CloseKeys.IsSubsetOf(consent.CloseKeys);
 }
 
 /// <summary>
@@ -146,8 +130,9 @@ public sealed record GameSwapPlan(
 /// picks the game across everything installed, so the game in priority may not be the one the
 /// player has open — a hand-launched HLL when Vietnam needs seeding — and any other Unreal Engine
 /// game open will likely stop ours launching at all. Closing someone's game is never done without
-/// their say-so: a manual Seed asks, an auto-seed closes only what its answered "Seed now?" prompt
-/// named, and the nudge's button is its own go-ahead. Unattended, games are left alone.
+/// their say-so: a manual Seed asks, and an auto-seed closes only what its answered "Seed now?"
+/// prompt named (it waits, silently, while the player is in a game). Unattended, games are left
+/// alone.
 /// </summary>
 public static class GameSwap
 {
