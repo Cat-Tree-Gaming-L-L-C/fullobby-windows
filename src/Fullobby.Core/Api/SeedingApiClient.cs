@@ -86,6 +86,9 @@ public sealed class SeedingApiClient(HttpClient http)
         {
             ["game"] = game,
             ["index"] = index,
+            // Required by the API (no server default): a missing field 422s the whole session,
+            // which leaves the server unable to verify the join or signal a restart-and-rejoin.
+            ["platform"] = Platform.Steam.ToWireString(),
         };
         if (steamId is not null)
         {
