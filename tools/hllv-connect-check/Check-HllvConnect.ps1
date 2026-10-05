@@ -12,6 +12,8 @@
       4. if the hands-off launch joined, repeats it while the volunteer skips the intros
          quickly, the way Fullobby's splash bypass does;
       5. copies the game's own log from the test and zips everything into one file to send back.
+         The Windows user name, PC name, user-profile paths and Steam IDs are removed from
+         everything it writes.
 
     Nothing is installed or changed. The only things written are the report folder and zip on
     the Desktop.
@@ -40,8 +42,29 @@ $ReportDir  = Join-Path $Desktop "fullobby-hllv-check-$Stamp"
 $ReportFile = Join-Path $ReportDir 'report.txt'
 New-Item -ItemType Directory -Path $ReportDir -Force | Out-Null
 
+# Personal details that commonly appear in game logs and process command lines. They are
+# replaced before anything is written to the report or copied into the zip. Very short
+# user/PC names are skipped so they don't mangle unrelated text.
+$PrivacyReplacements = @(@{ Pattern = '(?<!\d)7656119\d{10}(?!\d)'; With = '<steamid>' })
+if ($env:USERPROFILE) {
+    $PrivacyReplacements = @(@{ Pattern = [regex]::Escape($env:USERPROFILE); With = '%USERPROFILE%' }) + $PrivacyReplacements
+}
+foreach ($pair in @(@($env:USERNAME, '<user>'), @($env:COMPUTERNAME, '<computer>'))) {
+    if ($pair[0] -and $pair[0].Length -ge 3) {
+        $PrivacyReplacements += @{ Pattern = '(?<![\w-])' + [regex]::Escape($pair[0]) + '(?![\w-])'; With = $pair[1] }
+    }
+}
+
+function Protect-Privacy([string]$Text) {
+    if (-not $Text) { return $Text }
+    foreach ($r in $PrivacyReplacements) {
+        $Text = [regex]::Replace($Text, $r.Pattern, $r.With, 'IgnoreCase')
+    }
+    return $Text
+}
+
 function Write-Report([string]$Line) {
-    Add-Content -Path $ReportFile -Value $Line -Encoding UTF8
+    Add-Content -Path $ReportFile -Value (Protect-Privacy $Line) -Encoding UTF8
 }
 
 function Say([string]$Text, [string]$Color = 'Gray') {
@@ -207,108 +230,149 @@ function Invoke-Launch([string]$Label, [string]$Instructions) {
 
 # --- Start ---
 
-Clear-Host
-Say 'Fullobby - HLL: Vietnam connect check' 'Cyan'
-Say '--------------------------------------'
-Say 'This launches Hell Let Loose: Vietnam the same way Fullobby does and records whether it'
-Say 'joins the server. It takes about 5-10 minutes. Nothing is installed or changed.'
-Say ''
+$failure = $null
+try {
+    Clear-Host
+    Say 'Fullobby - HLL: Vietnam connect check' 'Cyan'
+    Say '--------------------------------------'
+    Say 'This launches Hell Let Loose: Vietnam the same way Fullobby does and records whether it'
+    Say 'joins the server. It takes about 5-10 minutes. Nothing is installed or changed.'
+    Say ''
 
-if (@(Get-Process -Name 'Fullobby' -ErrorAction SilentlyContinue).Count -gt 0) {
-    Say 'Fullobby is running. Please quit it first (right-click its tray icon > Quit),' 'Yellow'
-    Say 'so it cannot start or close the game during the test.' 'Yellow'
-    while (@(Get-Process -Name 'Fullobby' -ErrorAction SilentlyContinue).Count -gt 0) {
-        Pause-ForEnter 'Press Enter once Fullobby is closed'
+    if (@(Get-Process -Name 'Fullobby' -ErrorAction SilentlyContinue).Count -gt 0) {
+        Say 'Fullobby is running. Please quit it first (right-click its tray icon > Quit),' 'Yellow'
+        Say 'so it cannot start or close the game during the test.' 'Yellow'
+        while (@(Get-Process -Name 'Fullobby' -ErrorAction SilentlyContinue).Count -gt 0) {
+            Pause-ForEnter 'Press Enter once Fullobby is closed'
+        }
     }
-}
 
-$SteamExe = Find-SteamExe
-if (-not $SteamExe) {
-    Say 'Could not find Steam on this PC. Is it installed?' 'Red'
-    Pause-ForEnter 'Press Enter to exit'
-    exit 1
-}
-$InstallDir = Find-VietnamInstall $SteamExe
+    $SteamExe = Find-SteamExe
+    if (-not $SteamExe) {
+        throw 'Could not find Steam on this PC. Is it installed?'
+    }
+    $InstallDir = Find-VietnamInstall $SteamExe
 
-while (-not $Server -or $Server -notmatch '^\d{1,3}(\.\d{1,3}){3}:\d{1,5}$') {
-    if ($Server) { Say "  '$Server' doesn't look like IP:port (for example 203.0.113.10:7777)." 'Yellow' }
-    $Server = (Read-Host 'Server address you were given (IP:port)').Trim()
-}
+    while (-not $Server -or $Server -notmatch '^\d{1,3}(\.\d{1,3}){3}:\d{1,5}$') {
+        if ($Server) { Say "  '$Server' doesn't look like IP:port (for example 203.0.113.10:7777)." 'Yellow' }
+        $Server = (Read-Host 'Server address you were given (IP:port)').Trim()
+    }
 
-Write-Report 'Fullobby HLL: Vietnam connect check'
-Write-Report "Started:     $($StartedAt.ToString('yyyy-MM-dd HH:mm:ss zzz'))"
-Write-Report "Windows:     $([Environment]::OSVersion.VersionString)"
-Write-Report "Steam:       $SteamExe (running: $(@(Get-Process -Name steam -ErrorAction SilentlyContinue).Count -gt 0))"
-Write-Report "Install dir: $(if ($InstallDir) { $InstallDir } else { '(not found in Steam libraries)' })"
-Write-Report "Server:      $Server"
+    Write-Report 'Fullobby HLL: Vietnam connect check'
+    Write-Report "Started:     $($StartedAt.ToString('yyyy-MM-dd HH:mm:ss zzz'))"
+    Write-Report "Windows:     $([Environment]::OSVersion.VersionString)"
+    Write-Report "Steam:       $SteamExe (running: $(@(Get-Process -Name steam -ErrorAction SilentlyContinue).Count -gt 0))"
+    Write-Report "Install dir: $(if ($InstallDir) { $InstallDir } else { '(not found in Steam libraries)' })"
+    Write-Report "Server:      $Server"
 
-if (-not $InstallDir) {
-    Say "HLL: Vietnam doesn't appear to be installed through Steam on this PC." 'Yellow'
-    Say 'Continuing anyway in case it lives somewhere unusual.' 'Yellow'
-}
+    if (-not $InstallDir) {
+        Say "HLL: Vietnam doesn't appear to be installed through Steam on this PC." 'Yellow'
+        Say 'Continuing anyway in case it lives somewhere unusual.' 'Yellow'
+    }
 
-Wait-ForGameToClose
+    Wait-ForGameToClose
 
-$run1 = Invoke-Launch 'Test 1 of 2: hands off' @'
+    $run1 = Invoke-Launch 'Test 1 of 2: hands off' @'
   When the game opens, DO NOT press any keys or click anything.
   Let the intro videos play out on their own and wait about 2 minutes.
   Then note where you are (on the server, or the main menu) and come back to this window.
 '@
 
-if ($run1 -eq 'joined') {
-    Say ''
-    Say 'Thanks! Now quit the game to the desktop for the second test.' 'Cyan'
-    Wait-ForGameToClose
-    $null = Invoke-Launch 'Test 2 of 2: skip the intros' @'
+    if ($run1 -eq 'joined') {
+        Say ''
+        Say 'Thanks! Now quit the game to the desktop for the second test.' 'Cyan'
+        Wait-ForGameToClose
+        $null = Invoke-Launch 'Test 2 of 2: skip the intros' @'
   This time, as soon as the game window appears, press Esc (or Space) a few times to
   skip the intro videos as fast as you can - this is what Fullobby does automatically.
   Then wait about a minute, note where you end up, and come back to this window.
 '@
-} else {
+    } else {
+        Write-Report ''
+        Write-Report 'Test 2 skipped: the hands-off launch did not join.'
+    }
+
+    Say ''
+    Say 'Last step: please quit the game to the desktop so its log is complete.' 'Cyan'
+    Wait-ForGameToClose
+
+    # --- Game logs written during the test ---
+
+    $logRoots = @(Join-Path $env:LOCALAPPDATA 'HLLVietnam')
+    if ($InstallDir) { $logRoots += $InstallDir }
+    # Crash reports and anti-cheat logs are left out: they aren't needed to see whether the
+    # game tried to connect, and they carry more about the PC than the game's own log.
+    $skipDirs = '\\(Crashes|CrashReportClient|EasyAntiCheat|AntiCheat)\\'
+    $logs = @()
+    for ($i = 0; $i -lt $logRoots.Count; $i++) {
+        $root = $logRoots[$i]
+        if (Test-Path $root) {
+            foreach ($f in @(Get-ChildItem -Path $root -Recurse -Filter '*.log' -File -ErrorAction SilentlyContinue |
+                    Where-Object { $_.LastWriteTime -ge $StartedAt -and $_.FullName -notmatch $skipDirs })) {
+                # Keep the path in the copy's name so same-named logs from different folders
+                # don't overwrite each other.
+                $rel = if ($f.FullName.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
+                    $f.FullName.Substring($root.Length).TrimStart('\') -replace '[\\/]', '_'
+                } else { $f.Name }
+                $logs += [pscustomobject]@{ File = $f; CopyName = "$i-$rel" }
+            }
+        }
+    }
+
     Write-Report ''
-    Write-Report 'Test 2 skipped: the hands-off launch did not join.'
-}
-
-Say ''
-Say 'Last step: please quit the game to the desktop so its log is complete.' 'Cyan'
-Wait-ForGameToClose
-
-# --- Game logs written during the test ---
-
-$logRoots = @(Join-Path $env:LOCALAPPDATA 'HLLVietnam')
-if ($InstallDir) { $logRoots += $InstallDir }
-$logs = @()
-foreach ($root in $logRoots) {
-    if (Test-Path $root) {
-        $logs += Get-ChildItem -Path $root -Recurse -Filter '*.log' -File -ErrorAction SilentlyContinue |
-            Where-Object { $_.LastWriteTime -ge $StartedAt }
+    Write-Report '=== Game logs ==='
+    if ($logs.Count -eq 0) {
+        Write-Report '(no game log written during the test was found)'
+    } else {
+        $logDir = Join-Path $ReportDir 'game-logs'
+        New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+        $pattern = 'connect|Browse|travel|NetDriver|Network ?Failure|Travel ?Failure|PendingNet|LogNet:|LogOnline|Login|EAC|AntiCheat'
+        foreach ($log in $logs) {
+            $path = $log.File.FullName
+            Write-Report "--- $path (lines mentioning connecting/travel)"
+            try {
+                $text = Get-Content -Path $path -Raw -Encoding UTF8 -ErrorAction Stop
+                Set-Content -Path (Join-Path $logDir $log.CopyName) -Value (Protect-Privacy $text) -Encoding UTF8
+            } catch {
+                Write-Report "    (could not copy this log: $($_.Exception.Message))"
+                continue
+            }
+            $hits = @(Select-String -Path $path -Pattern $pattern -ErrorAction SilentlyContinue | Select-Object -First 200)
+            if ($hits.Count -eq 0) { Write-Report '    (none)' }
+            foreach ($h in $hits) { Write-Report "    $($h.Line)" }
+        }
     }
+} catch {
+    $failure = $_
+    Say ''
+    Say "Something went wrong: $($_.Exception.Message)" 'Red'
+    try {
+        Write-Report ''
+        Write-Report "ERROR: $($_.Exception.Message)"
+        Write-Report "  at: $($_.InvocationInfo.PositionMessage)"
+    } catch { }
 }
 
-Write-Report ''
-Write-Report '=== Game logs ==='
-if ($logs.Count -eq 0) {
-    Write-Report '(no game log written during the test was found)'
-} else {
-    $logDir = Join-Path $ReportDir 'game-logs'
-    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-    $pattern = 'connect|Browse|travel|NetDriver|Network ?Failure|Travel ?Failure|PendingNet|LogNet:|LogOnline|Login|EAC|AntiCheat'
-    foreach ($log in $logs) {
-        Copy-Item -Path $log.FullName -Destination (Join-Path $logDir $log.Name) -Force
-        Write-Report "--- $($log.FullName) (lines mentioning connecting/travel)"
-        $hits = @(Select-String -Path $log.FullName -Pattern $pattern -ErrorAction SilentlyContinue | Select-Object -First 200)
-        if ($hits.Count -eq 0) { Write-Report '    (none)' }
-        foreach ($h in $hits) { Write-Report "    $($h.Line)" }
-    }
-}
+# --- Zip whatever was collected, even if the check stopped early ---
 
 $zip = "$ReportDir.zip"
-Compress-Archive -Path (Join-Path $ReportDir '*') -DestinationPath $zip -Force
-
-Say ''
-Say 'All done - thank you!' 'Green'
-Say 'Please send this file back to the Fullobby team:' 'Green'
-Say "  $zip" 'White'
-Say '(It contains the test results and the game''s log, which includes your in-game name.)'
-Start-Process explorer.exe -ArgumentList "/select,`"$zip`""
+try {
+    Compress-Archive -Path (Join-Path $ReportDir '*') -DestinationPath $zip -Force
+    Say ''
+    if ($failure) {
+        Say 'The check stopped early, but the report is still useful.' 'Yellow'
+    } else {
+        Say 'All done - thank you!' 'Green'
+    }
+    Say 'Please send this file back to the Fullobby team:' 'Green'
+    Say "  $zip" 'White'
+    Say '(It contains the test results and the game''s log, which includes your in-game name.'
+    Say ' Your Windows user name, PC name and Steam ID are removed first.)'
+    Start-Process explorer.exe -ArgumentList "/select,`"$zip`""
+} catch {
+    Say ''
+    Say "Could not create the zip file: $($_.Exception.Message)" 'Red'
+    Say 'Please send the contents of this folder instead:' 'Yellow'
+    Say "  $ReportDir" 'White'
+}
 Pause-ForEnter 'Press Enter to close this window'

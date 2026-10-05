@@ -29,7 +29,22 @@ game for seeding. It takes about 5–10 minutes.
 
 - It launches the game with `steam.exe -applaunch 3079210 +connect <address>`.
 - It records when the game starts and the command line the game received.
-- It saves your answers and a copy of the game's log from the test.
+- It saves your answers and a copy of the game's logs from the test (not crash
+  reports or anti-cheat logs).
 
-It doesn't install or change anything. The game log includes your in-game
-name; nothing else personal is collected.
+It doesn't install or change anything.
+
+## What's in the file you send
+
+- Your answers and any notes you typed
+- Your Windows version, where Steam and the game are installed, and the server
+  address
+- The command lines Steam passed to the game and its launcher
+- The game's logs from the test, which include your **in-game name**
+
+Before anything is saved, the script replaces your **Windows user name**, **PC
+name**, **user folder path** and **Steam ID** with placeholders such as `<user>`.
+You can open the zip and check it before sending it.
+
+If something goes wrong partway through, the script says so and still makes the
+zip, so please send it anyway.
