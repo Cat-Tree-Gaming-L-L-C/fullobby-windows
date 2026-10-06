@@ -8,10 +8,12 @@
       1. launches the game through Steam with +connect, exactly as Fullobby does;
       2. watches the launcher and game processes and records the command line the game
          actually received (does +connect survive the anti-cheat launcher?);
-      3. asks the volunteer where the game ended up (on the server / main menu / other);
-      4. if the hands-off launch joined, repeats it while the volunteer skips the intros
-         quickly, the way Fullobby's splash bypass does;
-      5. copies the game's own log from the test and zips everything into one file to send back.
+      3. asks the volunteer where the game ended up (on the server / title screen / main menu / other);
+      4. if the game started, repeats the launch while the volunteer presses Esc through the
+         intros and title screen, the way Fullobby's splash bypass does;
+      5. finds the game's own logs (it looks for Unreal "Saved" folders under %LOCALAPPDATA%
+         that changed during the test, since the game's folder name isn't published) and
+         zips everything into one file to send back.
          The Windows user name, PC name, user-profile paths and Steam IDs are removed from
          everything it writes.
 
@@ -146,16 +148,18 @@ function Ask-Outcome {
     Say ''
     Say '  Where did the game end up?' 'Cyan'
     Say '    1 = On the server (loading screen for a map, or in the match)'
-    Say '    2 = Main menu (never tried to join)'
-    Say '    3 = It tried to join but showed an error or went back to the menu'
-    Say '    4 = Something else (game did not start, crashed, ...)'
+    Say '    2 = Title screen ("PRESS ANY BUTTON TO CONTINUE")'
+    Say '    3 = Main menu (never tried to join)'
+    Say '    4 = It tried to join but showed an error or went back to the menu'
+    Say '    5 = Something else (game did not start, crashed, ...)'
     while ($true) {
-        $answer = (Read-Host '  Type 1, 2, 3 or 4 and press Enter').Trim()
+        $answer = (Read-Host '  Type 1, 2, 3, 4 or 5 and press Enter').Trim()
         switch ($answer) {
             '1' { return 'joined' }
-            '2' { return 'main-menu' }
-            '3' { return 'join-error' }
-            '4' { return 'other' }
+            '2' { return 'title-screen' }
+            '3' { return 'main-menu' }
+            '4' { return 'join-error' }
+            '5' { return 'other' }
         }
         Say '  Please type just the number.' 'Yellow'
     }
@@ -198,7 +202,10 @@ function Invoke-Launch([string]$Label, [string]$Instructions) {
         if ($g -and -not $gameSeen) {
             $gameSeen = $elapsed
             $gameCmd = Get-ProcessCommandLine $g.Id
+            $gameExe = $null
+            try { $gameExe = $g.Path } catch { }
             Write-Report "  +${elapsed}s  game $($g.ProcessName).exe started"
+            Write-Report "           exe: $(if ($gameExe) { $gameExe } else { '(not readable)' })"
             Write-Report "           command line: $gameCmd"
             Say "  Game process started after ${elapsed}s."
         }
@@ -211,11 +218,15 @@ function Invoke-Launch([string]$Label, [string]$Instructions) {
         Start-Sleep -Seconds 1
     }
 
+    $script:GameStarted = [bool]$gameSeen
     if (-not $gameSeen) {
         Write-Report "  game process never appeared within ${WatchSeconds}s"
         Say '  The game process did not appear.' 'Yellow'
     }
-    if ($gameCmd) {
+    if ($gameCmd -and $gameCmd.StartsWith('(not readable')) {
+        # Anti-cheat usually hides it; that says nothing either way about +connect.
+        Write-Report '  game command line contains the server address: unknown (not readable)'
+    } elseif ($gameCmd) {
         $hasConnect = $gameCmd -match [regex]::Escape($Server)
         Write-Report "  game command line contains the server address: $hasConnect"
     }
@@ -272,24 +283,39 @@ try {
 
     Wait-ForGameToClose
 
-    $run1 = Invoke-Launch 'Test 1 of 2: hands off' @'
+    $script:GameStarted = $false
+    $null = Invoke-Launch 'Test 1 of 2: hands off' @'
   When the game opens, DO NOT press any keys or click anything.
   Let the intro videos play out on their own and wait about 2 minutes.
-  Then note where you are (on the server, or the main menu) and come back to this window.
+  Then note where you are (on the server, the title screen, or the main menu) and come
+  back to this window.
 '@
 
-    if ($run1 -eq 'joined') {
+    # Fullobby always presses keys through the intros, so test 2 is the one that matters most.
+    if ($script:GameStarted) {
         Say ''
         Say 'Thanks! Now quit the game to the desktop for the second test.' 'Cyan'
         Wait-ForGameToClose
-        $null = Invoke-Launch 'Test 2 of 2: skip the intros' @'
-  This time, as soon as the game window appears, press Esc (or Space) a few times to
-  skip the intro videos as fast as you can - this is what Fullobby does automatically.
-  Then wait about a minute, note where you end up, and come back to this window.
+        $null = Invoke-Launch 'Test 2 of 2: press Esc like Fullobby does' @'
+  This time, as soon as the game window appears, press Esc every second or two, for
+  about 30 seconds - this is what Fullobby does automatically. Use ONLY Esc at first.
+  If you are still on "PRESS ANY BUTTON TO CONTINUE" after that, press Space once.
+  Then wait about a minute without touching anything, note where you end up, and come
+  back to this window.
 '@
+        Say ''
+        Say '  Did pressing Esc get you past "PRESS ANY BUTTON TO CONTINUE"?' 'Cyan'
+        Say '    y = yes, Esc was enough'
+        Say '    n = no, I had to press Space (or another key)'
+        Say '    s = I never saw that screen'
+        $esc = ''
+        while ($esc -notin @('y', 'n', 's')) {
+            $esc = (Read-Host '  Type y, n or s and press Enter').Trim().ToLower()
+        }
+        Write-Report "  Esc got past the title screen: $(switch ($esc) { 'y' { 'yes' } 'n' { 'no, needed another key' } 's' { 'title screen not seen' } })"
     } else {
         Write-Report ''
-        Write-Report 'Test 2 skipped: the hands-off launch did not join.'
+        Write-Report 'Test 2 skipped: the game did not start in test 1.'
     }
 
     Say ''
@@ -298,8 +324,24 @@ try {
 
     # --- Game logs written during the test ---
 
-    $logRoots = @(Join-Path $env:LOCALAPPDATA 'HLLVietnam')
+    # The game's folder under %LOCALAPPDATA% isn't published (the first run showed it isn't
+    # "HLLVietnam"), so look for any Unreal "Saved" folder that changed during the test.
+    # Only top-level folders are checked, and only their names are recorded.
+    $logRoots = @()
+    $changedSaved = @()
+    foreach ($d in @(Get-ChildItem -Path $env:LOCALAPPDATA -Directory -ErrorAction SilentlyContinue)) {
+        $saved = Join-Path $d.FullName 'Saved'
+        if (-not (Test-Path $saved)) { continue }
+        $recent = @(Get-ChildItem -Path $saved -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.LastWriteTime -ge $StartedAt } | Select-Object -First 1)
+        if ($recent.Count -gt 0) {
+            $changedSaved += $d.Name
+            $logRoots += Join-Path $saved 'Logs'
+        }
+    }
     if ($InstallDir) { $logRoots += $InstallDir }
+    Write-Report ''
+    Write-Report "Unreal 'Saved' folders under %LOCALAPPDATA% changed during the test: $(if ($changedSaved.Count) { $changedSaved -join ', ' } else { '(none)' })"
     # Crash reports and anti-cheat logs are left out: they aren't needed to see whether the
     # game tried to connect, and they carry more about the PC than the game's own log.
     $skipDirs = '\\(Crashes|CrashReportClient|EasyAntiCheat|AntiCheat)\\'
