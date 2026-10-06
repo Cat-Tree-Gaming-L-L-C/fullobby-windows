@@ -77,7 +77,7 @@ public record SeedingDirective(
     int MaxSessionSecs, SeedingConfig Config, string? SwitchReason = null, bool? JoinANetwork = null);
 
 public record StartSessionRequest(
-    string Game, int Index, string? SteamId,
+    string Game, int Index, string? Platform, string? SteamId,
     string? OsVersion, string? OsArch, bool? EfficiencyMode, bool? AutoSeed);
 public record StartSessionResponse(string SessionId);
 

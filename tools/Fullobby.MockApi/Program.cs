@@ -76,8 +76,11 @@ app.MapGet("/api/seeding/directive", (HttpContext ctx, string? game, int? curren
         ? Results.Json(state.Directive(current_index, network_id))
         : Results.Unauthorized());
 
+// Like the real API, platform has no default: a request without it is rejected.
 app.MapPost("/api/seeding/start-session", (StartSessionRequest req) =>
-    Results.Json(new StartSessionResponse(state.StartSession(req.Index))));
+    req.Platform is "steam" or "epic" or "xbox"
+        ? Results.Json(new StartSessionResponse(state.StartSession(req.Index)))
+        : Results.Json(new { code = "invalid_body", error = "missing field `platform`" }, statusCode: 422));
 
 app.MapPost("/api/seeding/heartbeat", (HeartbeatRequest req) =>
     Results.Json(state.Heartbeat(req.SessionId)));
