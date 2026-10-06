@@ -1,19 +1,20 @@
 <#
 .SYNOPSIS
-    Checks whether Hell Let Loose: Vietnam joins a server when Steam launches it with
-    "+connect <ip>", the same way Fullobby launches it for seeding.
+    Tries other ways of making Hell Let Loose: Vietnam join a server at launch, for Fullobby
+    seeding.
 
 .DESCRIPTION
-    Meant to be run by a volunteer on a Windows PC that has HLL: Vietnam installed. It:
-      1. launches the game through Steam with +connect, exactly as Fullobby does;
-      2. watches the launcher and game processes and records the command line the game
-         actually received (does +connect survive the anti-cheat launcher?);
-      3. asks the volunteer where the game ended up (on the server / title screen / main menu / other);
-      4. if the game started, repeats the launch while the volunteer presses Esc through the
-         intros and title screen, the way Fullobby's splash bypass does;
-      5. finds the game's own logs (it looks for Unreal "Saved" folders under %LOCALAPPDATA%
-         that changed during the test, since the game's folder name isn't published) and
-         zips everything into one file to send back.
+    An earlier run showed that "steam.exe -applaunch 3079210 +connect <ip:port>" (how Fullobby
+    launches every game) reaches the launcher but leaves HLL: Vietnam on the main menu, even
+    after Esc gets it past the title screen. This version tries the alternatives, one launch
+    each, with the volunteer pressing Esc through the title screen the way Fullobby does:
+      A. Steam's connect link:      steam://connect/<ip:port>
+      B. the same link with the server's query port (if one is given)
+      C. -applaunch +connect with the query port (if one is given)
+      D. Launch_HLL.exe started directly with +connect <ip:port> (skips Steam's handoff)
+    For each it records the launcher and game processes, asks where the game ended up, and
+    at the end lists which files the game changed under %LOCALAPPDATA%\HLLVietnam\Saved
+    (names only) and copies any game logs. Everything is zipped into one file to send back.
          The Windows user name, PC name, user-profile paths and Steam IDs are removed from
          everything it writes.
 
@@ -22,10 +23,15 @@
 
 .PARAMETER Server
     Server address as IP:port (e.g. 203.0.113.10:7777). Asked for when omitted.
+
+.PARAMETER QueryPort
+    The server's query port (e.g. 7779), for tests B and C. Asked for when omitted; leave it
+    blank to skip those tests.
 #>
 [CmdletBinding()]
 param(
-    [string]$Server
+    [string]$Server,
+    [string]$QueryPort
 )
 
 $ErrorActionPreference = 'Stop'
@@ -165,19 +171,37 @@ function Ask-Outcome {
     }
 }
 
-# Launch through Steam the way Fullobby does and record what happens. Returns the outcome.
-function Invoke-Launch([string]$Label, [string]$Instructions) {
+# What the volunteer does in every test: get past the title screen the way Fullobby does.
+$EscInstructions = @'
+  As soon as the game window appears, press Esc every second or two for about 30 seconds
+  (this is what Fullobby does automatically). If you are still on "PRESS ANY BUTTON TO
+  CONTINUE" after that, press Space once. Then wait about a minute WITHOUT touching
+  anything, note where you end up, and come back to this window.
+'@
+
+# Launch the game one way and record what happens. $Description is what goes in the report;
+# $Expect is the address to look for in command lines. Returns the outcome.
+function Invoke-Launch([string]$Label, [string]$Description, [string]$Expect, [scriptblock]$Launch) {
     Say ''
     Say "=== $Label ===" 'Cyan'
-    Say $Instructions 'White'
+    Say "  Launch method: $Description" 'Gray'
+    Say $EscInstructions 'White'
     Say ''
     Pause-ForEnter '  Press Enter to launch the game'
 
     Write-Report ''
     Write-Report "=== $Label ==="
     $launchAt = Get-Date
-    Write-Report "Launch: `"$SteamExe`" -applaunch $AppId +connect $Server   at $($launchAt.ToString('HH:mm:ss'))"
-    Start-Process -FilePath $SteamExe -ArgumentList @('-applaunch', $AppId, '+connect', $Server)
+    Write-Report "Launch: $Description   at $($launchAt.ToString('HH:mm:ss'))"
+    try {
+        & $Launch
+    } catch {
+        Write-Report "  launch failed: $($_.Exception.Message)"
+        Say "  Could not launch this way: $($_.Exception.Message)" 'Yellow'
+        Write-Report '  RESULT: launch-failed'
+        $script:GameStarted = $false
+        return 'launch-failed'
+    }
 
     Say '  Launched. Watching the game start (you can Alt-Tab back here any time; the questions'
     Say '  appear once the game has had time to settle, up to about 3 minutes).'
@@ -195,6 +219,9 @@ function Invoke-Launch([string]$Label, [string]$Instructions) {
                 $launcherCmd = Get-ProcessCommandLine $l.Id
                 Write-Report "  +${elapsed}s  launcher $LauncherName.exe started"
                 Write-Report "           command line: $launcherCmd"
+                if (-not $launcherCmd.StartsWith('(not readable')) {
+                    Write-Report "           contains $Expect`: $($launcherCmd -match [regex]::Escape($Expect))"
+                }
             }
         }
 
@@ -227,7 +254,7 @@ function Invoke-Launch([string]$Label, [string]$Instructions) {
         # Anti-cheat usually hides it; that says nothing either way about +connect.
         Write-Report '  game command line contains the server address: unknown (not readable)'
     } elseif ($gameCmd) {
-        $hasConnect = $gameCmd -match [regex]::Escape($Server)
+        $hasConnect = $gameCmd -match [regex]::Escape($Expect)
         Write-Report "  game command line contains the server address: $hasConnect"
     }
 
@@ -246,8 +273,8 @@ try {
     Clear-Host
     Say 'Fullobby - HLL: Vietnam connect check' 'Cyan'
     Say '--------------------------------------'
-    Say 'This launches Hell Let Loose: Vietnam the same way Fullobby does and records whether it'
-    Say 'joins the server. It takes about 5-10 minutes. Nothing is installed or changed.'
+    Say 'This launches Hell Let Loose: Vietnam a few different ways and records whether each one'
+    Say 'joins the server. It takes about 10-15 minutes. Nothing is installed or changed.'
     Say ''
 
     if (@(Get-Process -Name 'Fullobby' -ErrorAction SilentlyContinue).Count -gt 0) {
@@ -269,7 +296,7 @@ try {
         $Server = (Read-Host 'Server address you were given (IP:port)').Trim()
     }
 
-    Write-Report 'Fullobby HLL: Vietnam connect check'
+    Write-Report 'Fullobby HLL: Vietnam connect check (v3: alternative connect methods)'
     Write-Report "Started:     $($StartedAt.ToString('yyyy-MM-dd HH:mm:ss zzz'))"
     Write-Report "Windows:     $([Environment]::OSVersion.VersionString)"
     Write-Report "Steam:       $SteamExe (running: $(@(Get-Process -Name steam -ErrorAction SilentlyContinue).Count -gt 0))"
@@ -281,42 +308,52 @@ try {
         Say 'Continuing anyway in case it lives somewhere unusual.' 'Yellow'
     }
 
-    Wait-ForGameToClose
-
-    $script:GameStarted = $false
-    $null = Invoke-Launch 'Test 1 of 2: hands off' @'
-  When the game opens, DO NOT press any keys or click anything.
-  Let the intro videos play out on their own and wait about 2 minutes.
-  Then note where you are (on the server, the title screen, or the main menu) and come
-  back to this window.
-'@
-
-    # Fullobby always presses keys through the intros, so test 2 is the one that matters most.
-    if ($script:GameStarted) {
+    $ip = $Server.Split(':')[0]
+    if (-not $PSBoundParameters.ContainsKey('QueryPort')) {
         Say ''
-        Say 'Thanks! Now quit the game to the desktop for the second test.' 'Cyan'
-        Wait-ForGameToClose
-        $null = Invoke-Launch 'Test 2 of 2: press Esc like Fullobby does' @'
-  This time, as soon as the game window appears, press Esc every second or two, for
-  about 30 seconds - this is what Fullobby does automatically. Use ONLY Esc at first.
-  If you are still on "PRESS ANY BUTTON TO CONTINUE" after that, press Space once.
-  Then wait about a minute without touching anything, note where you end up, and come
-  back to this window.
-'@
-        Say ''
-        Say '  Did pressing Esc get you past "PRESS ANY BUTTON TO CONTINUE"?' 'Cyan'
-        Say '    y = yes, Esc was enough'
-        Say '    n = no, I had to press Space (or another key)'
-        Say '    s = I never saw that screen'
-        $esc = ''
-        while ($esc -notin @('y', 'n', 's')) {
-            $esc = (Read-Host '  Type y, n or s and press Enter').Trim().ToLower()
-        }
-        Write-Report "  Esc got past the title screen: $(switch ($esc) { 'y' { 'yes' } 'n' { 'no, needed another key' } 's' { 'title screen not seen' } })"
-    } else {
-        Write-Report ''
-        Write-Report 'Test 2 skipped: the game did not start in test 1.'
+        Say "If you were given the server's QUERY port too (often 7779 or 27015), type it now." 'Cyan'
+        $QueryPort = (Read-Host 'Query port (or just press Enter to skip)').Trim()
     }
+    while ($QueryPort -and ($QueryPort -notmatch '^\d{1,5}$' -or [int]$QueryPort -gt 65535)) {
+        Say "  '$QueryPort' isn't a port number." 'Yellow'
+        $QueryPort = (Read-Host 'Query port (or just press Enter to skip)').Trim()
+    }
+    Write-Report "Query port:  $(if ($QueryPort) { $QueryPort } else { '(not given; tests B and C skipped)' })"
+    $launcherExe = if ($InstallDir) { Join-Path $InstallDir "$LauncherName.exe" } else { $null }
+
+    $tests = @(
+        @{ Id = 'A'; Description = "steam://connect/$Server"; Expect = $Server
+           Launch = { Start-Process "steam://connect/$Server" } }
+    )
+    if ($QueryPort) {
+        $q = "${ip}:$QueryPort"
+        $tests += @{ Id = 'B'; Description = "steam://connect/$q (query port)"; Expect = $q
+                     Launch = { Start-Process "steam://connect/$q" }.GetNewClosure() }
+        $tests += @{ Id = 'C'; Description = "`"$SteamExe`" -applaunch $AppId +connect $q (query port)"; Expect = $q
+                     Launch = { Start-Process -FilePath $SteamExe -ArgumentList @('-applaunch', $AppId, '+connect', $q) }.GetNewClosure() }
+    }
+    if ($launcherExe -and (Test-Path $launcherExe)) {
+        $tests += @{ Id = 'D'; Description = "`"$launcherExe`" +connect $Server (started directly, not through Steam)"; Expect = $Server
+                     Launch = { Start-Process -FilePath $launcherExe -ArgumentList @('+connect', $Server) -WorkingDirectory $InstallDir }.GetNewClosure() }
+    } else {
+        Write-Report "Test D skipped: $LauncherName.exe not found in the install folder."
+    }
+
+    $results = @()
+    for ($t = 0; $t -lt $tests.Count; $t++) {
+        $test = $tests[$t]
+        Wait-ForGameToClose
+        $outcome = Invoke-Launch "Test $($test.Id) ($($t + 1) of $($tests.Count))" $test.Description $test.Expect $test.Launch
+        $results += "  $($test.Id): $outcome  - $($test.Description)"
+        if ($t -lt $tests.Count - 1) {
+            Say ''
+            Say 'Thanks! Now quit the game to the desktop for the next test.' 'Cyan'
+        }
+    }
+
+    Write-Report ''
+    Write-Report '=== Summary ==='
+    foreach ($r in $results) { Write-Report $r }
 
     Say ''
     Say 'Last step: please quit the game to the desktop so its log is complete.' 'Cyan'
@@ -342,6 +379,21 @@ try {
     if ($InstallDir) { $logRoots += $InstallDir }
     Write-Report ''
     Write-Report "Unreal 'Saved' folders under %LOCALAPPDATA% changed during the test: $(if ($changedSaved.Count) { $changedSaved -join ', ' } else { '(none)' })"
+
+    # The last run found no .log in HLLVietnam\Saved\Logs. List what the game did write
+    # there (relative names only, no contents) to tell "logging is off" from "logs live elsewhere".
+    $vietnamSaved = Join-Path $env:LOCALAPPDATA 'HLLVietnam\Saved'
+    Write-Report ''
+    Write-Report 'Files changed under %LOCALAPPDATA%\HLLVietnam\Saved during the test (names only):'
+    $changedFiles = @()
+    if (Test-Path $vietnamSaved) {
+        $changedFiles = @(Get-ChildItem -Path $vietnamSaved -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.LastWriteTime -ge $StartedAt } | Select-Object -First 100)
+    }
+    if ($changedFiles.Count -eq 0) { Write-Report '    (none)' }
+    foreach ($f in $changedFiles) {
+        Write-Report "    $($f.FullName.Substring($vietnamSaved.Length).TrimStart('\'))  ($($f.Length) bytes)"
+    }
     # Crash reports and anti-cheat logs are left out: they aren't needed to see whether the
     # game tried to connect, and they carry more about the PC than the game's own log.
     $skipDirs = '\\(Crashes|CrashReportClient|EasyAntiCheat|AntiCheat)\\'
