@@ -951,18 +951,27 @@ public sealed partial class AccountViewModel : ObservableObject
 
     /// <summary>Refresh the membership list from the API. Returns false on a network/API failure
     /// (state left unchanged) so callers can fail open instead of locking the user out.</summary>
-    public async Task<bool> RefreshNetworksAsync()
+    public async Task<bool> RefreshNetworksAsync() =>
+        await FetchNetworksAsync(armGateIfNone: false).ConfigureAwait(false) is not null;
+
+    /// <summary>Fetch and apply the membership list, returning how many memberships it held (null on
+    /// failure). Callers off the UI thread must decide on this count, not on
+    /// <see cref="HasNetworkMembership"/>: <see cref="ApplyMemberships"/> only enqueues the update,
+    /// so the property still holds its old value when the await returns — on startup that is the
+    /// initial <c>false</c>, which raised the join-a-network banner for every member on every
+    /// launch (and, before the banner, dropped them back into the wizard's network step).</summary>
+    private async Task<int?> FetchNetworksAsync(bool armGateIfNone)
     {
         try
         {
             var list = await _api.GetMyNetworksAsync().ConfigureAwait(false);
-            ApplyMemberships(list);
-            return true;
+            ApplyMemberships(list, armGateIfNone);
+            return list.Count;
         }
         catch (Exception e)
         {
             _log.LogWarning(e, "Failed to fetch network memberships");
-            return false;
+            return null;
         }
     }
 
@@ -1188,15 +1197,9 @@ public sealed partial class AccountViewModel : ObservableObject
     /// blip must never lock a valid user out.</summary>
     private async Task EnforceNetworkGateAsync()
     {
-        if (!await RefreshNetworksAsync().ConfigureAwait(false))
+        if (await FetchNetworksAsync(armGateIfNone: true).ConfigureAwait(false) is null)
         {
             _log.LogInformation("Membership check failed; assuming membership OK (fail open)");
-            return;
-        }
-        if (!HasNetworkMembership)
-        {
-            _log.LogInformation("No network memberships; raising the join-a-network banner");
-            OpenNetworkGate();
         }
     }
 
@@ -1204,8 +1207,7 @@ public sealed partial class AccountViewModel : ObservableObject
     /// the network step when the account holds no memberships (fail open on fetch errors).</summary>
     private async Task CompleteOnboardingOrRequireNetworkAsync()
     {
-        var fetched = await RefreshNetworksAsync().ConfigureAwait(false);
-        if (fetched && !HasNetworkMembership)
+        if (await FetchNetworksAsync(armGateIfNone: false).ConfigureAwait(false) == 0)
         {
             SetOnboardingStep(1);
             return;
@@ -1213,7 +1215,10 @@ public sealed partial class AccountViewModel : ObservableObject
         CompleteOnboarding();
     }
 
-    private void ApplyMemberships(List<NetworkMembership> list) => RunOnUi(() =>
+    /// <param name="armGateIfNone">Raise the join-a-network banner when the list is empty. Decided
+    /// here, in the same UI-thread action that applies the list, so it can never act on a stale
+    /// <see cref="HasNetworkMembership"/>.</param>
+    private void ApplyMemberships(List<NetworkMembership> list, bool armGateIfNone = false) => RunOnUi(() =>
     {
         Networks.Clear();
         foreach (var m in list)
@@ -1221,6 +1226,11 @@ public sealed partial class AccountViewModel : ObservableObject
             Networks.Add(new NetworkMembershipRow(m));
         }
         HasNetworkMembership = Networks.Count > 0;
+        if (!HasNetworkMembership && armGateIfNone)
+        {
+            _log.LogInformation("No network memberships; raising the join-a-network banner");
+            NetworkGateActive = true;
+        }
         // A confirmed membership lowers the banner on its own: it exists to make the user join,
         // and they are joined. Without this, a gate armed by a stale or blipped check stayed up
         // until the user went looking for a way to dismiss it.
