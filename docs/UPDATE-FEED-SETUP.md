@@ -87,5 +87,5 @@ Do these in order. Steps 1–2 are one-time; step 6 verifies.
 Signed `latest.json` / `latest-beta.json` are **not** produced by CI (the signing key is offline). Each
 release, the maintainer signs `(version, sha256)` offline and commits the finalized manifest into
 `feed/` on `main`; the Pages workflow redeploys within ~1 min. See `feed/README.md` and the private
-`fullobby-api` repo `docs/RELEASE-SIGNING.md` (step 5). Until the first signed manifest lands,
+`fullobby` repo `docs/seeding/RELEASE-SIGNING.md` (step 5). Until the first signed manifest lands,
 `latest.json` 404s and the client reports "no update" — safe, never an unverified update.

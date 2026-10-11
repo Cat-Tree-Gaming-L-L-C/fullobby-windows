@@ -115,7 +115,7 @@ release-signing private key is held offline. After CI builds, a maintainer signs
 `(version, sha256)` on the offline device, finalizes the manifest, and publishes it. The in-app
 updater **refuses** any update whose `signature` is missing or doesn't verify against the client's
 hardbaked public key. The maintainer-only runbook + signing scripts live in the **private
-`fullobby-api` repo** (`docs/RELEASE-SIGNING.md`), kept out of this public repo so the release
+`fullobby` repo** (`docs/seeding/RELEASE-SIGNING.md`), kept out of this public repo so the release
 procedure and its attack surface aren't advertised.
 
 ### Update-feed contract (static feed)

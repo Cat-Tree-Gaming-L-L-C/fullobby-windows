@@ -34,13 +34,13 @@ public static class UpdateSignature
     /// <para>The production P-256 key below is real (private half held offline on the air-gapped
     /// signing device). If every entry were ever a placeholder/malformed, verification would still
     /// fail closed — updates are refused rather than accepted unverified. The maintainer-only
-    /// key-generation/signing runbook lives in the private <c>fullobby-api</c> repo
-    /// (<c>docs/RELEASE-SIGNING.md</c>).</para>
+    /// key-generation/signing runbook lives in the private <c>fullobby</c> repo
+    /// (<c>docs/seeding/RELEASE-SIGNING.md</c>).</para>
     /// </summary>
     private static readonly string[] TrustedSigningKeysBase64 =
     {
         // Production release-signing key. P-256 SPKI; private half held offline (air-gapped Pi).
-        // Generated 2026-06 — rotation runbook in the private fullobby-api repo (add new key here first).
+        // Generated 2026-06 — rotation runbook in the private fullobby repo (add new key here first).
         "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEBhNmbkxuvyMSqmXai72skJaAxc51FZTTGssUWB7F4ZCjPPY1TrdgXKFw/n0tE2qkqB3lD7krwAmOSXcV0DqpQw==",
     };
 
@@ -48,7 +48,7 @@ public static class UpdateSignature
     /// The exact bytes the offline signer signs and the client re-derives and verifies:
     /// <c>fullobby-update.v1\nversion=&lt;version&gt;\nsha256=&lt;lowercase-hex&gt;</c> — UTF-8,
     /// LF separators, <b>no trailing newline</b>. Must byte-for-byte match the offline signer
-    /// (<c>sign-release.sh</c> in the <c>fullobby-api</c> repo).
+    /// (<c>sign-release.sh</c> in the <c>fullobby</c> repo).
     /// </summary>
     public static string BuildSignedPayload(string version, string sha256) =>
         $"{SchemeTag}\nversion={version}\nsha256={sha256.ToLowerInvariant()}";
