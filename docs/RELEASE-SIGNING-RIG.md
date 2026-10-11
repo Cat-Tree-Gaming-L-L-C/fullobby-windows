@@ -10,8 +10,8 @@ Status: **design / proposal**. Nothing here is built yet. The parts marked
 everything else is procedure and hardware.
 
 > **Scope split.** This document covers the **rig and the manual signing procedure**.
-> Key generation, key backup/escrow, and key rotation stay in the private `fullobby-api`
-> repo (`docs/RELEASE-SIGNING.md`) and are deliberately *not* reproduced here — this repo
+> Key generation, key backup/escrow, and key rotation stay in the private `fullobby`
+> repo (`docs/seeding/RELEASE-SIGNING.md`) and are deliberately *not* reproduced here — this repo
 > is public. Nothing in this file is secret: the payload format, the public key, and the
 > verification rules already ship inside every client
 > (`src/Fullobby.Core/Update/UpdateSignature.cs`).
@@ -448,7 +448,7 @@ Build notes:
 2. **Ship the CI QR step?** It is ~8 lines in `release.yml` and removes the last place the
    operator handles a hash by hand. Recommended.
 3. **Where do `sign-scan.sh` and `finalize-manifest` live?** The Pi-side kiosk belongs with
-   `sign-release.sh` in the private `fullobby-api` repo. The online-side finalize/verify
+   `sign-release.sh` in the private `fullobby` repo. The online-side finalize/verify
    script arguably belongs **here**, in `scripts/`, next to `feed/` and the public key it
    verifies against — it handles nothing secret.
 4. **Channel binding in `fullobby-update.v2`?** Only worth it if the procedural mitigation
@@ -461,4 +461,4 @@ Build notes:
 - `src/Fullobby.Core/Update/UpdateSignature.cs` — canonical payload, trusted keys, verification
 - `.github/workflows/release.yml` — manifest + `payload.txt` generation
 - `feed/README.md`, `docs/UPDATE-FEED-SETUP.md` — publishing the signed manifest
-- private `fullobby-api` repo, `docs/RELEASE-SIGNING.md` — key generation, backup, rotation, `sign-release.sh`
+- private `fullobby` repo, `docs/seeding/RELEASE-SIGNING.md` — key generation, backup, rotation, `sign-release.sh`

@@ -7,7 +7,7 @@ opt in per game, from the set of games Fullobby has enabled that they have
 installed.
 
 Status: **design draft**. Backend gap analysis (grounded in the API
-codebase): `fullobby-api/docs/MULTI-GAME.md`.
+codebase): `fullobby/docs/seeding/MULTI-GAME.md`.
 
 ## Why this is closer than it looks
 

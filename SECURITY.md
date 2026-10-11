@@ -63,7 +63,7 @@ What the client itself is responsible for:
   against a hardcoded domain allowlist and must use HTTPS; the downloaded installer is
   verified against the signed SHA-256 before being run (and re-verified immediately
   before launch); filenames are sanitized against path traversal and capped at 500 MB.
-  (The maintainer-only signing procedure lives in the private `fullobby-api` repo.)
+  (The maintainer-only signing procedure lives in the private `fullobby` repo.)
 - **Hardbaked API host.** Release builds talk only to the production HTTPS API host;
   the `FULLOBBY_API_URL` override exists only in debug builds.
 - **Input validation.** Provider names, Steam/user IDs, config keys, display names,

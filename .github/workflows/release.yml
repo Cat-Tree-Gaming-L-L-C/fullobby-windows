@@ -19,7 +19,7 @@ name: Release
 # Pi) and intentionally never reaches CI, so this workflow emits the manifest with
 # `signature: null` plus a `<manifest>.payload.txt` asset (the exact bytes to sign) as
 # release assets. A maintainer signs it offline, finalizes the manifest (runbook + scripts
-# in the private fullobby-api repo), and publishes the signed manifest to the Pages feed.
+# in the private fullobby repo), and publishes the signed manifest to the Pages feed.
 # Until that happens the (unsigned or not-yet-published) manifest is REFUSED by clients —
 # the failure mode is "no auto-update", never "unverified update".
 
@@ -173,7 +173,7 @@ jobs:
 
           # signature stays null here — the release-signing private key is held OFFLINE and never
           # touches CI. An enforcing client REFUSES a null-signature manifest, so until the operator
-          # signs it offline, finalizes the manifest (runbook + scripts in the private fullobby-api
+          # signs it offline, finalizes the manifest (runbook + scripts in the private fullobby
           # repo), and publishes it to the Pages feed, this release simply will not auto-update anyone.
           # Safe failure mode. (version is the full SemVer, so the signed payload matches the manifest.)
           $manifest = [ordered]@{
@@ -196,7 +196,7 @@ jobs:
           Write-Host "SHA-256: $hash"
           Get-Content "dist/$env:MANIFEST_NAME"
           "## Release signing payload" | Out-File -Append $env:GITHUB_STEP_SUMMARY
-          "Sign this on the offline Pi — ``sign-release.sh $env:VERSION $hash`` (fullobby-api repo):" |
+          "Sign this on the offline Pi — ``sign-release.sh $env:VERSION $hash`` (fullobby repo):" |
             Out-File -Append $env:GITHUB_STEP_SUMMARY
           '```'    | Out-File -Append $env:GITHUB_STEP_SUMMARY
           $payload | Out-File -Append $env:GITHUB_STEP_SUMMARY

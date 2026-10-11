@@ -4,10 +4,10 @@ Player statistic tracking + reward score for seeding. Goal: reward *engagement*,
 not just connected time — active in-game seeders earn the most, AFK-in-lobby
 seeders earn a base rate, and showing up day after day compounds.
 
-Status: **design draft** — scoring engine is backend work (`fullobby-api`);
+Status: **design draft** — scoring engine is backend work (`fullobby`);
 client work is the manual-start signal + stats/score UI. Nothing here ships
 until the backend side exists. Backend implementation scoping (grounded
-against the API codebase) lives in `fullobby-api/docs/SCORING.md`.
+against the API codebase) lives in `fullobby/docs/seeding/SCORING.md`.
 
 ## Principles
 

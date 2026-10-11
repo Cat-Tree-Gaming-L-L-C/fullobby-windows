@@ -21,7 +21,7 @@ Each is `{ version, download_url, notes, sha256, signature }`. `version` is the 
 
 ## Publishing a signed manifest (maintainer)
 The manifests are **not** committed by CI — the release-signing key is offline. After signing a release
-(runbook: private `fullobby-api` repo, `docs/RELEASE-SIGNING.md`), publish the finalized manifest
+(runbook: private `fullobby` repo, `docs/seeding/RELEASE-SIGNING.md`), publish the finalized manifest
 into this folder on `main`:
 
 ```bash

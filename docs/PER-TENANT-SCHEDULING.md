@@ -7,7 +7,7 @@ document specifies what has to change so that networks and users stay
 independent, and what the client can build once it has.
 
 Status: **client side implemented (0.3.0), shipping dormant**. Window exposure
-and directive scoping remain backend work (`fullobby-api`); the client's wake
+and directive scoping remain backend work (`fullobby`); the client's wake
 scheduling and reconciliation are built and ship with 0.3.0, inert until the
 backend starts sending the per-network fields — until then the client behaves
 exactly as before (one server-derived wake). See "As built (client, 0.3.0)"
