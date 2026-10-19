@@ -105,6 +105,20 @@ public partial class App : Application
             Log.Warning(ex, "Efficiency-mode startup recovery failed");
         }
 
+        // The Manage tab used to embed the panel in a WebView2, whose profile holds a signed-in
+        // panel session (refreshable for days). The tab opens the browser now, so nothing needs it.
+        try
+        {
+            if (Directory.Exists(Branding.WebViewProfileDir))
+            {
+                Directory.Delete(Branding.WebViewProfileDir, recursive: true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Warning(ex, "Could not delete the old Manage tab WebView2 profile");
+        }
+
         // Fire a missed (scheduler-skipped or post-wake) auto-seed when the watchdog detects one.
         AppHost.Services.GetRequiredService<MissedAutoseedMonitor>().AutoseedDue += OnAutoseedDue;
 

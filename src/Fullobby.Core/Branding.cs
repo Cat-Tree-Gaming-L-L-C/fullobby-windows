@@ -88,8 +88,9 @@ public static class Branding
     public static string BackupRootDir => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), BackupDirName);
 
-    /// <summary>%LOCALAPPDATA%\com.fullobby.app\webview2 — the admin panel's WebView2 profile
-    /// (session cookies). Local, not roaming: WebView2 profiles must not follow a roaming profile.</summary>
+    /// <summary>%LOCALAPPDATA%\com.fullobby.app\webview2 — the WebView2 profile the Manage tab
+    /// embedded the panel in, holding a signed-in panel session. Nothing creates it any more; the app
+    /// deletes it at start (<c>App.OnLaunched</c>).</summary>
     public static string WebViewProfileDir => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         ConfigDirName, "webview2");

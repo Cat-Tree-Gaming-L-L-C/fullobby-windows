@@ -41,10 +41,10 @@ its window is open.
 A check opens **30 minutes before** the window. You can answer it three ways, and
 any one of them settles it:
 
-1. **The panel** — the app's **Manage** tab, or
-   [api.fullobby.com/admin](https://api.fullobby.com/admin) in a browser. Same
-   thing either way. Works with no Discord involved, and keeps working when your
-   DMs are closed.
+1. **The panel** —
+   [api.fullobby.com/admin](https://api.fullobby.com/admin) in a browser (the
+   app's **Manage** tab opens it for you). Works with no Discord involved, and
+   keeps working when your DMs are closed.
 2. **A Discord DM** from the bot, with a button (if your account has Discord
    linked).
 3. **The hub channel**, if your org registered one — a button per window
@@ -72,7 +72,7 @@ it, or the window has passed.
 
 ### Your Servers tab
 
-Open **Manage** in the app (or the panel in a browser) and pick **Servers**. It
+Open the panel (the app's **Manage** tab takes you there) and pick **Servers**. It
 lists the servers of the orgs you operate, with **Enable/Disable** and
 **Window** on each. Adding, editing, removing and re-tagging servers are Admin,
 so those controls aren't shown to you — the page says as much rather than

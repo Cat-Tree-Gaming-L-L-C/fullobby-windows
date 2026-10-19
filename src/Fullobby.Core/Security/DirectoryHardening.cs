@@ -6,8 +6,7 @@ namespace Fullobby.Core.Security;
 
 /// <summary>
 /// Restricts a directory's ACL to the current user. Used for every directory that holds
-/// credential-bearing data: the config store (tokens, API key) and the WebView2 profile
-/// (admin-panel session cookies).
+/// credential-bearing data: the config store (tokens, API key).
 /// </summary>
 public static class DirectoryHardening
 {

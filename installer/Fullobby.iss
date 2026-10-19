@@ -46,9 +46,6 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ; Windows 10 2004 (19041) is the floor, matching the csproj min platform version.
-; Note: Win10 does not ship the WebView2 runtime, so the Admin tab degrades to an
-; install-the-runtime message there (AdminPage handles this) unless the installer
-; grows a WebView2 bootstrap.
 MinVersion=10.0.19041
 ; Gracefully close a running Fullobby (Restart Manager) before updating
 CloseApplications=yes

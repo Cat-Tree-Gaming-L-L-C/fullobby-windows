@@ -1366,22 +1366,6 @@ public sealed partial class AccountViewModel : ObservableObject
         _config.Remove("guest_mode");
         // Removals are throttled; sign-out state must survive an immediate kill.
         _config.FlushPendingSaves();
-
-        // The admin panel signs in as its own WebView2 session, which persists in its profile
-        // directory independently of the tokens cleared above — so without this a signed-out user's
-        // panel session survives on disk. Best-effort: WebView2 holds the directory open while the
-        // Admin tab is live, and the delete simply fails then.
-        try
-        {
-            if (Directory.Exists(Branding.WebViewProfileDir))
-            {
-                Directory.Delete(Branding.WebViewProfileDir, recursive: true);
-            }
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            _log.LogWarning(e, "Could not clear the admin panel WebView2 profile on sign-out");
-        }
     }
 
     /// <summary>Open an OAuth/link URL in the system browser. The sign-in and link flows take their
