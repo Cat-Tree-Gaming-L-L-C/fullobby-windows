@@ -146,15 +146,6 @@ public sealed class LinkInitResponse
     public string RedirectUrl { get; set; } = "";
 }
 
-/// <summary>Response from POST /api/auth/panel-code — a single-use web-panel sign-in
-/// code (120 s TTL) plus the panel callback URL that redeems it.</summary>
-public sealed class PanelCodeResponse
-{
-    public string Code { get; set; } = "";
-    public string Url { get; set; } = "";
-    public long ExpiresIn { get; set; }
-}
-
 /// <summary>Response from POST /api/auth/link-confirm (committing a staged link).</summary>
 public sealed class LinkConfirmResponse
 {

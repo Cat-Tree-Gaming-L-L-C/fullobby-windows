@@ -33,8 +33,9 @@ reaches no network setting. That's enforced, not a convention.
 
 ## Where you do it: the panel
 
-[api.fullobby.com/admin](https://api.fullobby.com/admin), or the desktop app's
-**Manage** tab, which opens the same panel in-app. As an Org Admin you see:
+[api.fullobby.com/admin](https://api.fullobby.com/admin) in a browser. The
+desktop app's **Manage** tab opens it there for you. Sign in with the account you
+use in the app. As an Org Admin you see:
 
 - **Hub** — today's rotation, the current target, the leaderboard, ready checks
   with the button to answer them, and your hub's Discord mirror settings
