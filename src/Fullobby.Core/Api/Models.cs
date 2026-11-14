@@ -276,8 +276,7 @@ public sealed class ServerDayStatus
     public long DbId { get; set; }
     public string Name { get; set; } = "";
     public string ShortName { get; set; } = "";
-    /// <summary>Tag of the org that operates the server (<c>org_tag</c>; the API still sends
-    /// the pre-rename <c>community_tag</c> too, for clients older than 0.4.4).</summary>
+    /// <summary>Tag of the org that operates the server (<c>org_tag</c>).</summary>
     public string? OrgTag { get; set; }
     public DayStatus Status { get; set; }
     public int? PlayerCount { get; set; }
