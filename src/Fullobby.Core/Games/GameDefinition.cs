@@ -1,8 +1,20 @@
 namespace Fullobby.Core.Games;
 
+/// <summary>How a player gets onto one of a game's servers.</summary>
+public enum JoinMethod
+{
+    /// <summary>The client launches the game straight into the server
+    /// (<c>steam.exe -applaunch &lt;appid&gt; +connect &lt;ip&gt;</c>).</summary>
+    SteamConnect,
+    /// <summary>The client launches the game; the player joins the server themselves with the
+    /// address (or join code) the client shows them. For games whose connect argument isn't
+    /// confirmed yet.</summary>
+    Manual,
+}
+
 /// <summary>
 /// Static definition of a supported game.
-/// Each game (HLL, HLLV) has its own Steam App ID, executable names, install folder,
+/// Each game has its own Steam App ID, executable names, install folder,
 /// and feature flags so the rest of the codebase can be game-agnostic.
 /// </summary>
 public sealed record GameDefinition
@@ -43,6 +55,18 @@ public sealed record GameDefinition
 
     /// <summary>Whether efficiency mode (low graphics) is supported for this game.</summary>
     public bool SupportsEfficiencyMode { get; init; }
+
+    /// <summary>How the client gets a player onto a server. A server the API marks
+    /// <c>launch: "manual"</c> is joined manually whatever this says.</summary>
+    public JoinMethod Join { get; init; } = JoinMethod.SteamConnect;
+
+    /// <summary>Whether the launch goes through HLL's EAC bootstrapper and splash screen, which the
+    /// client waits out and presses past. Other games are left to load on their own.</summary>
+    public bool HasSplashBypass { get; init; }
+
+    /// <summary>Not yet proven against the real game (exe names, install folder, connect
+    /// argument come from public sources). The UI says so; each game's pilot clears it.</summary>
+    public bool Untested { get; init; }
 }
 
 /// <summary>The catalog of supported games.</summary>
@@ -59,6 +83,7 @@ public static class GameCatalog
         WindowTitle = "Hell Let Loose",
         ConfigRelativePath = @"HLL\Saved\Config\WindowsNoEditor\GameUserSettings.ini",
         SupportsEfficiencyMode = true,
+        HasSplashBypass = true,
     };
 
     /// <summary>Hell Let Loose: Vietnam. App id, install folder and launcher are Steam's published
@@ -80,14 +105,61 @@ public static class GameCatalog
         WindowTitle = null,
         ConfigRelativePath = null,
         SupportsEfficiencyMode = false,
+        HasSplashBypass = true,
+    };
+
+    // The newer games (docs/MULTI-GAME.md). App ids are Steam's; install folders and exe names are
+    // from public sources and UNTESTED until each game's pilot. Their launchers aren't watched (no
+    // splash bypass), so LauncherExeName is the game exe itself. How each joins follows the API's
+    // games catalogue: Rust takes +connect, Squad and Arma Reforger are joined by hand until their
+    // connect arguments are confirmed.
+
+    /// <summary>Squad (393380): <c>steamapps\common\Squad\SquadGame\Binaries\Win64\SquadGame.exe</c>.</summary>
+    public static readonly GameDefinition Squad = new()
+    {
+        Id = "squad",
+        DisplayName = "Squad",
+        SteamAppId = "393380",
+        ExeName = "SquadGame.exe",
+        LauncherExeName = "SquadGame.exe",
+        InstallFolder = "Squad",
+        Join = JoinMethod.Manual,
+        Untested = true,
+    };
+
+    /// <summary>Rust (252490): <c>steamapps\common\Rust\RustClient.exe</c>.</summary>
+    public static readonly GameDefinition Rust = new()
+    {
+        Id = "rust",
+        DisplayName = "Rust",
+        SteamAppId = "252490",
+        ExeName = "RustClient.exe",
+        LauncherExeName = "RustClient.exe",
+        InstallFolder = "Rust",
+        Join = JoinMethod.SteamConnect,
+        Untested = true,
+    };
+
+    /// <summary>Arma Reforger (1874880): <c>steamapps\common\Arma Reforger\ArmaReforgerSteam.exe</c>.</summary>
+    public static readonly GameDefinition ArmaReforger = new()
+    {
+        Id = "arma_reforger",
+        DisplayName = "Arma Reforger",
+        SteamAppId = "1874880",
+        ExeName = "ArmaReforgerSteam.exe",
+        LauncherExeName = "ArmaReforgerSteam.exe",
+        InstallFolder = "Arma Reforger",
+        Join = JoinMethod.Manual,
+        Untested = true,
     };
 
     /// <summary>All supported games, in priority order (HLL first).</summary>
-    public static readonly IReadOnlyList<GameDefinition> All = [Hll, Hllv];
+    public static readonly IReadOnlyList<GameDefinition> All = [Hll, Hllv, Squad, Rust, ArmaReforger];
 
-    /// <summary>Games the client will seed, in catalog order. Which of these a given machine can
-    /// actually launch is <c>InstalledGames</c>' call.</summary>
-    public static readonly IReadOnlyList<GameDefinition> Released = [Hll, Hllv];
+    /// <summary>Games the client will seed, in catalog order: the catalog's games this deployment
+    /// has enabled for seeding (<see cref="GameAvailability"/>, from <c>GET /api/games</c>). Which
+    /// of these a given machine can launch is <c>InstalledGames</c>' call.</summary>
+    public static IReadOnlyList<GameDefinition> Released => GameAvailability.Offered;
 
     /// <summary>Look up a game definition by its short ID (case-sensitive). Null if unknown.</summary>
     public static GameDefinition? ById(string id)

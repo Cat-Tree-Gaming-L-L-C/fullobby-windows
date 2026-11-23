@@ -414,6 +414,57 @@ public sealed partial class SettingsPage : Page
     /// (MoveNetworkAsync takes two arguments), hence an explicit gate.</summary>
     private bool _networkBusy;
 
+    // ── My games ─────────────────────────────────────────────────────────────
+
+    // One save at a time: each sends the whole list.
+    private bool _gamesBusy;
+
+    private async void GameToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        // The template's initial IsOn also raises Toggled: only a change from the row's state acts.
+        if (sender is not ToggleSwitch { Tag: MyGameRow row } toggle || toggle.IsOn == row.OptedIn || _gamesBusy)
+        {
+            return;
+        }
+        _gamesBusy = true;
+        try
+        {
+            await Account.SetGameOptInAsync(row, toggle.IsOn);
+        }
+        finally
+        {
+            _gamesBusy = false;
+        }
+    }
+
+    private async void GameUp_Click(object sender, RoutedEventArgs e) => await MoveGameAsync(sender, -1);
+
+    private async void GameDown_Click(object sender, RoutedEventArgs e) => await MoveGameAsync(sender, +1);
+
+    private async Task MoveGameAsync(object sender, int delta)
+    {
+        if (_gamesBusy || (sender as FrameworkElement)?.Tag is not MyGameRow row)
+        {
+            return;
+        }
+        _gamesBusy = true;
+        try
+        {
+            await Account.MoveGameAsync(row, delta);
+        }
+        finally
+        {
+            _gamesBusy = false;
+        }
+    }
+
+    private async void GamesRefresh_Click(object sender, RoutedEventArgs e)
+    {
+        var bootstrapper = App.AppHost.Services.GetRequiredService<Fullobby.Core.Bootstrap.AppBootstrapper>();
+        await bootstrapper.RefreshGamesAsync();
+        await Account.RefreshMyGamesAsync();
+    }
+
     private async void NetworkUp_Click(object sender, RoutedEventArgs e) => await MoveNetworkAsync(sender, -1);
 
     private async void NetworkDown_Click(object sender, RoutedEventArgs e) => await MoveNetworkAsync(sender, +1);

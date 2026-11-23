@@ -95,12 +95,7 @@ public static class ServerWindows
 
     /// <summary>One game's day board on a network (empty for an unknown game).</summary>
     public static List<ServerDayStatus> Board(NetworkSeedingStatus network, string gameId) =>
-        gameId switch
-        {
-            "hll" => network.HllDay,
-            "hllv" => network.HllvDay,
-            _ => [],
-        };
+        network.Day(gameId);
 
     private static IEnumerable<ServerDayStatus> Boards(
         NetworkSeedingStatus network, IReadOnlyCollection<string>? gameIds) =>

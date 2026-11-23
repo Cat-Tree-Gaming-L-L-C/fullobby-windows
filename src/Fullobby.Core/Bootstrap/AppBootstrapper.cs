@@ -1,5 +1,6 @@
 using Fullobby.Core.Api;
 using Fullobby.Core.Config;
+using Fullobby.Core.Games;
 using Fullobby.Core.Scheduling;
 using Fullobby.Core.Servers;
 using Microsoft.Extensions.Hosting;
@@ -124,6 +125,11 @@ public sealed class AppBootstrapper : IHostedService
 
     private async Task RunAsync(CancellationToken ct)
     {
+        // The games registry before anything that asks which games to seed: last-known first (an
+        // offline start keeps it), then the API's answer.
+        GameAvailabilityStore.Load(_config);
+        await RefreshGamesAsync(ct).ConfigureAwait(false);
+
         _lastConfigRefreshTicks = Environment.TickCount64;
         await RefreshConfigAsync(ct).ConfigureAwait(false);
 
@@ -152,6 +158,8 @@ public sealed class AppBootstrapper : IHostedService
             {
                 _lastConfigRefreshTicks = Environment.TickCount64;
                 await RefreshConfigAsync(ct).ConfigureAwait(false);
+                // A game Fullobby switches on appears without a client update.
+                await RefreshGamesAsync(ct).ConfigureAwait(false);
                 // The refreshed config may have moved the fleet windows the fallback wake follows.
                 await ReconcileWakesAsync(ct).ConfigureAwait(false);
             }
@@ -200,6 +208,23 @@ public sealed class AppBootstrapper : IHostedService
         }
     }
 
+    /// <summary>Fetch the games registry (public) and apply it. Non-fatal — keeps the last-known
+    /// registry (or the built-in HLL + Vietnam) on failure.</summary>
+    public async Task RefreshGamesAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var games = await _api.GetGamesAsync(ct).ConfigureAwait(false);
+            var registry = games.Select(g => (g.Slug, g.Seeding, g.Tested)).ToList();
+            GameAvailability.SetRegistry(registry);
+            GameAvailabilityStore.SaveRegistry(_config, registry);
+        }
+        catch (Exception e)
+        {
+            _log.LogDebug(e, "Games registry fetch failed (keeping the last-known games)");
+        }
+    }
+
     /// <summary>Fetch the server list and load it into the store. Public so the UI's retry
     /// button can re-run it after a load failure.</summary>
     public async Task LoadServersAsync(CancellationToken ct = default)
@@ -220,7 +245,7 @@ public sealed class AppBootstrapper : IHostedService
             {
                 _lastLoadFailed = false;
                 _log.LogInformation("Loaded {Count} servers (rotation changed: {Changed})",
-                    resp.Hll.Count, rotationChanged);
+                    resp.ByGame().Values.Sum(s => s.Count), rotationChanged);
                 ServersLoaded?.Invoke();
 
                 // Seed the banner immediately rather than waiting a full poll interval — and when

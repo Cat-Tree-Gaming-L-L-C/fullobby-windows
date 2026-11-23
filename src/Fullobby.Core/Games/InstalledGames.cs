@@ -4,8 +4,9 @@ using Fullobby.Core.Native;
 namespace Fullobby.Core.Games;
 
 /// <summary>
-/// Which released games this machine can launch: those Steam has an app manifest for in any of its
-/// library folders. The directive is asked across exactly these (the server picks the game by
+/// Which games this machine seeds: the released games (offered by the API's registry) that the
+/// player has opted into (<see cref="GameAvailability"/>) and that Steam has an app manifest for in
+/// any of its library folders. The directive is asked across exactly these (the server picks the game by
 /// network and rotation priority), and auto-seed only wakes for their server windows — a client
 /// that can't launch a game must neither be sent to it nor woken for it.
 ///
@@ -20,6 +21,9 @@ public static partial class InstalledGames
     private static readonly object Gate = new();
     private static IReadOnlyList<GameDefinition>? _cached;
     private static long _cachedAt;
+
+    // A registry or opt-in change changes the answer: don't serve a stale one for a minute.
+    static InstalledGames() => GameAvailability.Changed += Invalidate;
 
     /// <summary>The launchable released games, in catalog order. Never empty.</summary>
     public static IReadOnlyList<GameDefinition> Get()
@@ -67,13 +71,46 @@ public static partial class InstalledGames
             {
                 libraries.Insert(0, steam);
             }
-            var installed = Filter(GameCatalog.Released, appId =>
+            var installed = Filter(GameAvailability.OptedIn, appId =>
                 libraries.Any(lib => File.Exists(Path.Combine(lib, "steamapps", $"appmanifest_{appId}.acf"))));
-            return installed.Count > 0 ? installed : [GameCatalog.Hll];
+            return installed.Count > 0 ? installed : Fallback();
         }
         catch (Exception)
         {
-            return [GameCatalog.Hll];
+            return Fallback();
+        }
+    }
+
+    /// <summary>Nothing detected: HLL, as before games were detected at all — unless the player
+    /// opted out of it, in which case their first opted-in game (the server filters by opt-in too,
+    /// so asking about an opted-out game would only return nothing).</summary>
+    private static IReadOnlyList<GameDefinition> Fallback()
+    {
+        var opted = GameAvailability.OptedIn;
+        return opted.Any(g => g.Id == GameCatalog.Hll.Id) || opted.Count == 0
+            ? [GameCatalog.Hll]
+            : [opted[0]];
+    }
+
+    /// <summary>Whether Steam has <paramref name="game"/> installed (an app manifest in any library
+    /// folder). For the "My games" list; not cached.</summary>
+    public static bool IsInstalled(GameDefinition game)
+    {
+        try
+        {
+            var steam = SteamPaths.GetInstallPath();
+            var vdf = Path.Combine(steam, "steamapps", "libraryfolders.vdf");
+            var libraries = File.Exists(vdf) ? ParseLibraryPaths(File.ReadAllText(vdf)) : [];
+            if (!libraries.Contains(steam, StringComparer.OrdinalIgnoreCase))
+            {
+                libraries.Insert(0, steam);
+            }
+            return libraries.Any(lib =>
+                File.Exists(Path.Combine(lib, "steamapps", $"appmanifest_{game.SteamAppId}.acf")));
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 

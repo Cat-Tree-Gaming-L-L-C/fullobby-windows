@@ -204,6 +204,88 @@
                 </StackPanel>
             </Grid>
 
+            <!-- ── My games ────────────────────────────────────────────── -->
+            <TextBlock
+                Text="My Games"
+                Style="{StaticResource BodyStrongTextBlockStyle}"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                AutomationProperties.HeadingLevel="Level2"
+                Margin="0,8,0,0" />
+
+            <StackPanel
+                Spacing="4"
+                Visibility="{x:Bind Account.IsLoggedIn, Mode=OneWay, Converter={StaticResource BoolToVis}}">
+                <TextBlock
+                    Text="Games you seed, in priority order (top = preferred). New games are off until you turn them on."
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextWrapping="Wrap" />
+
+                <ItemsControl ItemsSource="{x:Bind Account.MyGames}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:MyGameRow">
+                            <Grid Padding="6,2" Margin="0,1" ColumnSpacing="4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock
+                                        Text="{x:Bind Name}"
+                                        FontSize="12"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="NoWrap" />
+                                    <TextBlock
+                                        Text="{x:Bind Note}"
+                                        Visibility="{x:Bind HasNote}"
+                                        FontSize="11"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        TextWrapping="Wrap" />
+                                    <HyperlinkButton
+                                        Content="Get it on Steam"
+                                        NavigateUri="{x:Bind StoreUrl}"
+                                        Padding="0"
+                                        FontSize="11"
+                                        Visibility="{x:Bind Installed, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                                </StackPanel>
+                                <Button Grid.Column="1" Padding="8,4" Tag="{x:Bind}" Click="GameUp_Click"
+                                        AutomationProperties.Name="Raise game priority"
+                                        ToolTipService.ToolTip="Higher priority">
+                                    <FontIcon Glyph="&#xE70E;" FontSize="11" />
+                                </Button>
+                                <Button Grid.Column="2" Padding="8,4" Tag="{x:Bind}" Click="GameDown_Click"
+                                        AutomationProperties.Name="Lower game priority"
+                                        ToolTipService.ToolTip="Lower priority">
+                                    <FontIcon Glyph="&#xE70D;" FontSize="11" />
+                                </Button>
+                                <ToggleSwitch
+                                    Grid.Column="3"
+                                    Tag="{x:Bind}"
+                                    IsOn="{x:Bind OptedIn}"
+                                    IsEnabled="{x:Bind CanToggle}"
+                                    OnContent=""
+                                    OffContent=""
+                                    MinWidth="0"
+                                    AutomationProperties.Name="{x:Bind Name}"
+                                    Toggled="GameToggle_Toggled" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Button Content="Refresh" HorizontalAlignment="Left" Click="GamesRefresh_Click"
+                        ToolTipService.ToolTip="Check again for installed games" />
+            </StackPanel>
+
+            <TextBlock
+                Text="Sign in to choose the games you seed."
+                FontSize="12"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                TextWrapping="Wrap"
+                Visibility="{x:Bind Account.IsLoggedIn, Mode=OneWay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+
             <!-- ── Networks ────────────────────────────────────────────── -->
             <TextBlock
                 Text="Seeding Networks"

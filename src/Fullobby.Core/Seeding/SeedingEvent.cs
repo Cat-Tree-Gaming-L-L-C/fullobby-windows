@@ -12,6 +12,10 @@ public abstract record SeedingEvent
     /// <summary>Splash-bypass key-spamming has begun; UI may show a countdown.</summary>
     public sealed record SplashBypassStarted(long DurationSecs) : SeedingEvent;
 
+    /// <summary>A manually joined game was launched: the player has to join <paramref name="ServerName"/>
+    /// themselves with <paramref name="JoinLine"/> (its address or join code).</summary>
+    public sealed record ManualJoinNeeded(string GameName, string ServerName, string JoinLine) : SeedingEvent;
+
     /// <summary>Splash bypass finished (game should be in-menu / connecting).</summary>
     public sealed record SplashBypassComplete : SeedingEvent;
 

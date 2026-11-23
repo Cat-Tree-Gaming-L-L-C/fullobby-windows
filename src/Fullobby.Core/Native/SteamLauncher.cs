@@ -77,24 +77,29 @@ public sealed partial class SteamLauncher
 
     /// <summary>Launch a game and connect to a server. Ensures Steam is running, validates the IP,
     /// then runs <c>steam.exe -applaunch &lt;appid&gt; +connect &lt;ip&gt;</c> and waits up to 30s
-    /// for the launcher shim to exit.</summary>
-    public async Task OpenGameAsync(GameDefinition game, string serverIp, CancellationToken ct = default)
+    /// for the launcher shim to exit. With <paramref name="connect"/> false (a manually joined
+    /// game) the game is only launched; the player joins the server themselves.</summary>
+    public async Task OpenGameAsync(
+        GameDefinition game, string serverIp, bool connect = true, CancellationToken ct = default)
     {
         await EnsureSteamRunningAsync(ct).ConfigureAwait(false);
 
-        if (ValidateServerIp(serverIp) is { } error)
+        if (connect && ValidateServerIp(serverIp) is { } error)
         {
             throw new ArgumentException($"Invalid server IP: {error}", nameof(serverIp));
         }
 
-        _log.LogInformation("Opening {Game}", game.DisplayName);
+        _log.LogInformation("Opening {Game}{Mode}", game.DisplayName, connect ? "" : " (manual join)");
         var steamPath = SteamPaths.GetExecutablePath();
 
         var psi = new ProcessStartInfo(steamPath) { UseShellExecute = false };
         psi.ArgumentList.Add("-applaunch");
         psi.ArgumentList.Add(game.SteamAppId);
-        psi.ArgumentList.Add("+connect");
-        psi.ArgumentList.Add(serverIp);
+        if (connect)
+        {
+            psi.ArgumentList.Add("+connect");
+            psi.ArgumentList.Add(serverIp);
+        }
 
         using var child = Process.Start(psi);
         if (child is null)

@@ -166,6 +166,19 @@ public sealed partial class SeedingViewModel : ObservableObject
     [ObservableProperty]
     private SeedingStatus status = SeedingStatus.Idle;
 
+    /// <summary>What a manually joined game's player types to join the server (its address or
+    /// join code); null when there's nothing to join by hand.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowManualJoin))]
+    private string? manualJoinLine;
+
+    /// <summary>"Join Alpha #1 in Squad:" — the banner's message.</summary>
+    [ObservableProperty]
+    private string manualJoinText = "";
+
+    /// <summary>Whether the manual-join banner shows.</summary>
+    public bool ShowManualJoin => ManualJoinLine is not null;
+
     /// <summary>True for the seeding flow (Seed tab), false for a bare launch (Launch tab).
     /// Picks the one-vs-two stop-button layout.</summary>
     [ObservableProperty]
@@ -379,7 +392,15 @@ public sealed partial class SeedingViewModel : ObservableObject
 
     private void SetStatus(SeedingStatus value) => Status = value;
 
-    partial void OnStatusChanged(SeedingStatus value) => RefreshDerived();
+    partial void OnStatusChanged(SeedingStatus value)
+    {
+        // Stopped or idle: there's no server to join by hand any more.
+        if (value is SeedingStatus.Idle or SeedingStatus.Stopped)
+        {
+            ManualJoinLine = null;
+        }
+        RefreshDerived();
+    }
 
     partial void OnIsSeedingChanged(bool value) => RefreshDerived();
 
@@ -1399,6 +1420,32 @@ public sealed partial class SeedingViewModel : ObservableObject
         }
     }
 
+    /// <summary>The manual-join banner's Copy button.</summary>
+    [RelayCommand]
+    private void CopyManualJoin()
+    {
+        if (ManualJoinLine is { } line)
+        {
+            CopyToClipboard(line);
+            _inAppToast.Info("Copied");
+        }
+    }
+
+    private void CopyToClipboard(string text)
+    {
+        try
+        {
+            var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
+            package.SetText(text);
+            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+        }
+        catch (Exception e)
+        {
+            // Another app holding the clipboard open; the banner still shows the address.
+            _log.LogDebug(e, "Couldn't copy the join address");
+        }
+    }
+
     [RelayCommand]
     private void SwitchNow()
     {
@@ -1424,7 +1471,17 @@ public sealed partial class SeedingViewModel : ObservableObject
                 SplashBypassActive = false;
                 break;
 
+            case SeedingEvent.ManualJoinNeeded m:
+                ManualJoinText = $"Join {m.ServerName} in {m.GameName} with this address:";
+                ManualJoinLine = m.JoinLine;
+                // On the clipboard already, so the player only has to paste it in the game.
+                CopyToClipboard(m.JoinLine);
+                _toast.Show($"Join {m.ServerName}",
+                    $"{m.GameName} is starting. Join the server with {m.JoinLine} (copied to your clipboard).");
+                break;
+
             case SeedingEvent.HllClosed:
+                ManualJoinLine = null;
                 ResetSwitchOverlay();
                 SplashBypassActive = false;
                 SetStatus(SeedingStatus.Stopped);
@@ -1606,7 +1663,7 @@ public sealed partial class SeedingViewModel : ObservableObject
         var networksWithServers = 0;
         foreach (var n in status.Networks)
         {
-            var networkDays = game == "hllv" ? n.HllvDay : n.HllDay;
+            var networkDays = n.Day(game);
             if (networkDays.Count == 0)
             {
                 continue;

@@ -87,9 +87,12 @@ public sealed class ProcessMonitor
     /// <summary>Whether any released game's main process is running.</summary>
     public bool IsAnyGameRunning() => GameCatalog.Released.Any(IsGameRunning);
 
-    /// <summary>Whether a game's EAC launcher is running (folder-verified, see <see cref="IsGameRunning"/>).</summary>
+    /// <summary>Whether a game's EAC launcher is running (folder-verified, see <see cref="IsGameRunning"/>).
+    /// Only HLL's launch goes through a launcher the client watches (<see cref="GameDefinition.HasSplashBypass"/>);
+    /// any other game is never "loading", only running or not.</summary>
     public bool IsGameLoading(GameDefinition game) =>
-        IsRunningCached(LauncherKey(game), () => FindGamePids(game, [game.LauncherExeName]));
+        game.HasSplashBypass
+        && IsRunningCached(LauncherKey(game), () => FindGamePids(game, [game.LauncherExeName]));
 
     /// <summary>Pids of the game's main process (folder-verified). Used to find its window when the
     /// title isn't known.</summary>
