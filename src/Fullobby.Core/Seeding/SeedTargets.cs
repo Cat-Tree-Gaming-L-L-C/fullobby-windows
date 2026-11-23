@@ -22,9 +22,9 @@ public static class SeedTargets
             {
                 continue;
             }
-            foreach (var c in new[] { n.Hll, n.Hllv })
+            foreach (var c in n.Candidates())
             {
-                if (c is not null && games.Contains(c.Game))
+                if (games.Contains(c.Game))
                 {
                     result.Add(c);
                 }

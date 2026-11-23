@@ -61,6 +61,30 @@ app.MapGet("/api/auth/me", () => Results.Json(new
 app.MapGet("/api/servers", () => Results.Json(state.ServersResponse()));
 app.MapGet("/api/servers/stats", () => Results.Json(state.Stats()));
 
+// ── Games registry + "My games" ──────────────────────────────────────────────────
+// The registry as a deployment piloting Squad would serve it; "My games" kept in memory.
+var myGames = new List<(string Slug, bool OptedIn)>();
+object MyGamesView() =>
+    new[] { ("hll", true), ("hllv", true), ("squad", false) }
+        .Select(d => myGames.FirstOrDefault(g => g.Slug == d.Item1) is { Slug: not null } c
+            ? new { slug = c.Slug, opted_in = c.OptedIn, chosen = true }
+            : new { slug = d.Item1, opted_in = d.Item2, chosen = false })
+        .ToList();
+app.MapGet("/api/games", () => Results.Json(new object[]
+{
+    new { slug = "hll", display_name = "Hell Let Loose", short_name = "HLL", steam_app_id = 686810, launch = "client", seeding = true, tested = true },
+    new { slug = "hllv", display_name = "Hell Let Loose: Vietnam", short_name = "HLL Vietnam", steam_app_id = 3079210, launch = "client", seeding = true, tested = true },
+    new { slug = "squad", display_name = "Squad", short_name = "Squad", steam_app_id = 393380, launch = "manual", seeding = true, tested = false },
+}));
+app.MapGet("/api/games/mine", () => Results.Json(MyGamesView()));
+app.MapPut("/api/games/mine", (System.Text.Json.JsonElement body) =>
+{
+    myGames = body.GetProperty("games").EnumerateArray()
+        .Select(g => (g.GetProperty("slug").GetString()!, g.GetProperty("opted_in").GetBoolean()))
+        .ToList();
+    return Results.Json(MyGamesView());
+});
+
 // ── Seeding ──────────────────────────────────────────────────────────────────────
 app.MapGet("/api/seeding/status", () => Results.Json(state.SeedingStatus()));
 

@@ -6,6 +6,7 @@ using Fullobby.Core;
 using Fullobby.Core.Activation;
 using Fullobby.Core.Api;
 using Fullobby.Core.Config;
+using Fullobby.Core.Games;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -139,6 +140,11 @@ public sealed partial class AccountViewModel : ObservableObject
 
     /// <summary>The user's network memberships in priority order (top = preferred).</summary>
     public ObservableCollection<NetworkMembershipRow> Networks { get; } = new();
+
+    /// <summary>"My games": every game this client offers, in the player's order, with whether
+    /// they seed it. Built from <see cref="GameAvailability"/> (the registry and the player's
+    /// choices) plus a fresh Steam install check.</summary>
+    public ObservableCollection<MyGameRow> MyGames { get; } = new();
 
     /// <summary>The ids of the networks the user belongs to (UI thread) — what narrows the streamed,
     /// every-network seeding status down to this user.</summary>
@@ -966,6 +972,9 @@ public sealed partial class AccountViewModel : ObservableObject
         {
             var list = await _api.GetMyNetworksAsync().ConfigureAwait(false);
             ApplyMemberships(list, armGateIfNone);
+            // Wherever the account's state is (re)read — sign-in, session restore, Settings — the
+            // player's games come with it.
+            _ = RefreshMyGamesAsync();
             return list.Count;
         }
         catch (Exception e)
@@ -1172,6 +1181,93 @@ public sealed partial class AccountViewModel : ObservableObject
         }
     }
 
+    // ── My games (docs/MULTI-GAME.md) ──────────────────────────────────────────
+
+    /// <summary>Read the player's games from the API and apply them. Non-fatal: the last-known
+    /// choices (or the defaults) stay.</summary>
+    public async Task RefreshMyGamesAsync()
+    {
+        if (!IsLoggedIn)
+        {
+            RunOnUi(RebuildMyGames);
+            return;
+        }
+        try
+        {
+            ApplyMyGames(await _api.GetMyGamesAsync().ConfigureAwait(false));
+        }
+        catch (Exception e)
+        {
+            _log.LogWarning(e, "Failed to fetch the player's games");
+            RunOnUi(RebuildMyGames);
+        }
+    }
+
+    private void ApplyMyGames(List<UserGame> games)
+    {
+        var choices = games.Select(g => (g.Slug, g.OptedIn)).ToList();
+        GameAvailability.SetChoices(choices.ToDictionary(c => c.Slug, c => c.OptedIn, StringComparer.Ordinal));
+        GameAvailabilityStore.SaveChoices(_config, choices);
+        _myGamesOrder = games.Select(g => g.Slug).ToList();
+        RunOnUi(RebuildMyGames);
+    }
+
+    /// <summary>The player's order, as the API last returned it (empty: catalog order).</summary>
+    private List<string> _myGamesOrder = [];
+
+    /// <summary>Rebuild <see cref="MyGames"/> (UI thread): offered games, the player's order
+    /// first, with a fresh install check.</summary>
+    public void RebuildMyGames()
+    {
+        var offered = GameAvailability.Offered;
+        var ordered = offered
+            .OrderBy(g => _myGamesOrder.IndexOf(g.Id) is var i && i >= 0 ? i : int.MaxValue)
+            .ToList();
+        MyGames.Clear();
+        foreach (var g in ordered)
+        {
+            MyGames.Add(new MyGameRow(g, InstalledGames.IsInstalled(g), GameAvailability.IsOptedIn(g.Id),
+                GameAvailability.IsUntested(g.Id)));
+        }
+        InstalledGames.Invalidate();
+    }
+
+    /// <summary>Opt into or out of a game. Sends the whole list in its current order.</summary>
+    public Task SetGameOptInAsync(MyGameRow row, bool optedIn) =>
+        SaveMyGamesAsync(MyGames.Select(r => (r.Id, r.Id == row.Id ? optedIn : r.OptedIn)).ToList());
+
+    /// <summary>Move a game up (−1) or down (+1) the player's order.</summary>
+    public Task MoveGameAsync(MyGameRow row, int delta)
+    {
+        var rows = MyGames.ToList();
+        var index = rows.IndexOf(row);
+        var target = index + delta;
+        if (index < 0 || target < 0 || target >= rows.Count)
+        {
+            return Task.CompletedTask;
+        }
+        (rows[index], rows[target]) = (rows[target], rows[index]);
+        return SaveMyGamesAsync(rows.Select(r => (r.Id, r.OptedIn)).ToList());
+    }
+
+    private async Task SaveMyGamesAsync(List<(string Id, bool OptedIn)> games)
+    {
+        if (!IsLoggedIn)
+        {
+            return;
+        }
+        try
+        {
+            ApplyMyGames(await _api.SetMyGamesAsync(games).ConfigureAwait(false));
+        }
+        catch (Exception e)
+        {
+            _log.LogError(e, "Failed to save the player's games");
+            _toast.Error("Couldn't save your games");
+            RunOnUi(RebuildMyGames);
+        }
+    }
+
     /// <summary>Raise the join-a-network banner for a user who has already completed onboarding.
     /// Used on session restore with zero memberships and when a directive arrives flagged
     /// <c>join_a_network</c>. Cleared by <see cref="ApplyMemberships"/> once one is confirmed.</summary>
@@ -1347,6 +1443,10 @@ public sealed partial class AccountViewModel : ObservableObject
             Networks.Clear();
             HasNetworkMembership = false;
             NetworkGateActive = false;
+            // Signed out: back to the default games.
+            GameAvailability.SetChoices(null);
+            GameAvailabilityStore.ClearChoices(_config);
+            RebuildMyGames();
             // The conflict was about the account being torn down here.
             LinkConflictMessage = null;
             LinkConflictProvider = null;
@@ -1451,6 +1551,28 @@ public sealed class LinkedProviderRow
 }
 
 /// <summary>A seeding-network membership, formatted for the onboarding and Settings lists.</summary>
+/// <summary>One row of "My games".</summary>
+public sealed class MyGameRow(GameDefinition game, bool installed, bool optedIn, bool untested)
+{
+    public string Id { get; } = game.Id;
+    public string Name { get; } = game.DisplayName;
+    /// <summary>Steam has it installed. A game that isn't can't be opted into (it couldn't be
+    /// launched), but can always be opted out of.</summary>
+    public bool Installed { get; } = installed;
+    public bool OptedIn { get; } = optedIn;
+    public bool CanToggle => Installed || OptedIn;
+    public bool Untested { get; } = untested;
+    /// <summary>Under the name: why a row is the way it is.</summary>
+    public string Note => (Installed, Untested) switch
+    {
+        (false, _) => "Not installed",
+        (true, true) => "New: support not yet proven on a live server",
+        _ => game.Join == JoinMethod.Manual ? "You join the server yourself; we copy its address" : "",
+    };
+    public bool HasNote => Note.Length > 0;
+    public Uri StoreUrl { get; } = new($"https://store.steampowered.com/app/{game.SteamAppId}");
+}
+
 public sealed class NetworkMembershipRow
 {
     public NetworkMembershipRow(NetworkMembership m)

@@ -19,6 +19,26 @@ public sealed class SeedingApiClient(HttpClient http)
     public Task<List<BatchStatsResult>> GetStatsAsync(CancellationToken ct = default) =>
         SendAsync<List<BatchStatsResult>>(HttpMethod.Get, "/api/servers/stats", null, ct);
 
+    /// <summary>The games this deployment runs (public; read before sign-in).</summary>
+    public Task<List<GameInfo>> GetGamesAsync(CancellationToken ct = default) =>
+        SendAsync<List<GameInfo>>(HttpMethod.Get, "/api/games", null, ct);
+
+    /// <summary>The signed-in player's games: which they seed, in their order.</summary>
+    public Task<List<UserGame>> GetMyGamesAsync(CancellationToken ct = default) =>
+        SendAsync<List<UserGame>>(HttpMethod.Get, "/api/games/mine", null, ct);
+
+    /// <summary>Replace the player's games; <paramref name="games"/>' order is their priority. A
+    /// game left out goes back to the default. Returns the resulting list.</summary>
+    public Task<List<UserGame>> SetMyGamesAsync(
+        IReadOnlyList<(string Slug, bool OptedIn)> games, CancellationToken ct = default) =>
+        SendAsync<List<UserGame>>(HttpMethod.Put, "/api/games/mine",
+            new Dictionary<string, object?>
+            {
+                ["games"] = games
+                    .Select(g => new Dictionary<string, object?> { ["slug"] = g.Slug, ["opted_in"] = g.OptedIn })
+                    .ToList(),
+            }, ct);
+
     /// <summary>Fetch pre-computed seeding status (best candidate per region).</summary>
     public Task<SeedingStatusResponse> GetSeedingStatusAsync(CancellationToken ct = default) =>
         SendAsync<SeedingStatusResponse>(HttpMethod.Get, "/api/seeding/status", null, ct);

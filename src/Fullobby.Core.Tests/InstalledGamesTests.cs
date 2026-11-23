@@ -4,6 +4,7 @@ namespace Fullobby.Core.Tests;
 
 /// <summary>Which games a machine can launch: Steam library folders out of
 /// <c>libraryfolders.vdf</c>, and the released games with a manifest in one of them.</summary>
+[Collection(GameAvailabilityCollection.Name)]
 public class InstalledGamesTests
 {
     [Fact]

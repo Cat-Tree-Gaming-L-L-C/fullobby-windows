@@ -15,6 +15,19 @@ public sealed class ServerInfo
     public string Name { get; set; } = "";
     public int SeedingThreshold { get; set; }
     public string Game { get; set; } = "";
+    /// <summary><c>"client"</c>: the client launches the game into the server; <c>"manual"</c>: the
+    /// player joins it with <see cref="JoinLine"/>. Null from an API older than the games registry
+    /// (treated as the game's catalog join method).</summary>
+    public string? Launch { get; set; }
+    /// <summary>A manual-join game's join code where it has one (WARDOGS); else null.</summary>
+    public string? JoinId { get; set; }
+
+    /// <summary>Whether the player joins this server themselves rather than being connected.</summary>
+    public bool IsManualJoin(global::Fullobby.Core.Games.GameDefinition? game) =>
+        Launch == "manual" || (Launch is null && game?.Join == global::Fullobby.Core.Games.JoinMethod.Manual);
+
+    /// <summary>What a player types to join: the join code if there is one, else the address.</summary>
+    public string JoinLine => JoinId is { Length: > 0 } code ? code : Ip;
 }
 
 public sealed class BatchStatsResult
@@ -37,7 +50,23 @@ public sealed class ServersResponse
 {
     public List<ServerInfo> Hll { get; set; } = [];
     public List<ServerInfo>? Hllv { get; set; }
+    /// <summary>Every game's rotation keyed by game id (the games registry's shape). Authoritative
+    /// when present; <see cref="Hll"/>/<see cref="Hllv"/> remain for APIs that predate it.</summary>
+    public Dictionary<string, List<ServerInfo>> Games { get; set; } = [];
     public long CachedAt { get; set; }
+
+    /// <summary>Each game's rotation: <see cref="Games"/>, filling in HLL and Vietnam from the
+    /// legacy fields when the map lacks them.</summary>
+    public Dictionary<string, List<ServerInfo>> ByGame()
+    {
+        var all = new Dictionary<string, List<ServerInfo>>(Games, StringComparer.Ordinal);
+        all.TryAdd("hll", Hll);
+        if (Hllv is { } hllv)
+        {
+            all.TryAdd("hllv", hllv);
+        }
+        return all;
+    }
 }
 
 /// <summary>Auth provider used to sign in. Serializes lowercase; defaults to Steam.</summary>
@@ -317,6 +346,50 @@ public sealed class NetworkSeedingStatus
     public NetworkPhase? HllvPhase { get; set; }
     public List<ServerDayStatus> HllDay { get; set; } = [];
     public List<ServerDayStatus> HllvDay { get; set; } = [];
+    /// <summary>Every game's state keyed by game id (the games registry's shape), the only home of
+    /// games past HLL and Vietnam. Read through <see cref="Candidate"/>, <see cref="Phase"/> and
+    /// <see cref="Day"/>, which fall back to the legacy per-game fields.</summary>
+    public Dictionary<string, GameSeedingStatus> Games { get; set; } = [];
+
+    /// <summary>The game's seeding candidate on this network, if any.</summary>
+    public SeedingCandidate? Candidate(string gameId) =>
+        Games.TryGetValue(gameId, out var g) ? g.Candidate : gameId switch
+        {
+            "hll" => Hll,
+            "hllv" => Hllv,
+            _ => null,
+        };
+
+    /// <summary>Where the game's rotation stands today on this network.</summary>
+    public NetworkPhase? Phase(string gameId) =>
+        Games.TryGetValue(gameId, out var g) ? g.Phase : gameId switch
+        {
+            "hll" => HllPhase,
+            "hllv" => HllvPhase,
+            _ => null,
+        };
+
+    /// <summary>The game's day board on this network (rotation order).</summary>
+    public List<ServerDayStatus> Day(string gameId) =>
+        Games.TryGetValue(gameId, out var g) ? g.Day : gameId switch
+        {
+            "hll" => HllDay,
+            "hllv" => HllvDay,
+            _ => [],
+        };
+
+    /// <summary>Every game with state on this network: candidates first in map order.</summary>
+    public IEnumerable<SeedingCandidate> Candidates()
+    {
+        var ids = Games.Keys.Concat(["hll", "hllv"]).Distinct(StringComparer.Ordinal);
+        foreach (var id in ids)
+        {
+            if (Candidate(id) is { } c)
+            {
+                yield return c;
+            }
+        }
+    }
 
     // ── Per-tenant schedule boundaries (docs/PER-TENANT-SCHEDULING.md) ──
     // Additive backend change: authoritative per network when present; null = the backend doesn't
@@ -331,6 +404,38 @@ public sealed class NetworkSeedingStatus
     public int? DailyResetHourUtc { get; set; }
     /// <summary>This network's missed-autoseed window; null = fall back to the fleet default.</summary>
     public int? MissedAutoseedWindowHours { get; set; }
+}
+
+/// <summary>One game's seeding state on one network (<see cref="NetworkSeedingStatus.Games"/>).</summary>
+public sealed class GameSeedingStatus
+{
+    public SeedingCandidate? Candidate { get; set; }
+    public NetworkPhase? Phase { get; set; }
+    public List<ServerDayStatus> Day { get; set; } = [];
+}
+
+/// <summary>A game this deployment runs, from the public <c>GET /api/games</c>.</summary>
+public sealed class GameInfo
+{
+    public string Slug { get; set; } = "";
+    public string DisplayName { get; set; } = "";
+    public string ShortName { get; set; } = "";
+    public long? SteamAppId { get; set; }
+    /// <summary><c>"client"</c> or <c>"manual"</c>.</summary>
+    public string Launch { get; set; } = "client";
+    /// <summary>Seeding runs for it.</summary>
+    public bool Seeding { get; set; }
+    /// <summary>Proven on a real server; false while the game is in its pilot.</summary>
+    public bool Tested { get; set; } = true;
+}
+
+/// <summary>One of the player's games (<c>GET|PUT /api/games/mine</c>), in their order.</summary>
+public sealed class UserGame
+{
+    public string Slug { get; set; } = "";
+    public bool OptedIn { get; set; }
+    /// <summary>The player's own choice, as opposed to the default.</summary>
+    public bool Chosen { get; set; }
 }
 
 /// <summary>The user's membership in a seeding network (an alliance running one rotation over

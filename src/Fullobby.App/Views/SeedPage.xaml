@@ -72,6 +72,25 @@
                     </InfoBar.Content>
                 </InfoBar>
 
+                <!-- Manual join: a game the client can't connect into (Squad, Arma Reforger until their
+                     connect arguments are confirmed). The address is on the clipboard already. -->
+                <InfoBar
+                    IsOpen="{x:Bind ViewModel.ShowManualJoin, Mode=OneWay}"
+                    IsClosable="False"
+                    Severity="Informational"
+                    Message="{x:Bind ViewModel.ManualJoinText, Mode=OneWay}">
+                    <InfoBar.Content>
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,12">
+                            <TextBlock
+                                Text="{x:Bind ViewModel.ManualJoinLine, Mode=OneWay}"
+                                FontFamily="Consolas"
+                                IsTextSelectionEnabled="True"
+                                VerticalAlignment="Center" />
+                            <Button Content="Copy" Command="{x:Bind ViewModel.CopyManualJoinCommand}" />
+                        </StackPanel>
+                    </InfoBar.Content>
+                </InfoBar>
+
                 <!-- Splash-bypass banner -->
                 <Border
                     Visibility="{x:Bind ViewModel.SplashBypassActive, Mode=OneWay, Converter={StaticResource BoolToVis}}"

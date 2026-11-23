@@ -425,7 +425,13 @@ public sealed class SeedingEngine : IDisposable
         }
 
         MouseNudge();
-        await _steam.OpenGameAsync(_currentGame, server.Ip, ct).ConfigureAwait(false);
+        var manual = server.IsManualJoin(_currentGame);
+        await _steam.OpenGameAsync(_currentGame, server.Ip, connect: !manual, ct).ConfigureAwait(false);
+        if (manual)
+        {
+            // The game can't be pointed at the server: the player joins it, with what we show them.
+            Emit(new SeedingEvent.ManualJoinNeeded(_currentGame.DisplayName, server.Name, server.JoinLine));
+        }
     }
 
     /// <summary>Move the cursor away before launch
@@ -659,7 +665,11 @@ public sealed class SeedingEngine : IDisposable
             if (foundHllRunning)
             {
                 if (_state.IsStopRequested) return;
-                await FocusHllAsync(ct).ConfigureAwait(false);
+                // Only HLL's launch has a splash screen to press past; other games load on their own.
+                if (_currentGame.HasSplashBypass)
+                {
+                    await FocusHllAsync(ct).ConfigureAwait(false);
+                }
             }
             else
             {

@@ -2,6 +2,7 @@ using Fullobby.Core.Games;
 
 namespace Fullobby.Core.Tests;
 
+[Collection(GameAvailabilityCollection.Name)]
 public class GameCatalogTests
 {
     [Fact]
@@ -32,15 +33,32 @@ public class GameCatalogTests
     [Fact]
     public void All_CountAndOrder()
     {
-        Assert.Equal(2, GameCatalog.All.Count);
-        Assert.Equal("hll", GameCatalog.All[0].Id);
-        Assert.Equal("hllv", GameCatalog.All[1].Id);
+        Assert.Equal(["hll", "hllv", "squad", "rust", "arma_reforger"], GameCatalog.All.Select(g => g.Id));
     }
 
     [Fact]
-    public void Released_BothHllTitles_InCatalogOrder()
+    public void Released_BeforeTheRegistry_IsBothHllTitles()
     {
+        GameAvailability.Reset();
         Assert.Equal(["hll", "hllv"], GameCatalog.Released.Select(g => g.Id));
+    }
+
+    [Fact]
+    public void NewGames_AreUntested_AndOnlyHllHasTheSplashBypass()
+    {
+        Assert.True(GameCatalog.Hll.HasSplashBypass);
+        Assert.True(GameCatalog.Hllv.HasSplashBypass);
+        foreach (var g in new[] { GameCatalog.Squad, GameCatalog.Rust, GameCatalog.ArmaReforger })
+        {
+            Assert.True(g.Untested, g.Id);
+            Assert.False(g.HasSplashBypass, g.Id);
+        }
+        // As the API's games catalogue has them.
+        Assert.Equal(JoinMethod.Manual, GameCatalog.Squad.Join);
+        Assert.Equal(JoinMethod.SteamConnect, GameCatalog.Rust.Join);
+        Assert.Equal(JoinMethod.Manual, GameCatalog.ArmaReforger.Join);
+        Assert.Equal(["393380", "252490", "1874880"],
+            new[] { GameCatalog.Squad, GameCatalog.Rust, GameCatalog.ArmaReforger }.Select(g => g.SteamAppId));
     }
 
     [Fact]

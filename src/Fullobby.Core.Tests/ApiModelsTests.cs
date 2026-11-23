@@ -370,4 +370,44 @@ public class ApiModelsTests
         Assert.Equal(AuthProvider.Discord, lp.Provider);
         Assert.Null(lp.DisplayName);
     }
+
+    [Fact]
+    public void GamesMap_IsReadFirst_WithTheLegacyFieldsAsFallback()
+    {
+        const string json = """
+            {"networks":[{"network_id":5,"network_tag":"n","active":true,"default_seeding_threshold":75,
+            "hll":{"game":"hll","index":0,"server":{"ip":"1.1.1.1","short_name":"H","name":"H","seeding_threshold":50,"game":"hll"},"db_id":1},
+            "hll_day":[{"db_id":1,"name":"H","short_name":"H","status":"current","threshold":50}],
+            "games":{"squad":{"candidate":{"game":"squad","index":0,"server":{"ip":"2.2.2.2:7787","short_name":"S","name":"S","seeding_threshold":40,"game":"squad","launch":"manual"},"db_id":41},
+                              "phase":"cycling",
+                              "day":[{"db_id":41,"name":"S","short_name":"S","status":"current","threshold":40}]}}}],
+            "updated_at":7}
+            """;
+        var n = Assert.Single(Parse<SeedingStatusResponse>(json).Networks);
+        // HLL from its legacy fields (an API that hasn't put it in the map).
+        Assert.Equal(1, n.Candidate("hll")!.DbId);
+        Assert.Single(n.Day("hll"));
+        // Squad only lives in the map.
+        var squad = n.Candidate("squad")!;
+        Assert.Equal(41, squad.DbId);
+        Assert.Equal("manual", squad.Server.Launch);
+        Assert.Equal(NetworkPhase.Cycling, n.Phase("squad"));
+        Assert.Equal(41, Assert.Single(n.Day("squad")).DbId);
+        Assert.Empty(n.Day("rust"));
+        Assert.Equal([41L, 1L], n.Candidates().Select(c => c.DbId));
+    }
+
+    [Fact]
+    public void ServersResponse_ByGame_MergesTheMapWithTheLegacyLists()
+    {
+        const string json = """
+            {"hll":[{"ip":"1.1.1.1","short_name":"H","name":"H","seeding_threshold":50,"game":"hll"}],
+             "games":{"squad":[{"ip":"2.2.2.2:7787","short_name":"S","name":"S","seeding_threshold":40,"game":"squad"}]},
+             "cached_at":1}
+            """;
+        var all = Parse<ServersResponse>(json).ByGame();
+        Assert.Equal("1.1.1.1", Assert.Single(all["hll"]).Ip);
+        Assert.Equal("2.2.2.2:7787", Assert.Single(all["squad"]).Ip);
+        Assert.False(all.ContainsKey("hllv"));
+    }
 }

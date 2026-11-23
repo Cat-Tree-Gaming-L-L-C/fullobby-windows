@@ -6,8 +6,43 @@ and/or an RCON-style admin surface**. First new game: **Palworld**. Users
 opt in per game, from the set of games Fullobby has enabled that they have
 installed.
 
-Status: **design draft**. Backend gap analysis (grounded in the API
-codebase): `fullobby/docs/seeding/MULTI-GAME.md`.
+Status: **phase 5 built (2026-11-23), untested against real game servers.**
+The plan grew to Squad, Rust, Arma Reforger, Palworld and ARK; the client
+seeds the first three (Palworld and ARK don't seed). Backend gap analysis
+(grounded in the API codebase): `fullobby/docs/seeding/MULTI-GAME.md`.
+
+**As built (phase 5):**
+
+- **Registry before sign-in.** `AppBootstrapper.RefreshGamesAsync` reads the
+  public `GET /api/games` at start and with each config refresh;
+  `GameAvailability.Offered` = the API's seeding games ∩ `GameCatalog.All`
+  (`Released` is now this). Last-known registry persists
+  (`GameAvailabilityStore`, `games_registry`); without one the client offers
+  HLL + Vietnam as before.
+- **Catalog.** `GameCatalog` gains Squad (393380), Rust (252490) and Arma
+  Reforger (1874880), each **`Untested`**: install folders and exe names are
+  from public sources until each pilot. `GameDefinition.Join`: Rust launches
+  with `+connect`; Squad and Arma Reforger are **manual** (as the API's
+  catalogue says) — the client launches the game, copies the server address to
+  the clipboard, toasts, and shows it in a banner with a Copy button
+  (`SeedingEvent.ManualJoinNeeded`). A server the API marks `launch: "manual"`
+  is joined by hand whatever the catalog says. `HasSplashBypass` keeps the
+  EAC wait and Esc/F13 splash bypass to the HLL titles; other games are never
+  "loading", only running or not.
+- **Opt-in.** Settings → **My Games** (`AccountViewModel.MyGames`): every
+  offered game with install state, a toggle and up/down priority, synced to
+  `GET|PUT /api/games/mine` (the API's `user_games`). Not installed → "Get it
+  on Steam", can't be opted into. Defaults match the API: HLL, Vietnam and
+  WARDOGS in, newer games out — a new game is never seeded without the player
+  choosing it. The directive's `games=` = installed ∩ opted in; the API
+  filters by opt-in too and orders by the player's priority.
+- **Wire.** `NetworkSeedingStatus.Games` / `ServersResponse.Games` (the
+  game-keyed maps) are read first through `Candidate(id)`, `Day(id)`,
+  `Phase(id)`, `ByGame()`, falling back to the legacy `hll*`/`hllv*` fields.
+  The API keeps sending those until the version gate rises past this release.
+
+Not yet: an onboarding step for "My games" (Settings only), the release
+itself (signed update feed), and each game's pilot on a real server.
 
 ## Why this is closer than it looks
 

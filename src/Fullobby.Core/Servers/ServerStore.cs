@@ -24,14 +24,8 @@ public sealed class ServerStore
     {
         lock (_gate)
         {
-            var next = new Dictionary<string, List<ServerInfo>>(StringComparer.Ordinal)
-            {
-                ["hll"] = [.. response.Hll],
-            };
-            if (response.Hllv is { } hllv)
-            {
-                next["hllv"] = [.. hllv];
-            }
+            var next = response.ByGame()
+                .ToDictionary(kv => kv.Key, kv => (List<ServerInfo>)[.. kv.Value], StringComparer.Ordinal);
 
             if (SameRotations(_gameServers, next))
             {
